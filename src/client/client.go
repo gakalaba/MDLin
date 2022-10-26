@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"genericsmrproto"
-	"golang.org/x/sync/semaphore"
+  "sempaphore"
 	"log"
 	"masterproto"
 	"math/rand"
@@ -46,7 +46,7 @@ type response struct {
 // yet received responses
 type outstandingRequestInfo struct {
 	sync.Mutex
-	sema       *semaphore.Weighted // Controls number of outstanding operations
+	sema       *sempaphore.Weighted // Controls number of outstanding operations
 	startTimes map[int32]time.Time // The time at which operations were sent out
 }
 
@@ -107,7 +107,7 @@ func main() {
 
 		orInfo := &outstandingRequestInfo{
 			sync.Mutex{},
-			semaphore.NewWeighted(*outstandingReqs),
+			sempaphore.NewWeighted(*outstandingReqs),
 			make(map[int32]time.Time, *outstandingReqs),
 		}
 

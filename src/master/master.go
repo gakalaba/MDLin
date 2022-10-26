@@ -42,8 +42,12 @@ func main() {
 	if *nodeIPs != "" {
 		ips = strings.Split(*nodeIPs, ",")
 		log.Println("Ordered replica ips:", ips, len(ips))
-	}
-
+	} else {
+    for i := 0; i < *numNodes; i++ {
+	    ips = append(ips, "")
+	  }
+  }
+  log.Println(ips, len(ips))
 	master := &Master{
 		*numNodes,
 		make([]string, *numNodes),
