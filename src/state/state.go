@@ -21,6 +21,7 @@ type Command struct {
 	V  Value
 }
 
+// Key-Value hashmap (ints->ints)
 type State struct {
 	Store map[Key]Value
 }
@@ -53,6 +54,7 @@ func IsRead(command *Command) bool {
 	return command.Op == GET
 }
 
+// Execute some kvstore command - PUT(key, value) or value = GET(key)
 func (c *Command) Execute(st *State) Value {
 	switch c.Op {
 	case PUT, PUT_BLIND:

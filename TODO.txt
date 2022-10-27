@@ -1,5 +1,74 @@
-- Updated README with details instructions.
-- Average results over multiple trials.
-- Create dashboard.txt in addition to graphs.
-- virtualenv for experiment scripts.
-- Plot grid graphs.
++Single-Sharded Protocol
+  -Understand Paxos Implementation
+  -Modify State package OR instantiate and extend it
++Testing of correctness
+  -Need to add testing of values not just performance and compare MDLin to Paxos
+  -Also doesn't have testing of leader failures :// matt burke's version has this
+  https://github.com/matthelb/gryff/blob/master/src/client/client.go
+
++Run Multiple Shards
+  -Learn how leader-to-leader communication works
+-Multi-Sharded Protocol
+
+Master keeps map of all servers, servers connect to master, client connects to master to find out about servers. One of the
+servers that connects to the master is the leader (default index 0). Master is a metadata master, not a member of the
+replication group.
+
+________________________
+|                        |
+|       Paxos/Epaxos     |
+|________________________| 
+|            ^           |    ^ this upwards comes from passing along channel for each message type, kept in rpcTable
+|            |           |    |
+|       genericsmr       |
+|________________________|
+ lots of layering going on. Paxos (and EPaxos) is built on top of genericsmr. When Paxos creates a replica, it
+ passes in a channel and the kind of message type that that channel receives to genericsmr NewReplica. (This
+ message type also has Serializable interface, meaning these message types can Marshal and UnMarshal.) It does 
+ this for all message types, Prepare, Accept, Commit, CommitShort, PrepareReply, AcceptReply.
+
+ The genericsmr is responsible for handling tcp connections from clients and peers. It has the main loop that handles
+ receiving communication over the network, called `replicaListener` and `clientListener`. When it gets a message, 
+ it looks up which one it is in the `rpcTable` and finds the associated channel, passes the (unmarshalled, explained 
+ in `paxosprotomarsh.go`, line 76) message along the channel. This is the communication between the layers. 
+
+ The Paxos implemnetation then has one main loop that select on messages getting pulling out of these channels and
+ dispatches the work for each message type in custom handler functions. 
+
+ When Paxos it responds to a client, it creates the reply struct and calls the genericsmr function `ReplyPropose` including
+ the buffio writer that it got from the client. The `ReplyPropose` marshals the content (struct with fields of replies), and
+ then flushes it on the io.Writer. This is also the one that the client registered, and the client has a loop that reads
+ from a list of these buffers, calling Unmarshal on it to see what the response is.
+
+
+Message Types:
+1. propose -- external, this comes from clients into the replication group. When a leader receives this, it begins consensus
+-------------
+2. prepare -- RequestVote. When you don't have a leader yet, initiate an election with bcastPrepare with a uniqueBallot to all other replicas
+3. accept -- AppendEntries. When you have a stable leader, the leader issues `bcastAccept` with log entry to all other replicas
+4. commit -- Commit the entry in your log. The leader can do this in parallel with responding to the client.
+-------------
+5. commitShort? -- Only broadcast commit, but don't need to log the command, only need to log that that index in the log is COMMIT status.
+Due to quorum intersection property, at least one node will have the command and COMMIT STATUS.
+6. prepareReply
+7. acceptReply
+
+ ---------------------------------------------
+| Normal Operation Mode (no leader failures): |
+ ---------------------------------------------
+ 0. Clients ship a `Propose` RPC over the proposeChan, this is where a leader will begin broadcasting to the other replicas via a `bcastAccept()`.
+ 1. leader adds to log with PREPARED status. sends `Accept` RPC to all other replicas
+ 2. When a replica receives an `Accept` RPC, it checks if it should add it to the log. if it should, it adds it to 
+ the log persistently with status ACCEPTED. It then replies with `AcceptReply` RPC to leader.
+ 3. When leader receives majority of `AcceptReply` with OK status, it updates log status to COMMITTED, then (executes and) responds to client 
+ and broadcasts `commitShort` RPC via `bcastCommit()`
+ 4. When a replica handles commitShort, it updates the persistent log status to have COMMIT, and then executes the command
+ 5. The leader sends ReplyPropose to the client
+
+With leader failures:
+0. First election is begun with first proposal from client -- the leader calls `bcastPrepare()` when it detects no elections have occurred
+because defaultBallot == -1
+
+
+
+

@@ -73,6 +73,8 @@ func (t *Prepare) Marshal(wire io.Writer) {
 	wire.Write(bs)
 }
 
+// The prepare message is 13 bytes large (look at definition in paxosproto.go)
+// This unmarshalling is specific to receiving 13 bytes on the wire that are organized as a prepare struct
 func (t *Prepare) Unmarshal(wire io.Reader) error {
 	var b [13]byte
 	var bs []byte

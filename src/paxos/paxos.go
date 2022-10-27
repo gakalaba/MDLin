@@ -59,11 +59,11 @@ type Instance struct {
 }
 
 type LeaderBookkeeping struct {
-	clientProposals []*genericsmr.Propose
-	maxRecvBallot   int32
-	prepareOKs      int
-	acceptOKs       int
-	nacks           int
+	clientProposals []*genericsmr.Propose // What are these?
+	maxRecvBallot   int32                 // highest term
+	prepareOKs      int                   // number of prepare OKs
+	acceptOKs       int                   // number of accept OKs
+	nacks           int                   // number of fails on an AcceptReply and PrepareReply
 }
 
 func NewReplica(id int, peerAddrList []string, thrifty bool,
@@ -102,7 +102,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool,
 	return r
 }
 
-//append a log entry to stable storage
+// append a log entry to stable storage
 func (r *Replica) recordInstanceMetadata(inst *Instance) {
 	if !r.Durable {
 		return
@@ -114,7 +114,7 @@ func (r *Replica) recordInstanceMetadata(inst *Instance) {
 	r.StableStore.Write(b[:])
 }
 
-//write a sequence of commands to stable storage
+// write a sequence of commands to stable storage
 func (r *Replica) recordCommands(cmds []state.Command) {
 	if !r.Durable {
 		return
@@ -124,11 +124,11 @@ func (r *Replica) recordCommands(cmds []state.Command) {
 		return
 	}
 	for i := 0; i < len(cmds); i++ {
-		cmds[i].Marshal(io.Writer(r.StableStore))
+		cmds[i].Marshal(io.Writer(r.StableStore)) //Write the commands {Op, K, V} (log entries) to stable storage (file)
 	}
 }
 
-//sync with the stable store
+// sync with the stable store
 func (r *Replica) sync() {
 	if !r.Durable {
 		return
@@ -197,18 +197,19 @@ func (r *Replica) run() {
 			//got a Propose from a client
 			r.handlePropose(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
+			//**This is a golang specific hack!!
 			if r.batchingEnabled {
 				onOffProposeChan = nil
 			}
 			break
 
 		case prepareS := <-r.prepareChan:
-			prepare := prepareS.Message.(*paxosproto.Prepare)
+			prepare := prepareS.Message.(*paxosproto.Prepare) // Casting Message interface to concrete type *paxosproto.Prepare
 			//got a Prepare message
 			r.handlePrepare(prepare)
 			break
 
-		case acceptS := <-r.acceptChan:
+		case acceptS := <-r.acceptChan: // follower got something from leader's bCastAccept
 			accept := acceptS.Message.(*paxosproto.Accept)
 			//got an Accept message
 			r.handleAccept(accept)
@@ -290,7 +291,7 @@ func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 	}
 }
 
-var pa paxosproto.Accept
+var pa paxosproto.Accept //why is this a global...?
 
 func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Command) {
 	defer func() {
@@ -311,7 +312,7 @@ func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Comm
 	}
 	q := r.Id
 
-	for sent := 0; sent < n; {
+	for sent := 0; sent < n; { // send to all nodes that are alive (except self)
 		q = (q + 1) % int32(r.N)
 		if q == r.Id {
 			break
@@ -348,7 +349,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 
 	n := r.N - 1
 	if r.Thrifty {
-		n = r.N >> 1
+		n = r.N >> 1 //If thrifty, "Use only as many messages as strictly required for inter-replica communication." In this case we send to ourselves and N/2, so a Q total
 	}
 	q := r.Id
 	sent := 0
@@ -362,9 +363,9 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 			continue
 		}
 		sent++
-		r.SendMsg(q, r.commitShortRPC, argsShort)
+		r.SendMsg(q, r.commitShortRPC, argsShort) //doing short commit
 	}
-	if r.Thrifty && q != r.Id {
+	if r.Thrifty && q != r.Id { //we only sent to N/2 including ourselves, so send remaining messages
 		for sent < r.N-1 {
 			q = (q + 1) % int32(r.N)
 			if q == r.Id {
@@ -385,12 +386,12 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		r.ReplyPropose(preply, propose.Reply)
 		return
 	}
-
+	// We are the leader
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
 	}
 
-	instNo := r.crtInstance
+	instNo := r.crtInstance //get next empty index in our log
 	r.crtInstance++
 
 	batchSize := 1
@@ -403,18 +404,19 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.Propose, batchSize)
-	cmds[0] = propose.Command
-	proposals[0] = propose
+	cmds[0] = propose.Command //Store the command the client sent
+	proposals[0] = propose    //Store the proposal message from client
 
 	for i := 1; i < batchSize; i++ {
-		prop := <-r.ProposeChan
+		prop := <-r.ProposeChan // pull everything out of the proposal chan (well, as much as we clocked batchSize at above)
 		cmds[i] = prop.Command
 		proposals[i] = prop
 	}
 
 	if r.defaultBallot == -1 {
+		// the instanceSpace is our log, we add the entry to OUR log
 		r.instanceSpace[instNo] = &Instance{
-			cmds,
+			cmds, // a single instance in the log might have batched commands!!
 			r.makeUniqueBallot(0),
 			PREPARING,
 			&LeaderBookkeeping{proposals, 0, 0, 0, 0}}
@@ -424,13 +426,13 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 			cmds,
 			r.defaultBallot,
 			PREPARED,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0}}
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0}} // This is where clientProposals is SET to a non-nil value
 
 		r.recordInstanceMetadata(r.instanceSpace[instNo])
 		r.recordCommands(cmds)
-		r.sync()
+		r.sync() //we record the entry in our stable storage log
 
-		r.bcastAccept(instNo, r.defaultBallot, cmds)
+		r.bcastAccept(instNo, r.defaultBallot, cmds) // and then we replicate it at a majority
 	}
 }
 
@@ -465,22 +467,27 @@ func (r *Replica) handleAccept(accept *paxosproto.Accept) {
 
 	if inst == nil {
 		if accept.Ballot < r.defaultBallot {
-			areply = &paxosproto.AcceptReply{accept.Instance, FALSE, r.defaultBallot}
+			areply = &paxosproto.AcceptReply{accept.Instance, FALSE, r.defaultBallot} // REJECT if proposed entry is from old term
 		} else {
 			r.instanceSpace[accept.Instance] = &Instance{
 				accept.Command,
 				accept.Ballot,
 				ACCEPTED,
 				nil}
-			areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
+			areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot} // ACCEPT
 		}
-	} else if inst.ballot > accept.Ballot {
-		areply = &paxosproto.AcceptReply{accept.Instance, FALSE, inst.ballot}
+	} else if inst.ballot > accept.Ballot { //The entry i have wherever the thing being proposed will go is from a more recent term
+		areply = &paxosproto.AcceptReply{accept.Instance, FALSE, inst.ballot} // REJECT
+
+		/// difference between following 2 cases?
 	} else if inst.ballot < accept.Ballot {
 		inst.cmds = accept.Command
 		inst.ballot = accept.Ballot
 		inst.status = ACCEPTED
-		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, inst.ballot}
+		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, inst.ballot} // ACCEPT
+
+		// If the instance we're overwriting was one that had been proposed from a
+		// leader, those are pending client requests... retry them
 		if inst.lb != nil && inst.lb.clientProposals != nil {
 			//TODO: is this correct?
 			// try the proposal in a different instance
@@ -489,16 +496,16 @@ func (r *Replica) handleAccept(accept *paxosproto.Accept) {
 			}
 			inst.lb.clientProposals = nil
 		}
-	} else {
+	} else { // proposed thing is equal term to term of whati have in the log there
 		// reordered ACCEPT
-		r.instanceSpace[accept.Instance].cmds = accept.Command
+		r.instanceSpace[accept.Instance].cmds = accept.Command //overwrite the entry
 		if r.instanceSpace[accept.Instance].status != COMMITTED {
 			r.instanceSpace[accept.Instance].status = ACCEPTED
 		}
-		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
+		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot} // ACCEPT
 	}
 
-	if areply.OK == TRUE {
+	if areply.OK == TRUE { // append to our stable log
 		r.recordInstanceMetadata(r.instanceSpace[accept.Instance])
 		r.recordCommands(accept.Command)
 		r.sync()
@@ -520,6 +527,9 @@ func (r *Replica) handleCommit(commit *paxosproto.Commit) {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
 		r.instanceSpace[commit.Instance].status = COMMITTED
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
+
+		// If we're committing something and we've somehow never resubmitted the
+		// clientProposals pending in it's channel we should retry them
 		if inst.lb != nil && inst.lb.clientProposals != nil {
 			for i := 0; i < len(inst.lb.clientProposals); i++ {
 				r.ProposeChan <- inst.lb.clientProposals[i]
@@ -534,10 +544,11 @@ func (r *Replica) handleCommit(commit *paxosproto.Commit) {
 	r.recordCommands(commit.Command)
 }
 
+// main difference is we dont include the command in the log entry? this is safe due to quorum intersection property
 func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
 	inst := r.instanceSpace[commit.Instance]
 
-	if inst == nil {
+	if inst == nil { // i wasn't a part of hte consensus group, but it's being committed so i'll add it for sure
 		r.instanceSpace[commit.Instance] = &Instance{nil,
 			commit.Ballot,
 			COMMITTED,
@@ -555,7 +566,7 @@ func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
 
 	r.updateCommittedUpTo()
 
-	r.recordInstanceMetadata(r.instanceSpace[commit.Instance])
+	r.recordInstanceMetadata(r.instanceSpace[commit.Instance]) // AKA update the COMMIT Instance.status
 }
 
 func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
@@ -621,28 +632,34 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 	}
 
 	if areply.OK == TRUE {
-		inst.lb.acceptOKs++
-		if inst.lb.acceptOKs+1 > r.N>>1 {
+		inst.lb.acceptOKs++               //how is this not atomic
+		if inst.lb.acceptOKs+1 > r.N>>1 { //IF WE HAVE A QUORUM OF ACCEPTS then update the commit index
 			inst = r.instanceSpace[areply.Instance]
 			inst.status = COMMITTED
 			if inst.lb.clientProposals != nil && state.AllBlindWrites(inst.cmds) {
-				// give client the all clear
+				// give client the all clear... we don't need to wait for value,
+				// these are WRITES otherwise the execute will send the values
+				// ProposeReply struct:=
+				// OK        uint8
+				// CommandId int32
+				// Value     state.Value
+				// Timestamp int64
 				for i := 0; i < len(inst.cmds); i++ {
 					propreply := &genericsmrproto.ProposeReply{
 						TRUE,
 						inst.lb.clientProposals[i].CommandId,
-						state.NIL,
+						state.NIL, // these are all writes, so we don't give a value back
 						inst.lb.clientProposals[i].Timestamp}
-					r.ReplyPropose(propreply, inst.lb.clientProposals[i].Reply)
+					r.ReplyPropose(propreply, inst.lb.clientProposals[i].Reply) //we pass in the client wire bufio
 				}
 			}
 
 			r.recordInstanceMetadata(r.instanceSpace[areply.Instance])
 			r.sync() //is this necessary?
 
-			r.updateCommittedUpTo()
+			r.updateCommittedUpTo() // This directly impacts the background executeCommands function
 
-			r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
+			r.bcastCommit(areply.Instance, inst.ballot, inst.cmds) // so that the other replicas can also execute this command!!!
 		}
 	} else {
 		// TODO: there is probably another active leader
@@ -666,6 +683,8 @@ func (r *Replica) executeCommands() {
 				inst := r.instanceSpace[i]
 				for j := 0; j < len(inst.cmds); j++ {
 					val := inst.cmds[j].Execute(r.State)
+					// the following check lets us know the main handle function didn't notify the client for this instance
+					// which might happen if the commands were all writes or if we're the leader
 					if inst.lb != nil && !state.AllBlindWrites(inst.cmds) {
 						propreply := &genericsmrproto.ProposeReply{
 							TRUE,

@@ -18,7 +18,7 @@ import (
 
 const CHAN_BUFFER_SIZE = 200000
 
-type RPCMessage struct {
+type RPCMessage struct { // struct to bookeep who a message came from, when, and what it said
 	Message    fastrpc.Serializable
 	ReceivedAt int64 // Unix Nano UTC timestamp
 	From       int64 // The rid of the replica who sent this message
@@ -70,8 +70,8 @@ type Replica struct {
 
 	PreferredPeerOrder []int32 // replicas in the preferred order of communication
 
-	rpcTable map[uint8]*RPCPair
-	rpcCode  uint8
+	rpcTable map[uint8]*RPCPair // int->RPCPair hashmap
+	rpcCode  uint8              // index into rpcTable
 
 	Ewma []float64
 
@@ -212,6 +212,7 @@ func (r *Replica) WaitForClientConnections() {
 	}
 }
 
+// main run function
 func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 	var msgType uint8
 	var err error = nil
@@ -220,7 +221,7 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 
 	for err == nil && !r.Shutdown {
 
-		if msgType, err = reader.ReadByte(); err != nil {
+		if msgType, err = reader.ReadByte(); err != nil { // received a SendMsg(code)
 			break
 		}
 
@@ -261,7 +262,7 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 
 func (r *Replica) clientListener(conn net.Conn) {
 	reader := bufio.NewReader(conn)
-	writer := bufio.NewWriter(conn)
+	writer := bufio.NewWriter(conn) // Make a new buffio Writer based on the client connection for all the proposals received
 	var msgType byte
 	var err error
 	for !r.Shutdown && err == nil {
@@ -298,13 +299,13 @@ func (r *Replica) RegisterRPC(msgObj fastrpc.Serializable, notify chan *RPCMessa
 	code := r.rpcCode
 	r.rpcCode++
 	r.rpcTable[code] = &RPCPair{msgObj, notify}
-	return code
+	return code // return the index in the table that it exists at
 }
 
 func (r *Replica) SendMsg(peerId int32, code uint8, msg fastrpc.Serializable) {
 	w := r.PeerWriters[peerId]
 	w.WriteByte(code)
-	msg.Marshal(w)
+	msg.Marshal(w) //marshall the message and send it into the w bufio object
 	w.Flush()
 }
 
