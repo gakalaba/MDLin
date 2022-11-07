@@ -195,6 +195,7 @@ func main() {
             arg.PID = client_pid // ADD the client's id so we can sequence these
 				    arg.Timestamp = time.Now().UnixNano()
             arg.SeqNo = int64(i + j*(n+*eps)) //id increases across all the rounds
+            log.Println(arg)
             if !*fast {
 					    if *noLeader {
 						    leader = rarray[i]
@@ -339,6 +340,7 @@ func waitRepliesMDL(readers []*bufio.Reader, leader int, n int, done chan bool) 
 			}
 			rsp[reply.CommandId] = true
 		}
+    log.Printf("THe reply.OK was %d", reply.OK)
 		if reply.OK != 0 {
       log.Printf("Success! expected seqno = %d", reply.ExpectedSeqNo)
 			successful[leader]++
@@ -355,12 +357,6 @@ func waitReplies(readers []*bufio.Reader, leader int, n int, done chan bool) {
 	var err error
 	//var msgType byte
 	for i := 0; i < n; i++ {
-		//if msgType, err = readers[leader].ReadByte(); err != nil ||
-		//	msgType != clientproto.GEN_PROPOSE_REPLY{
-		//		log.Println("Error when reading (op:%d): %v", msgType, err)
-		//	e = true
-		//	continue
-		//}
 		if err = reply.Unmarshal(readers[leader]); err != nil {
 			log.Println("Error when reading:", err)
 			e = true

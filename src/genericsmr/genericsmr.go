@@ -235,6 +235,7 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 
 		receivedAt := CurrentTime()
 
+    log.Printf("Replica %d got a message!", r.Id)
 		switch uint8(msgType) {
 
 		case genericsmrproto.GENERIC_SMR_BEACON:
@@ -258,6 +259,7 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 			if rpair, present := r.rpcTable[msgType]; present {
 				obj := rpair.Obj.New()
 				if err = obj.Unmarshal(reader); err != nil {
+          log.Println("Couldn't unmarshall")
 					break
 				}
 				rpair.Chan <- &RPCMessage{obj, receivedAt, int64(rid)}
@@ -284,8 +286,10 @@ func (r *Replica) clientListener(conn net.Conn) {
       log.Println("genericsmr received client bytes! line 284")
       prop := new(mdlinproto.Propose)
       if err = prop.Unmarshal(reader); err != nil {
+        log.Println("genericsmr couldn't unmarshal the proposal")
         break
       }
+      log.Println("Sending the proposal on the channel")
       r.MDLProposeChan <- &MDLPropose{prop, writer}
       break
 
@@ -326,6 +330,12 @@ func (r *Replica) SendMsg(peerId int32, code uint8, msg fastrpc.Serializable) {
 }
 
 func (r *Replica) ReplyPropose(reply *genericsmrproto.ProposeReply, w *bufio.Writer) {
+	reply.Marshal(w)
+	w.Flush()
+}
+
+func (r *Replica) MDReplyPropose(reply *mdlinproto.ProposeReply, w *bufio.Writer) {
+  w.WriteByte(mdlinproto.PROPOSE_REPLY)
 	reply.Marshal(w)
 	w.Flush()
 }

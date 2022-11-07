@@ -1,7 +1,6 @@
 package mdlin
 
 import (
-  "bufio"
 	"encoding/binary"
 	"genericsmr"
 	"genericsmrproto"
@@ -112,11 +111,6 @@ func NewReplica(id int, peerAddrList []string, thrifty bool,
 	go r.run()
 
 	return r
-}
-
-func (r *Replica) ReplyPropose(reply *mdlinproto.ProposeReply, w *bufio.Writer) {
-	reply.Marshal(w)
-	w.Flush()
 }
 
 //append a log entry to stable storage
@@ -287,6 +281,7 @@ func (r *Replica) updateCommittedUpTo() {
 }
 
 func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
+  log.Println("Inside broadcast prepare!")
 	defer func() {
 		if err := recover(); err != nil {
 			log.Println("Prepare bcast failed:", err)
@@ -313,6 +308,7 @@ func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 			continue
 		}
 		sent++
+    log.Println("calling SendMsg")
 		r.SendMsg(q, r.prepareRPC, args)
 	}
 }
@@ -414,14 +410,16 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 // Client submitted a command to a server
 func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	if !r.IsLeader {
+    log.Println("I'm not the leader, sending client a FALSE reply")
 		preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.NIL, 0, -1}
-		r.ReplyPropose(preply, propose.Reply)
+    log.Println("Responding to client with OK = false (0)")
+		r.MDReplyPropose(preply, propose.Reply)
 		return
 	}
 
   // Get batch size
 	batchSize := 1
-  numProposals := len(r.MDLProposeChan)
+  numProposals := len(r.MDLProposeChan)+1
 	if r.batchingEnabled {
 		batchSize := numProposals + 1
 		if batchSize > MAX_BATCH {
@@ -438,6 +436,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
   var expectedSeqno int64
   prop := propose
   i := 1
+  log.Printf("found = %d, batchSize = %d, i = %d, numProposals = %d", found, batchSize, i, numProposals)
   for (found < batchSize && i <= numProposals) {
     pid := prop.PID
     seqno := prop.SeqNo
@@ -445,8 +444,10 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
     if val, ok := r.nextSeqNo[pid]; ok {
       expectedSeqno = val
     }
+    log.Printf("found = %d, pid = %d, seqno = %d, expectedSeqNo = %d", found, pid, seqno, expectedSeqno)
     if (seqno != expectedSeqno) {
       // Add to buffer
+      log.Println("Out of order, buffering back into channel")
       r.MDLProposeChan <- prop
     } else {
       cmds[found] = prop.Command
@@ -455,9 +456,11 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
       seqnos[found] = seqno
       found++
       r.nextSeqNo[pid]++
+      log.Println("We made an entry")
     }
     i++
-    if (i <= numProposals) {
+    if (found < batchSize && i <= numProposals) {
+      log.Println("Pulled out the next one")
       prop = <-r.MDLProposeChan
     }
   }
@@ -465,13 +468,16 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
   // None of the proposals in the channel 
   // are ready to be added to the log
   if (found == 0) {
+    log.Println("None of the proposals pulled out of the channel were ready!")
     r.noProposalsReady = true
     preply := &mdlinproto.ProposeReply{FALSE, -1, state.NIL, 0, -1} // TODO which expected Seqno will this be?
-		r.ReplyPropose(preply, propose.Reply)
+		log.Println("Responding to client with OK = false (0)")
+    r.MDReplyPropose(preply, propose.Reply)
     // TODO consider replying to client that it's out of order
     return
   }
 
+  log.Println("We're making our entry after checking it's received sequentially")
   r.noProposalsReady = false
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
@@ -488,6 +494,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			&LeaderBookkeeping{proposals, 0, 0, 0, 0},
       pids,
       seqnos}
+    log.Println("(candidate) leader broadcasting prepares....")
 		r.bcastPrepare(instNo, r.makeUniqueBallot(0), true)
 	} else {
 		r.instanceSpace[instNo] = &Instance{
@@ -501,6 +508,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		r.recordInstanceMetadata(r.instanceSpace[instNo])
 		r.recordCommands(cmds)
 		r.sync()
+    log.Println("Leader broadcasting Accepts")
 
     // Make a copy of the nextSeqNo map
     expectedSeqs := make(map[int64]int64)
@@ -728,7 +736,8 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
 						state.NIL,
 						inst.lb.clientProposals[i].Timestamp,
             inst.seqno[i]+1}
-					r.ReplyPropose(propreply, inst.lb.clientProposals[i].Reply)
+					log.Println("Responding to client with OK = true (1)")
+          r.MDReplyPropose(propreply, inst.lb.clientProposals[i].Reply)
 				}
 			}
 
@@ -768,7 +777,8 @@ func (r *Replica) executeCommands() {
 							val,
 							inst.lb.clientProposals[j].Timestamp,
               inst.seqno[i]+1}
-						r.ReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
+						log.Println("Responding to client with OK = true (1)")
+            r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
 					}
 				}
 				i++
