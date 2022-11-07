@@ -57,9 +57,15 @@ func (t *Propose) Marshal(wire io.Writer) {
 	bs[5] = byte(tmp64 >> 40)
 	bs[6] = byte(tmp64 >> 48)
 	bs[7] = byte(tmp64 >> 56)
+	wire.Write(bs)
 }
 
 func (t *Propose) Unmarshal(wire io.Reader) error {
+	// CommandId int32
+	// Command   state.Command
+	// Timestamp int64
+	// SeqNo     int64
+	// PID       int64
 	var b [8]byte
 	var bs []byte
 	bs = b[:4]
