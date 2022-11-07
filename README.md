@@ -1,8 +1,7 @@
-EPaxos
+Multi-dispatch Linearizability
 ======
 
-This repo contains code used to evaluate the Egalitarian Paxos consensus
-protocol for the NSDI '21 paper [EPaxos Revisited](https://www.usenix.org/conference/nsdi21/presentation/tollman).
+This repo contains an implementation of multi-dispatch linearizability on top of the Paxos code within the EPaxos codebase.
 This is a fork of the code used for the original EPaxos evaluation for
 [the EPaxos SOSP paper](http://dl.acm.org/ft_gateway.cfm?id=2517350&ftid=1403953&dwn=1).
 
