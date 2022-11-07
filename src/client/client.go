@@ -16,6 +16,8 @@ import (
 	"time"
 )
 
+// client -q 5 -r 5 -T 2
+
 var masterAddr *string = flag.String("maddr", "", "Master address. Defaults to localhost")
 var masterPort *int = flag.Int("mport", 7087, "Master port.  Defaults to 7077.")
 var reqsNb *int = flag.Int("q", 5000, "Total number of requests. Defaults to 5000.")
@@ -26,7 +28,7 @@ var mdlin *bool = flag.Bool("mdl", true, "Multi-dispatch Linearizability: allow 
 var rounds *int = flag.Int("r", 1, "Split the total number of requests into this many rounds, and do rounds sequentially. Defaults to 1.")
 var procs *int = flag.Int("p", 2, "GOMAXPROCS. Defaults to 2")
 var T = flag.Int("T", 1, "Number of threads (simulated clients).")
-var check = flag.Bool("check", false, "Check that every expected reply was received exactly once.")
+var check = flag.Bool("check", true, "Check that every expected reply was received exactly once.")
 var eps *int = flag.Int("eps", 0, "Send eps more messages per round than the client will wait for (to discount stragglers). Defaults to 0.")
 var conflicts *int = flag.Int("c", -1, "Percentage of conflicts. Defaults to 0%")
 var s = flag.Float64("s", 2, "Zipfian s parameter")
@@ -155,7 +157,6 @@ func main() {
 	// Sending the requests and waiting for replies
 	////////////////////////////////////////////////
 	for j := 0; j < *rounds; j++ {
-
 		n := (*reqsNb) / *rounds
 
 		if *check {
@@ -209,7 +210,7 @@ func main() {
 						    writers[rep].Flush()
 					    }
 				    }
-				    log.Println("Thread %d sent command %d with seqNo %d", client_pid, id_base+int32(i), arg.SeqNo)
+				    log.Printf("Thread %d sent command %d with seqNo %d", client_pid, id_base+int32(i), arg.SeqNo)
 			    }
         }(int64(tid), id, mdlinproto.Propose{id, state.Command{state.PUT, 0, 0}, 0, 0, 0})
         id += int32(n+*eps)
@@ -256,6 +257,7 @@ func main() {
 		////////////////////////////////
 		// Sync with WaitReplies()
 		///////////////////////////
+    log.Printf("*********Reqs for round %d sent, now we sync up waiting for replies", j)
 		err := false
 		if *noLeader {
 			for i := 0; i < N; i++ {
@@ -321,7 +323,7 @@ func waitRepliesMDL(readers []*bufio.Reader, leader int, n int, done chan bool) 
 	for i := 0; i < n; i++ {
 		if msgType, err = readers[leader].ReadByte(); err != nil ||
 			msgType != mdlinproto.PROPOSE_REPLY{
-				log.Println("Error when reading (op:%d): %v", msgType, err)
+				log.Printf("Error when reading (op:%d): %v", msgType, err)
 			e = true
 			continue
 		}
@@ -338,7 +340,7 @@ func waitRepliesMDL(readers []*bufio.Reader, leader int, n int, done chan bool) 
 			rsp[reply.CommandId] = true
 		}
 		if reply.OK != 0 {
-      log.Println("Success! expected seqno = %d", reply.ExpectedSeqNo)
+      log.Printf("Success! expected seqno = %d", reply.ExpectedSeqNo)
 			successful[leader]++
 		}
 	}

@@ -27,7 +27,6 @@ type Replica struct {
 	commitShortChan     chan *genericsmr.RPCMessage
 	prepareReplyChan    chan *genericsmr.RPCMessage
 	acceptReplyChan     chan *genericsmr.RPCMessage
-  mdlProposeChan      chan *Propose
 	prepareRPC          uint8
 	acceptRPC           uint8
 	commitRPC           uint8
@@ -68,13 +67,8 @@ type Instance struct {
   seqno  []int64
 }
 
-type Propose struct {
-	*mdlinproto.Propose
-	Reply *bufio.Writer
-}
-
 type LeaderBookkeeping struct {
-	clientProposals []*Propose
+	clientProposals []*genericsmr.MDLPropose
 	maxRecvBallot   int32
 	prepareOKs      int
 	acceptOKs       int
@@ -91,7 +85,6 @@ func NewReplica(id int, peerAddrList []string, thrifty bool,
 		make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan *genericsmr.RPCMessage, 3*genericsmr.CHAN_BUFFER_SIZE),
-    make(chan *Propose, genericsmr.CHAN_BUFFER_SIZE),
 		0, 0, 0, 0, 0, 0,
 		false,
 		make([]*Instance, 15*1024*1024),
@@ -199,6 +192,7 @@ func (r *Replica) run() {
 
 	if r.Id == 0 {
 		r.IsLeader = true
+    log.Println("I'm the leader")
 	}
 
 	clockChan = make(chan bool, 1)
@@ -206,7 +200,7 @@ func (r *Replica) run() {
 		go r.clock()
 	}
 
-	onOffProposeChan := r.mdlProposeChan
+	onOffProposeChan := r.MDLProposeChan
 
 	for !r.Shutdown {
 
@@ -214,10 +208,12 @@ func (r *Replica) run() {
 
 		case <-clockChan:
 			//activate the new proposals channel
-			onOffProposeChan = r.mdlProposeChan
+      log.Println("---------clockChan---------")
+			onOffProposeChan = r.MDLProposeChan
 			break
 
 		case propose := <-onOffProposeChan:
+      log.Println("---------ProposalChan---------")
 			//got a Propose from a client
 			r.handlePropose(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
@@ -227,42 +223,49 @@ func (r *Replica) run() {
 			break
 
 		case prepareS := <-r.prepareChan:
+      log.Println("---------PrepareChan---------")
 			prepare := prepareS.Message.(*mdlinproto.Prepare)
 			//got a Prepare message
 			r.handlePrepare(prepare)
 			break
 
 		case acceptS := <-r.acceptChan:
+      log.Println("---------AcceptChan---------")
 			accept := acceptS.Message.(*mdlinproto.Accept)
 			//got an Accept message
 			r.handleAccept(accept)
 			break
 
 		case commitS := <-r.commitChan:
+      log.Println("---------CommitChan---------")
 			commit := commitS.Message.(*mdlinproto.Commit)
 			//got a Commit message
 			r.handleCommit(commit)
 			break
 
 		case commitS := <-r.commitShortChan:
+      log.Println("---------CommitShortChan---------")
 			commit := commitS.Message.(*mdlinproto.CommitShort)
 			//got a Commit message
 			r.handleCommitShort(commit)
 			break
 
 		case prepareReplyS := <-r.prepareReplyChan:
+      log.Println("---------PrepareReplyChan---------")
 			prepareReply := prepareReplyS.Message.(*mdlinproto.PrepareReply)
 			//got a Prepare reply
 			r.handlePrepareReply(prepareReply)
 			break
 
 		case acceptReplyS := <-r.acceptReplyChan:
+      log.Println("---------AcceptReplyChan---------")
 			acceptReply := acceptReplyS.Message.(*mdlinproto.AcceptReply)
 			//got an Accept reply
 			r.handleAcceptReply(acceptReply)
 			break
 
 		case metricsRequest := <-r.MetricsChan:
+      log.Println("---------MetricsChan---------")
 			// Empty reply because there are no relevant metrics
 			reply := &genericsmrproto.MetricsReply{}
 			reply.Marshal(metricsRequest.Reply)
@@ -409,7 +412,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 }
 
 // Client submitted a command to a server
-func (r *Replica) handlePropose(propose *Propose) {
+func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	if !r.IsLeader {
 		preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.NIL, 0, -1}
 		r.ReplyPropose(preply, propose.Reply)
@@ -418,7 +421,7 @@ func (r *Replica) handlePropose(propose *Propose) {
 
   // Get batch size
 	batchSize := 1
-  numProposals := len(r.mdlProposeChan)
+  numProposals := len(r.MDLProposeChan)
 	if r.batchingEnabled {
 		batchSize := numProposals + 1
 		if batchSize > MAX_BATCH {
@@ -427,7 +430,7 @@ func (r *Replica) handlePropose(propose *Propose) {
 	}
 
   cmds := make([]state.Command, batchSize)
-	proposals := make([]*Propose, batchSize)
+	proposals := make([]*genericsmr.MDLPropose, batchSize)
   pids := make([]int64, batchSize)
   seqnos := make([]int64, batchSize)
 
@@ -444,7 +447,7 @@ func (r *Replica) handlePropose(propose *Propose) {
     }
     if (seqno != expectedSeqno) {
       // Add to buffer
-      r.mdlProposeChan <- prop
+      r.MDLProposeChan <- prop
     } else {
       cmds[found] = prop.Command
       proposals[found] = prop
@@ -455,7 +458,7 @@ func (r *Replica) handlePropose(propose *Propose) {
     }
     i++
     if (i <= numProposals) {
-      prop = <-r.mdlProposeChan
+      prop = <-r.MDLProposeChan
     }
   }
 
@@ -568,7 +571,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
 			//TODO: is this correct?
 			// try the proposal in a different instance
 			for i := 0; i < len(inst.lb.clientProposals); i++ {
-				r.mdlProposeChan <- inst.lb.clientProposals[i]
+				r.MDLProposeChan <- inst.lb.clientProposals[i]
 			}
 			inst.lb.clientProposals = nil
 		}
@@ -609,7 +612,7 @@ func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
 		if inst.lb != nil && inst.lb.clientProposals != nil {
 			for i := 0; i < len(inst.lb.clientProposals); i++ {
-				r.mdlProposeChan <- inst.lb.clientProposals[i]
+				r.MDLProposeChan <- inst.lb.clientProposals[i]
 			}
 			inst.lb.clientProposals = nil
 		}
@@ -636,7 +639,7 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
 		if inst.lb != nil && inst.lb.clientProposals != nil {
 			for i := 0; i < len(inst.lb.clientProposals); i++ {
-				r.mdlProposeChan <- inst.lb.clientProposals[i]
+				r.MDLProposeChan <- inst.lb.clientProposals[i]
 			}
 			inst.lb.clientProposals = nil
 		}
@@ -667,7 +670,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 				// so we put the client proposal back in the queue so that
 				// we know to try it in another instance
 				for i := 0; i < len(inst.lb.clientProposals); i++ {
-					r.mdlProposeChan <- inst.lb.clientProposals[i]
+					r.MDLProposeChan <- inst.lb.clientProposals[i]
 				}
 				inst.lb.clientProposals = nil
 			}
@@ -695,7 +698,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 			if inst.lb.clientProposals != nil {
 				// try the proposals in another instance
 				for i := 0; i < len(inst.lb.clientProposals); i++ {
-					r.mdlProposeChan <- inst.lb.clientProposals[i]
+					r.MDLProposeChan <- inst.lb.clientProposals[i]
 				}
 				inst.lb.clientProposals = nil
 			}

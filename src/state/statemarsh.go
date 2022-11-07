@@ -3,11 +3,9 @@ package state
 import (
 	"encoding/binary"
 	"io"
-	"log"
 )
 
 func (t *Command) Marshal(w io.Writer) {
-	log.Println("Using custom state Marshal")
 	var b [8]byte
 	bs := b[:8]
 	bs = b[:1]

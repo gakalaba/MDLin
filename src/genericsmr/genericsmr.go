@@ -6,6 +6,7 @@ import (
 	"fastrpc"
 	"fmt"
 	"genericsmrproto"
+  "mdlinproto"
 	"io"
 	"log"
 	"net"
@@ -34,6 +35,11 @@ type Propose struct {
 	Reply *bufio.Writer
 }
 
+type MDLPropose struct {
+  *mdlinproto.Propose
+  Reply *bufio.Writer
+}
+
 type MetricsRequest struct {
 	*genericsmrproto.MetricsRequest
 	Reply *bufio.Writer
@@ -57,6 +63,7 @@ type Replica struct {
 	State *state.State
 
 	ProposeChan chan *Propose        // channel for client proposals
+  MDLProposeChan chan *MDLPropose
 	BeaconChan  chan *Beacon         // channel for beacons from peer replicas
 	MetricsChan chan *MetricsRequest // channel to send metrics to experiment code
 
@@ -90,6 +97,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool) *Replica {
 		nil,
 		state.InitState(),
 		make(chan *Propose, CHAN_BUFFER_SIZE),
+		make(chan *MDLPropose, CHAN_BUFFER_SIZE),
 		make(chan *Beacon, CHAN_BUFFER_SIZE),
 		make(chan *MetricsRequest, 1),
 		false,
@@ -272,6 +280,14 @@ func (r *Replica) clientListener(conn net.Conn) {
 		}
 
 		switch uint8(msgType) {
+    case mdlinproto.PROPOSE:
+      log.Println("genericsmr received client bytes! line 284")
+      prop := new(mdlinproto.Propose)
+      if err = prop.Unmarshal(reader); err != nil {
+        break
+      }
+      r.MDLProposeChan <- &MDLPropose{prop, writer}
+      break
 
 		case genericsmrproto.PROPOSE:
 			prop := new(genericsmrproto.Propose)
