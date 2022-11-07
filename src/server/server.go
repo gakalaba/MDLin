@@ -23,7 +23,7 @@ var masterAddr *string = flag.String("maddr", "", "Master address. Defaults to l
 var masterPort *int = flag.Int("mport", 7087, "Master port.  Defaults to 7087.")
 var myAddr *string = flag.String("addr", "", "Server address (this machine). Defaults to localhost.")
 var doEpaxos *bool = flag.Bool("e", false, "Use EPaxos as the replication protocol. Defaults to false.")
-var doMDLin *bool= flag.Bool("mdl", false, "Use MD Linearizability as the replication protocol. Defaults to false.")
+var doMDLin *bool= flag.Bool("mdl", true, "Use Multi-dispatch Linearizability instead of Single-dispatch Linearizability. Defaults to true.")
 var procs *int = flag.Int("p", 2, "GOMAXPROCS. Defaults to 2")
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 var thrifty = flag.Bool("thrifty", false, "Use only as many messages as strictly required for inter-replica communication.")
@@ -63,7 +63,7 @@ func main() {
 		rpc.Register(rep)
 	} else if *doMDLin {
     log.Println("Starting MD Linearizability replica...")
-    rep := mdlin.NewReplica(replicaID, nodeList, *thrifty, *durable, *batch)
+    rep := mdlin.NewReplica(replicaId, nodeList, *thrifty, *durable, *batch)
     rpc.Register(rep)
   } else {
 		log.Println("Starting classic Paxos replica...")

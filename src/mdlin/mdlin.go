@@ -1,6 +1,7 @@
 package mdlin
 
 import (
+  "bufio"
 	"encoding/binary"
 	"genericsmr"
 	"genericsmrproto"
@@ -14,6 +15,7 @@ import (
 const CHAN_BUFFER_SIZE = 200000
 const TRUE = uint8(1)
 const FALSE = uint8(0)
+const NUM_CLIENTS = uint8(2)
 
 const MAX_BATCH = 5000
 
@@ -25,6 +27,7 @@ type Replica struct {
 	commitShortChan     chan *genericsmr.RPCMessage
 	prepareReplyChan    chan *genericsmr.RPCMessage
 	acceptReplyChan     chan *genericsmr.RPCMessage
+  mdlProposeChan      chan *Propose
 	prepareRPC          uint8
 	acceptRPC           uint8
 	commitRPC           uint8
@@ -40,6 +43,11 @@ type Replica struct {
 	flush               bool
 	committedUpTo       int32
 	batchingEnabled     bool
+  // Add these for multidispatch
+  nextSeqNo           map[int64]int64 // Mapping client PID to next expected sequence number
+  //buffIS              []*Instance // in memory log of buffered instances (instances that came out of order from clients)
+  //crtBuffIS           int32 // index into buffIS
+  noProposalsReady    bool
 }
 
 type InstanceStatus int
@@ -56,10 +64,17 @@ type Instance struct {
 	ballot int32
 	status InstanceStatus
 	lb     *LeaderBookkeeping
+  pid    []int64
+  seqno  []int64
+}
+
+type Propose struct {
+	*mdlinproto.Propose
+	Reply *bufio.Writer
 }
 
 type LeaderBookkeeping struct {
-	clientProposals []*genericsmr.Propose
+	clientProposals []*Propose
 	maxRecvBallot   int32
 	prepareOKs      int
 	acceptOKs       int
@@ -76,6 +91,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool,
 		make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan *genericsmr.RPCMessage, 3*genericsmr.CHAN_BUFFER_SIZE),
+    make(chan *Propose, genericsmr.CHAN_BUFFER_SIZE),
 		0, 0, 0, 0, 0, 0,
 		false,
 		make([]*Instance, 15*1024*1024),
@@ -86,20 +102,28 @@ func NewReplica(id int, peerAddrList []string, thrifty bool,
 		true,
 		-1,
 		batch,
-	}
+    make(map[int64]int64),
+    // make([]*Instance, 15*1024*1024),
+    // 0
+    true}
 
 	r.Durable = durable
 
-	r.prepareRPC = r.RegisterRPC(new(paxosproto.Prepare), r.prepareChan)
-	r.acceptRPC = r.RegisterRPC(new(paxosproto.Accept), r.acceptChan)
-	r.commitRPC = r.RegisterRPC(new(paxosproto.Commit), r.commitChan)
-	r.commitShortRPC = r.RegisterRPC(new(paxosproto.CommitShort), r.commitShortChan)
-	r.prepareReplyRPC = r.RegisterRPC(new(paxosproto.PrepareReply), r.prepareReplyChan)
-	r.acceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.acceptReplyChan)
+	r.prepareRPC = r.RegisterRPC(new(mdlinproto.Prepare), r.prepareChan)
+	r.acceptRPC = r.RegisterRPC(new(mdlinproto.Accept), r.acceptChan)
+	r.commitRPC = r.RegisterRPC(new(mdlinproto.Commit), r.commitChan)
+	r.commitShortRPC = r.RegisterRPC(new(mdlinproto.CommitShort), r.commitShortChan)
+	r.prepareReplyRPC = r.RegisterRPC(new(mdlinproto.PrepareReply), r.prepareReplyChan)
+	r.acceptReplyRPC = r.RegisterRPC(new(mdlinproto.AcceptReply), r.acceptReplyChan)
 
 	go r.run()
 
 	return r
+}
+
+func (r *Replica) ReplyPropose(reply *mdlinproto.ProposeReply, w *bufio.Writer) {
+	reply.Marshal(w)
+	w.Flush()
 }
 
 //append a log entry to stable storage
@@ -144,11 +168,11 @@ func (r *Replica) BeTheLeader(args *genericsmrproto.BeTheLeaderArgs, reply *gene
 	return nil
 }
 
-func (r *Replica) replyPrepare(replicaId int32, reply *paxosproto.PrepareReply) {
+func (r *Replica) replyPrepare(replicaId int32, reply *mdlinproto.PrepareReply) {
 	r.SendMsg(replicaId, r.prepareReplyRPC, reply)
 }
 
-func (r *Replica) replyAccept(replicaId int32, reply *paxosproto.AcceptReply) {
+func (r *Replica) replyAccept(replicaId int32, reply *mdlinproto.AcceptReply) {
 	r.SendMsg(replicaId, r.acceptReplyRPC, reply)
 }
 
@@ -182,7 +206,7 @@ func (r *Replica) run() {
 		go r.clock()
 	}
 
-	onOffProposeChan := r.ProposeChan
+	onOffProposeChan := r.mdlProposeChan
 
 	for !r.Shutdown {
 
@@ -190,50 +214,50 @@ func (r *Replica) run() {
 
 		case <-clockChan:
 			//activate the new proposals channel
-			onOffProposeChan = r.ProposeChan
+			onOffProposeChan = r.mdlProposeChan
 			break
 
 		case propose := <-onOffProposeChan:
 			//got a Propose from a client
 			r.handlePropose(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
-			if r.batchingEnabled {
+			if (r.batchingEnabled && !r.noProposalsReady)  {
 				onOffProposeChan = nil
 			}
 			break
 
 		case prepareS := <-r.prepareChan:
-			prepare := prepareS.Message.(*paxosproto.Prepare)
+			prepare := prepareS.Message.(*mdlinproto.Prepare)
 			//got a Prepare message
 			r.handlePrepare(prepare)
 			break
 
 		case acceptS := <-r.acceptChan:
-			accept := acceptS.Message.(*paxosproto.Accept)
+			accept := acceptS.Message.(*mdlinproto.Accept)
 			//got an Accept message
 			r.handleAccept(accept)
 			break
 
 		case commitS := <-r.commitChan:
-			commit := commitS.Message.(*paxosproto.Commit)
+			commit := commitS.Message.(*mdlinproto.Commit)
 			//got a Commit message
 			r.handleCommit(commit)
 			break
 
 		case commitS := <-r.commitShortChan:
-			commit := commitS.Message.(*paxosproto.CommitShort)
+			commit := commitS.Message.(*mdlinproto.CommitShort)
 			//got a Commit message
 			r.handleCommitShort(commit)
 			break
 
 		case prepareReplyS := <-r.prepareReplyChan:
-			prepareReply := prepareReplyS.Message.(*paxosproto.PrepareReply)
+			prepareReply := prepareReplyS.Message.(*mdlinproto.PrepareReply)
 			//got a Prepare reply
 			r.handlePrepareReply(prepareReply)
 			break
 
 		case acceptReplyS := <-r.acceptReplyChan:
-			acceptReply := acceptReplyS.Message.(*paxosproto.AcceptReply)
+			acceptReply := acceptReplyS.Message.(*mdlinproto.AcceptReply)
 			//got an Accept reply
 			r.handleAcceptReply(acceptReply)
 			break
@@ -269,7 +293,7 @@ func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 	if toInfinity {
 		ti = TRUE
 	}
-	args := &paxosproto.Prepare{r.Id, instance, ballot, ti}
+	args := &mdlinproto.Prepare{r.Id, instance, ballot, ti}
 
 	n := r.N - 1
 	if r.Thrifty {
@@ -290,9 +314,9 @@ func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 	}
 }
 
-var pa paxosproto.Accept
+var pa mdlinproto.Accept
 
-func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Command) {
+func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Command, pids []int64, seqnos []int64, expectedMap map[int64]int64) {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Println("Accept bcast failed:", err)
@@ -302,12 +326,15 @@ func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Comm
 	pa.Instance = instance
 	pa.Ballot = ballot
 	pa.Command = command
+  pa.PIDs = pids
+  pa.SeqNos = seqnos
+  pa.ExpectedSeqs = expectedMap
 	args := &pa
-	//args := &paxosproto.Accept{r.Id, instance, ballot, command}
+	//args := &mdlinproto.Accept{r.Id, instance, ballot, command}
 
 	n := r.N - 1
 	if r.Thrifty {
-		n = r.N >> 1
+		n = r.N >> 1 //n = n//2
 	}
 	q := r.Id
 
@@ -324,10 +351,10 @@ func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Comm
 	}
 }
 
-var pc paxosproto.Commit
-var pcs paxosproto.CommitShort
+var pc mdlinproto.Commit
+var pcs mdlinproto.CommitShort
 
-func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Command) {
+func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Command, pids []int64, seqnos []int64) {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Println("Commit bcast failed:", err)
@@ -337,6 +364,8 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 	pc.Instance = instance
 	pc.Ballot = ballot
 	pc.Command = command
+  pc.PIDs = pids
+  pc.SeqNos = seqnos
 	args := &pc
 	pcs.LeaderId = r.Id
 	pcs.Instance = instance
@@ -344,7 +373,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 	pcs.Count = int32(len(command))
 	argsShort := &pcs
 
-	//args := &paxosproto.Commit{r.Id, instance, command}
+	//args := &mdlinproto.Commit{r.Id, instance, command}
 
 	n := r.N - 1
 	if r.Thrifty {
@@ -379,13 +408,68 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 	}
 }
 
-func (r *Replica) handlePropose(propose *genericsmr.Propose) {
+// Client submitted a command to a server
+func (r *Replica) handlePropose(propose *Propose) {
 	if !r.IsLeader {
-		preply := &genericsmrproto.ProposeReply{FALSE, -1, state.NIL, 0}
+		preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.NIL, 0, -1}
 		r.ReplyPropose(preply, propose.Reply)
 		return
 	}
 
+  // Get batch size
+	batchSize := 1
+  numProposals := len(r.mdlProposeChan)
+	if r.batchingEnabled {
+		batchSize := numProposals + 1
+		if batchSize > MAX_BATCH {
+			batchSize = MAX_BATCH
+		}
+	}
+
+  cmds := make([]state.Command, batchSize)
+	proposals := make([]*Propose, batchSize)
+  pids := make([]int64, batchSize)
+  seqnos := make([]int64, batchSize)
+
+  found := 0
+  var expectedSeqno int64
+  prop := propose
+  i := 1
+  for (found < batchSize && i <= numProposals) {
+    pid := prop.PID
+    seqno := prop.SeqNo
+    expectedSeqno = 0
+    if val, ok := r.nextSeqNo[pid]; ok {
+      expectedSeqno = val
+    }
+    if (seqno != expectedSeqno) {
+      // Add to buffer
+      r.mdlProposeChan <- prop
+    } else {
+      cmds[found] = prop.Command
+      proposals[found] = prop
+      pids[found] = pid
+      seqnos[found] = seqno
+      found++
+      r.nextSeqNo[pid]++
+    }
+    i++
+    if (i <= numProposals) {
+      prop = <-r.mdlProposeChan
+    }
+  }
+
+  // None of the proposals in the channel 
+  // are ready to be added to the log
+  if (found == 0) {
+    r.noProposalsReady = true
+    preply := &mdlinproto.ProposeReply{FALSE, -1, state.NIL, 0, -1} // TODO which expected Seqno will this be?
+		r.ReplyPropose(preply, propose.Reply)
+    // TODO consider replying to client that it's out of order
+    return
+  }
+
+  r.noProposalsReady = false
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
 	}
@@ -393,63 +477,58 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	instNo := r.crtInstance
 	r.crtInstance++
 
-	batchSize := 1
-	if r.batchingEnabled {
-		batchSize := len(r.ProposeChan) + 1
-		if batchSize > MAX_BATCH {
-			batchSize = MAX_BATCH
-		}
-	}
-
-	cmds := make([]state.Command, batchSize)
-	proposals := make([]*genericsmr.Propose, batchSize)
-	cmds[0] = propose.Command
-	proposals[0] = propose
-
-	for i := 1; i < batchSize; i++ {
-		prop := <-r.ProposeChan
-		cmds[i] = prop.Command
-		proposals[i] = prop
-	}
-
 	if r.defaultBallot == -1 {
 		r.instanceSpace[instNo] = &Instance{
 			cmds,
 			r.makeUniqueBallot(0),
 			PREPARING,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0}}
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0},
+      pids,
+      seqnos}
 		r.bcastPrepare(instNo, r.makeUniqueBallot(0), true)
 	} else {
 		r.instanceSpace[instNo] = &Instance{
 			cmds,
 			r.defaultBallot,
 			PREPARED,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0}}
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0},
+      pids,
+      seqnos}
 
 		r.recordInstanceMetadata(r.instanceSpace[instNo])
 		r.recordCommands(cmds)
 		r.sync()
 
-		r.bcastAccept(instNo, r.defaultBallot, cmds)
+    // Make a copy of the nextSeqNo map
+    expectedSeqs := make(map[int64]int64)
+    copyMap(expectedSeqs, r.nextSeqNo)
+		r.bcastAccept(instNo, r.defaultBallot, cmds, pids, seqnos, expectedSeqs)
 	}
 }
 
-func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
+// Helper to copy contents of map2 to map1
+func copyMap(map1 map[int64]int64, map2 map[int64]int64) {
+  for k, v := range map2 {
+    map1[k] = v
+  }
+}
+
+func (r *Replica) handlePrepare(prepare *mdlinproto.Prepare) {
 	inst := r.instanceSpace[prepare.Instance]
-	var preply *paxosproto.PrepareReply
+	var preply *mdlinproto.PrepareReply
 
 	if inst == nil {
 		ok := TRUE
 		if r.defaultBallot > prepare.Ballot {
 			ok = FALSE
 		}
-		preply = &paxosproto.PrepareReply{prepare.Instance, ok, r.defaultBallot, make([]state.Command, 0)}
+		preply = &mdlinproto.PrepareReply{prepare.Instance, ok, r.defaultBallot, make([]state.Command, 0)}
 	} else {
 		ok := TRUE
 		if prepare.Ballot < inst.ballot {
 			ok = FALSE
 		}
-		preply = &paxosproto.PrepareReply{prepare.Instance, ok, inst.ballot, inst.cmds}
+		preply = &mdlinproto.PrepareReply{prepare.Instance, ok, inst.ballot, inst.cmds}
 	}
 
 	r.replyPrepare(prepare.LeaderId, preply)
@@ -459,33 +538,37 @@ func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
 	}
 }
 
-func (r *Replica) handleAccept(accept *paxosproto.Accept) {
+func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
+  //TODO for now.... are we making any of the decisions based on the nextSeqnos???
 	inst := r.instanceSpace[accept.Instance]
-	var areply *paxosproto.AcceptReply
+	var areply *mdlinproto.AcceptReply
 
+  expectedSeqs := accept.ExpectedSeqs
 	if inst == nil {
 		if accept.Ballot < r.defaultBallot {
-			areply = &paxosproto.AcceptReply{accept.Instance, FALSE, r.defaultBallot}
+			areply = &mdlinproto.AcceptReply{accept.Instance, FALSE, r.defaultBallot}
 		} else {
 			r.instanceSpace[accept.Instance] = &Instance{
 				accept.Command,
 				accept.Ballot,
 				ACCEPTED,
-				nil}
-			areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
+				nil,
+        accept.PIDs,
+        accept.SeqNos}
+			areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
 		}
 	} else if inst.ballot > accept.Ballot {
-		areply = &paxosproto.AcceptReply{accept.Instance, FALSE, inst.ballot}
+		areply = &mdlinproto.AcceptReply{accept.Instance, FALSE, inst.ballot}
 	} else if inst.ballot < accept.Ballot {
 		inst.cmds = accept.Command
 		inst.ballot = accept.Ballot
 		inst.status = ACCEPTED
-		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, inst.ballot}
+		areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, inst.ballot}
 		if inst.lb != nil && inst.lb.clientProposals != nil {
 			//TODO: is this correct?
 			// try the proposal in a different instance
 			for i := 0; i < len(inst.lb.clientProposals); i++ {
-				r.ProposeChan <- inst.lb.clientProposals[i]
+				r.mdlProposeChan <- inst.lb.clientProposals[i]
 			}
 			inst.lb.clientProposals = nil
 		}
@@ -495,19 +578,21 @@ func (r *Replica) handleAccept(accept *paxosproto.Accept) {
 		if r.instanceSpace[accept.Instance].status != COMMITTED {
 			r.instanceSpace[accept.Instance].status = ACCEPTED
 		}
-		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
+		areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
 	}
 
 	if areply.OK == TRUE {
 		r.recordInstanceMetadata(r.instanceSpace[accept.Instance])
 		r.recordCommands(accept.Command)
 		r.sync()
+    // If we are to accep the Proposal from the leader, we also need to bump up our nextSeqNo
+    copyMap(r.nextSeqNo, expectedSeqs)
 	}
 
 	r.replyAccept(accept.LeaderId, areply)
 }
 
-func (r *Replica) handleCommit(commit *paxosproto.Commit) {
+func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
 	inst := r.instanceSpace[commit.Instance]
 
 	if inst == nil {
@@ -515,14 +600,16 @@ func (r *Replica) handleCommit(commit *paxosproto.Commit) {
 			commit.Command,
 			commit.Ballot,
 			COMMITTED,
-			nil}
+			nil,
+      commit.PIDs,
+      commit.SeqNos}
 	} else {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
 		r.instanceSpace[commit.Instance].status = COMMITTED
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
 		if inst.lb != nil && inst.lb.clientProposals != nil {
 			for i := 0; i < len(inst.lb.clientProposals); i++ {
-				r.ProposeChan <- inst.lb.clientProposals[i]
+				r.mdlProposeChan <- inst.lb.clientProposals[i]
 			}
 			inst.lb.clientProposals = nil
 		}
@@ -534,20 +621,22 @@ func (r *Replica) handleCommit(commit *paxosproto.Commit) {
 	r.recordCommands(commit.Command)
 }
 
-func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
+func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 	inst := r.instanceSpace[commit.Instance]
 
 	if inst == nil {
 		r.instanceSpace[commit.Instance] = &Instance{nil,
 			commit.Ballot,
 			COMMITTED,
-			nil}
+			nil,
+      nil,
+      nil}
 	} else {
 		r.instanceSpace[commit.Instance].status = COMMITTED
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
 		if inst.lb != nil && inst.lb.clientProposals != nil {
 			for i := 0; i < len(inst.lb.clientProposals); i++ {
-				r.ProposeChan <- inst.lb.clientProposals[i]
+				r.mdlProposeChan <- inst.lb.clientProposals[i]
 			}
 			inst.lb.clientProposals = nil
 		}
@@ -558,7 +647,7 @@ func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
 	r.recordInstanceMetadata(r.instanceSpace[commit.Instance])
 }
 
-func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
+func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 	inst := r.instanceSpace[preply.Instance]
 
 	if inst.status != PREPARING {
@@ -570,7 +659,7 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 	if preply.OK == TRUE {
 		inst.lb.prepareOKs++
 
-		if preply.Ballot > inst.lb.maxRecvBallot {
+		if preply.Ballot > inst.lb.maxRecvBallot { //TODO CHANGE THIS THIS WILL BREAK MDL
 			inst.cmds = preply.Command
 			inst.lb.maxRecvBallot = preply.Ballot
 			if inst.lb.clientProposals != nil {
@@ -578,7 +667,7 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 				// so we put the client proposal back in the queue so that
 				// we know to try it in another instance
 				for i := 0; i < len(inst.lb.clientProposals); i++ {
-					r.ProposeChan <- inst.lb.clientProposals[i]
+					r.mdlProposeChan <- inst.lb.clientProposals[i]
 				}
 				inst.lb.clientProposals = nil
 			}
@@ -592,7 +681,9 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 			}
 			r.recordInstanceMetadata(r.instanceSpace[preply.Instance])
 			r.sync()
-			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds)
+      expectedSeqs := make(map[int64]int64)
+      copyMap(expectedSeqs, r.nextSeqNo)
+			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds, inst.pid, inst.seqno, expectedSeqs)
 		}
 	} else {
 		// TODO: there is probably another active leader
@@ -604,7 +695,7 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 			if inst.lb.clientProposals != nil {
 				// try the proposals in another instance
 				for i := 0; i < len(inst.lb.clientProposals); i++ {
-					r.ProposeChan <- inst.lb.clientProposals[i]
+					r.mdlProposeChan <- inst.lb.clientProposals[i]
 				}
 				inst.lb.clientProposals = nil
 			}
@@ -612,7 +703,7 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 	}
 }
 
-func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
+func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
 	inst := r.instanceSpace[areply.Instance]
 
 	if inst.status != PREPARED && inst.status != ACCEPTED {
@@ -628,11 +719,12 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 			if inst.lb.clientProposals != nil && state.AllBlindWrites(inst.cmds) {
 				// give client the all clear
 				for i := 0; i < len(inst.cmds); i++ {
-					propreply := &genericsmrproto.ProposeReply{
+					propreply := &mdlinproto.ProposeReply{
 						TRUE,
 						inst.lb.clientProposals[i].CommandId,
 						state.NIL,
-						inst.lb.clientProposals[i].Timestamp}
+						inst.lb.clientProposals[i].Timestamp,
+            inst.seqno[i]+1}
 					r.ReplyPropose(propreply, inst.lb.clientProposals[i].Reply)
 				}
 			}
@@ -642,7 +734,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 
 			r.updateCommittedUpTo()
 
-			r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
+			r.bcastCommit(areply.Instance, inst.ballot, inst.cmds, inst.pid, inst.seqno)
 		}
 	} else {
 		// TODO: there is probably another active leader
@@ -667,11 +759,12 @@ func (r *Replica) executeCommands() {
 				for j := 0; j < len(inst.cmds); j++ {
 					val := inst.cmds[j].Execute(r.State)
 					if inst.lb != nil && !state.AllBlindWrites(inst.cmds) {
-						propreply := &genericsmrproto.ProposeReply{
+						propreply := &mdlinproto.ProposeReply{
 							TRUE,
 							inst.lb.clientProposals[j].CommandId,
 							val,
-							inst.lb.clientProposals[j].Timestamp}
+							inst.lb.clientProposals[j].Timestamp,
+              inst.seqno[i]+1}
 						r.ReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
 					}
 				}

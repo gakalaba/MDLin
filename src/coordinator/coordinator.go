@@ -212,5 +212,5 @@ func (master *Master) GetReplicaList(args *masterproto.GetReplicaListArgs, reply
 
 func (master *Master) GetShardLeaderList(args *masterproto.GetShardLeaderListArgs, reply *masterproto.GetShardLeaderListReply) error {
   //TODO implement me when doing multisharded
-  return nil
+  return master.nodeList
 }

@@ -25,3 +25,11 @@ type GetReplicaListReply struct {
 	ReplicaList []string
 	Ready       bool
 }
+
+type GetShardLeaderListArgs struct {
+}
+
+type GetShardLeaderListReply struct {
+	LeaderList []string
+	Ready      bool
+}

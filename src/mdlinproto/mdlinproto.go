@@ -7,11 +7,29 @@ import (
 const (
 	PREPARE uint8 = iota
 	PREPARE_REPLY
+	PROPOSE //(405, 423, 75)
+	PROPOSE_REPLY
 	ACCEPT
 	ACCEPT_REPLY
 	COMMIT
 	COMMIT_SHORT
 )
+
+type Propose struct {
+	CommandId int32
+	Command   state.Command
+	Timestamp int64
+	SeqNo     int64 // Add this for multidispatch
+	PID       int64
+}
+
+type ProposeReply struct {
+	OK            uint8
+	CommandId     int32
+	Value         state.Value
+	Timestamp     int64
+	ExpectedSeqNo int64 // The group can reply with the expected seq no
+}
 
 type Prepare struct {
 	LeaderId   int32
@@ -28,10 +46,13 @@ type PrepareReply struct {
 }
 
 type Accept struct {
-	LeaderId int32
-	Instance int32
-	Ballot   int32
-	Command  []state.Command
+	LeaderId     int32
+	Instance     int32
+	Ballot       int32
+	Command      []state.Command
+	PIDs         []int64
+	SeqNos       []int64
+	ExpectedSeqs map[int64]int64
 }
 
 type AcceptReply struct {
@@ -45,6 +66,8 @@ type Commit struct {
 	Instance int32
 	Ballot   int32
 	Command  []state.Command
+	PIDs     []int64
+	SeqNos   []int64
 }
 
 type CommitShort struct {
