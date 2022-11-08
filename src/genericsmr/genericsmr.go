@@ -235,7 +235,6 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 
 		receivedAt := CurrentTime()
 
-    log.Printf("Replica %d got a message!", r.Id)
 		switch uint8(msgType) {
 
 		case genericsmrproto.GENERIC_SMR_BEACON:
@@ -283,13 +282,11 @@ func (r *Replica) clientListener(conn net.Conn) {
 
 		switch uint8(msgType) {
     case mdlinproto.PROPOSE:
-      log.Println("genericsmr received client bytes! line 284")
       prop := new(mdlinproto.Propose)
       if err = prop.Unmarshal(reader); err != nil {
         log.Println("genericsmr couldn't unmarshal the proposal")
         break
       }
-      log.Println("Sending the proposal on the channel")
       r.MDLProposeChan <- &MDLPropose{prop, writer}
       break
 

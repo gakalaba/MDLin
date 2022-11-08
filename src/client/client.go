@@ -37,6 +37,7 @@ var v = flag.Float64("v", 1, "Zipfian v parameter")
 var N int
 
 var successful []int
+var failed []int
 
 var rarray []int
 var rsp []bool
@@ -136,6 +137,7 @@ func main() {
 	}
 
 	successful = make([]int, N)
+  failed = make([]int, N)
 	leader := 0
 
 	if *noLeader == false {
@@ -144,7 +146,6 @@ func main() {
 			log.Fatalf("Error making the GetLeader RPC\n")
 		}
 		leader = reply.LeaderId
-		log.Printf("The leader is replica %d\n", leader)
 	}
 
 	var id int32 = 0
@@ -160,7 +161,7 @@ func main() {
 		n := (*reqsNb) / *rounds
 
 		if *check {
-			rsp = make([]bool, n)
+			rsp = make([]bool, n*(*T))
 			for j := 0; j < n; j++ {
 				rsp[j] = false
 			}
@@ -195,7 +196,6 @@ func main() {
             arg.PID = client_pid // ADD the client's id so we can sequence these
 				    arg.Timestamp = time.Now().UnixNano()
             arg.SeqNo = int64(i + j*(n+*eps)) //id increases across all the rounds
-            log.Println(arg)
             if !*fast {
 					    if *noLeader {
 						    leader = rarray[i]
@@ -212,6 +212,7 @@ func main() {
 					    }
 				    }
 				    log.Printf("Thread %d sent command %d with seqNo %d", client_pid, id_base+int32(i), arg.SeqNo)
+            log.Println(arg)
 			    }
         }(int64(tid), id, mdlinproto.Propose{id, state.Command{state.PUT, 0, 0}, 0, 0, 0})
         id += int32(n+*eps)
@@ -258,7 +259,6 @@ func main() {
 		////////////////////////////////
 		// Sync with WaitReplies()
 		///////////////////////////
-    log.Printf("*********Reqs for round %d sent, now we sync up waiting for replies", j)
 		err := false
 		if *noLeader {
 			for i := 0; i < N; i++ {
@@ -277,7 +277,7 @@ func main() {
 		// Do some checks on the results
 		///////////////////////////////////
 		if *check {
-			for j := 0; j < n; j++ {
+			for j := 0; j < n*(*T); j++ {
 				if !rsp[j] {
 					log.Println("Didn't receive", j)
 				}
@@ -304,7 +304,12 @@ func main() {
 		s += succ
 	}
 
-	log.Printf("Successful: %d\n", s)
+  f := 0
+  for _, fai := range  failed {
+    f += fai
+  }
+
+  log.Printf("Successful: %d, Failed: %d\n", s, f)
 
 	for _, client := range servers {
 		if client != nil {
@@ -333,14 +338,20 @@ func waitRepliesMDL(readers []*bufio.Reader, leader int, n int, done chan bool) 
 			e = true
 			continue
 		}
-		//log.Println(reply.Value)
+    
+		log.Printf("Reply.OK = %d, CommandId = %d, PID = %d, Timestamp = %d, SeqNo = %d", reply.OK, reply.CommandId, reply.Value, reply.Timestamp, reply.ExpectedSeqNo)
+    log.Printf("rsp len %d and commandID was %d and the index was %d", len(rsp), reply.CommandId, reply.CommandId/(int32(*rounds)))
+    if reply.OK == 0 {
+      log.Println("Client request failed")
+      failed[leader]++
+      continue
+    }
 		if *check {
-			if rsp[reply.CommandId] {
+			if rsp[reply.CommandId/(int32(*rounds))] {
 				log.Println("Duplicate reply", reply.CommandId)
 			}
-			rsp[reply.CommandId] = true
+			rsp[reply.CommandId/(int32(*rounds))] = true
 		}
-    log.Printf("THe reply.OK was %d", reply.OK)
 		if reply.OK != 0 {
       log.Printf("Success! expected seqno = %d", reply.ExpectedSeqNo)
 			successful[leader]++
@@ -362,8 +373,8 @@ func waitReplies(readers []*bufio.Reader, leader int, n int, done chan bool) {
 			e = true
 			continue
 		}
-		//log.Println(reply.Value)
-		if *check {
+
+    if *check {
 			if rsp[reply.CommandId] {
 				log.Println("Duplicate reply", reply.CommandId)
 			}

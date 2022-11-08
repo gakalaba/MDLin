@@ -208,8 +208,14 @@ func (r *Replica) run() {
 
 		case propose := <-onOffProposeChan:
       log.Println("---------ProposalChan---------")
+      log.Printf("len = %d", len(r.MDLProposeChan))
+      log.Printf("CommandId = %d, Command = %d, Timestamp = %d, SeqNo = %d, PID = %d", propose.CommandId, propose.Command, propose.Timestamp, propose.SeqNo, propose.PID)
 			//got a Propose from a client
-			r.handlePropose(propose)
+      preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.Value(propose.PID), propose.Timestamp, propose.SeqNo}
+			r.MDReplyPropose(preply, propose.Reply)
+
+
+      // UNCOMMENT r.handlePropose(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
 			if (r.batchingEnabled && !r.noProposalsReady)  {
 				onOffProposeChan = nil
@@ -308,7 +314,6 @@ func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 			continue
 		}
 		sent++
-    log.Println("calling SendMsg")
 		r.SendMsg(q, r.prepareRPC, args)
 	}
 }
@@ -412,7 +417,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	if !r.IsLeader {
     log.Println("I'm not the leader, sending client a FALSE reply")
 		preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.NIL, 0, -1}
-    log.Println("Responding to client with OK = false (0)")
+    log.Println("Responding to client with OK = false (0) because this isn't the leader")
 		r.MDReplyPropose(preply, propose.Reply)
 		return
 	}
@@ -436,7 +441,6 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
   var expectedSeqno int64
   prop := propose
   i := 1
-  log.Printf("found = %d, batchSize = %d, i = %d, numProposals = %d", found, batchSize, i, numProposals)
   for (found < batchSize && i <= numProposals) {
     pid := prop.PID
     seqno := prop.SeqNo
@@ -444,7 +448,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
     if val, ok := r.nextSeqNo[pid]; ok {
       expectedSeqno = val
     }
-    log.Printf("found = %d, pid = %d, seqno = %d, expectedSeqNo = %d", found, pid, seqno, expectedSeqno)
+    log.Printf("found = %d, pid = %d, seqno = %d, expectedSeqNo = %d, len channel = %d", found, pid, seqno, expectedSeqno, numProposals)
     if (seqno != expectedSeqno) {
       // Add to buffer
       log.Println("Out of order, buffering back into channel")
@@ -456,7 +460,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
       seqnos[found] = seqno
       found++
       r.nextSeqNo[pid]++
-      log.Println("We made an entry")
+      //log.Println("We made an entry")
     }
     i++
     if (found < batchSize && i <= numProposals) {
@@ -471,13 +475,12 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
     log.Println("None of the proposals pulled out of the channel were ready!")
     r.noProposalsReady = true
     preply := &mdlinproto.ProposeReply{FALSE, -1, state.NIL, 0, -1} // TODO which expected Seqno will this be?
-		log.Println("Responding to client with OK = false (0)")
+		log.Println("Responding to client with OK = false (0) because no proposals were ready")
     r.MDReplyPropose(preply, propose.Reply)
     // TODO consider replying to client that it's out of order
     return
   }
 
-  log.Println("We're making our entry after checking it's received sequentially")
   r.noProposalsReady = false
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
@@ -736,7 +739,9 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
 						state.NIL,
 						inst.lb.clientProposals[i].Timestamp,
             inst.seqno[i]+1}
-					log.Println("Responding to client with OK = true (1)")
+					//_, filename, line, _ := runtime.Caller(1)
+          //log.Printf("[error] %s:%d %v", filename, line, err)
+          log.Println("Responding to client with OK = true (1) in handleAcceptReply")
           r.MDReplyPropose(propreply, inst.lb.clientProposals[i].Reply)
 				}
 			}
@@ -776,8 +781,8 @@ func (r *Replica) executeCommands() {
 							inst.lb.clientProposals[j].CommandId,
 							val,
 							inst.lb.clientProposals[j].Timestamp,
-              inst.seqno[i]+1}
-						log.Println("Responding to client with OK = true (1)")
+              inst.seqno[j]+1}
+						log.Println("Responding to client with OK = true (1) in executeCommand")
             r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
 					}
 				}

@@ -7,7 +7,7 @@ import (
 const (
 	PREPARE uint8 = iota
 	PREPARE_REPLY
-	PROPOSE //(405, 423, 75)
+	PROPOSE
 	PROPOSE_REPLY
 	ACCEPT
 	ACCEPT_REPLY
