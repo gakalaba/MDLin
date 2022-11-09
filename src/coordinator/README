@@ -1,2 +1,0 @@
-do we need this? this would just be to coordinate multiple shards, where each shard
-would contain its own master and servers

@@ -16,6 +16,7 @@ type GetLeaderArgs struct {
 
 type GetLeaderReply struct {
 	LeaderId int
+  LeaderAddr string
 }
 
 type GetReplicaListArgs struct {
@@ -26,10 +27,3 @@ type GetReplicaListReply struct {
 	Ready       bool
 }
 
-type GetShardLeaderListArgs struct {
-}
-
-type GetShardLeaderListReply struct {
-	LeaderList []string
-	Ready      bool
-}

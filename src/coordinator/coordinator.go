@@ -6,6 +6,7 @@ import (
 	"genericsmrproto"
 	"log"
 	"masterproto"
+  "coordinatorproto"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -14,17 +15,18 @@ import (
 	"time"
 )
 
-var portnum *int = flag.Int("port", 7087, "Port # to listen on. Defaults to 7087")
-var numNodes *int = flag.Int("N", 3, "Number of replicas. Defaults to 3.")
-var nodeIPs *string = flag.String("ips", "", "Space separated list of IP addresses (ordered). The leader will be 0")
+var portnum *int = flag.Int("port", 7097, "Port # to listen on. Defaults to 7097")
+var nShards *int = flag.Int("N", 2, "Number of shards. Defaults to 2.")
+var masterIPs *string = flag.String("ips", "", "Space separated list of master IP addresses (ordered).")
 
-type Master struct {
-	N              int
-	nodeList       []string
+type Coordinator struct {
+	numShards              int
+	masterList       []string
 	addrList       []string
 	portList       []int
 	lock           *sync.Mutex
-	nodes          []*rpc.Client
+	masters          []*rpc.Client
+  shardLeaders []*rpc.Client
 	leader         []bool
 	alive          []bool
 	expectAddrList []string
@@ -35,15 +37,15 @@ type Master struct {
 func main() {
 	flag.Parse()
 
-	log.Printf("Master starting on port %d\n", *portnum)
-	log.Printf("...waiting for %d replicas\n", *numNodes)
+	log.Printf("Coordinator starting on port %d\n", *portnum)
+	log.Printf("...waiting for %d shards\n", *numShards)
 
 	ips := []string{}
-	if *nodeIPs != "" {
-		ips = strings.Split(*nodeIPs, ",")
-		log.Println("Ordered replica ips:", ips, len(ips))
+	if *masterIPs != "" {
+		ips = strings.Split(*masterIPs, ",")
+		log.Println("Ordered master ips:", ips, len(ips))
 	} else {
-    for i := 0; i < *numNodes; i++ {
+    for i := 0; i < *numShards; i++ {
 	    ips = append(ips, "")
 	  }
   }
@@ -186,31 +188,18 @@ func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterprot
 	return nil
 }
 
-func (master *Master) GetLeader(args *masterproto.GetLeaderArgs, reply *masterproto.GetLeaderReply) error {
-	time.Sleep(4 * 1000 * 1000)
-	for i, l := range master.leader {
-		if l {
-			*reply = masterproto.GetLeaderReply{i}
-			break
-		}
-	}
-	return nil
-}
+func (coordinator *Coordinator) GetShardLeaderList(args *coordinatorproto.GetShardLeaderListArgs, reply *coordinatorproto.GetShardLeaderListReply) error {
+  coordinator.lock.Lock()
+  defer coordinator.lock.Unlock()
 
-func (master *Master) GetReplicaList(args *masterproto.GetReplicaListArgs, reply *masterproto.GetReplicaListReply) error {
-	master.lock.Lock()
-	defer master.lock.Unlock()
-
-	if master.nConnected == master.N {
-		reply.ReplicaList = master.nodeList
-		reply.Ready = true
-	} else {
-		reply.Ready = false
-	}
-	return nil
-}
-
-func (master *Master) GetShardLeaderList(args *masterproto.GetShardLeaderListArgs, reply *masterproto.GetShardLeaderListReply) error {
-  //TODO implement me when doing multisharded
+  if coordinator.nConnected == coordinator.numShards {
+    for e, i := range coordinator.masterList {
+      reply := new(masterproto.GetLeaderReply)
+      if err = master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply); err != nil {
+        log.Fatalf("Error making the GetLeader RPC\n")
+      }
+      coordinator.shardList[i] = reply.LeaderAddr
+    }
+    reply.Ready = true
   return master.nodeList
 }
