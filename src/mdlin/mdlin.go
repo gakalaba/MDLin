@@ -9,12 +9,14 @@ import (
 	"mdlinproto"
 	"state"
 	"time"
+  "mysort"
 )
 
 const CHAN_BUFFER_SIZE = 200000
 const TRUE = uint8(1)
 const FALSE = uint8(0)
 const NUM_CLIENTS = uint8(2)
+const NUM_OUTSTANDING_INST = 10000
 
 const MAX_BATCH = 5000
 
@@ -43,8 +45,7 @@ type Replica struct {
 	batchingEnabled     bool
   // Add these for multidispatch
   nextSeqNo           map[int64]int64 // Mapping client PID to next expected sequence number
-  //buffIS              []*Instance // in memory log of buffered instances (instances that came out of order from clients)
-  //crtBuffIS           int32 // index into buffIS
+  outstandingInst     map[int64][]*genericsmr.MDLPropose // Mapping client PID to `sorted` list of outstanding proposals received
   noProposalsReady    bool
 }
 
@@ -95,8 +96,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool,
 		-1,
 		batch,
     make(map[int64]int64),
-    // make([]*Instance, 15*1024*1024),
-    // 0
+    make(map[int64][]*genericsmr.MDLPropose),
     true}
 
 	r.Durable = durable
@@ -451,8 +451,15 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
     log.Printf("found = %d, pid = %d, seqno = %d, expectedSeqNo = %d, len channel = %d", found, pid, seqno, expectedSeqno, numProposals)
     if (seqno != expectedSeqno) {
       // Add to buffer
+      if _, ok := r.outstandingInst[pid]; !ok {
+        r.outstandingInst[pid] = make([]*genericsmr.MDLPropose, 0)
+      }
+      r.outstandingInst[pid] = append(r.outstandingInst[pid], prop)
+      if (len(r.outstandingInst[pid]) > 1) {
+        mysort.MergeSort(r.outstandingInst[pid])
+      }
       log.Println("Out of order, buffering back into channel")
-      r.MDLProposeChan <- prop
+      // Now see if there's a contiguous run with this included TODO
     } else {
       cmds[found] = prop.Command
       proposals[found] = prop

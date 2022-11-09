@@ -14,6 +14,10 @@ type byteReader interface {
 	ReadByte() (c byte, err error)
 }
 
+func (t *Propose) New() fastrpc.Serializable {
+	return new(Propose)
+}
+
 func (t *Propose) Marshal(wire io.Writer) {
 	var b [8]byte
 	var bs []byte
@@ -93,6 +97,10 @@ func (t *Propose) Unmarshal(wire io.Reader) error {
 	t.PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
 
 	return nil
+}
+
+func (t *ProposeReply) New() fastrpc.Serializable {
+	return new(ProposeReply)
 }
 
 func (t *ProposeReply) Marshal(wire io.Writer) {
