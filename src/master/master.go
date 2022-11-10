@@ -190,7 +190,7 @@ func (master *Master) GetLeader(args *masterproto.GetLeaderArgs, reply *masterpr
 	time.Sleep(4 * 1000 * 1000)
 	for i, l := range master.leader {
 		if l {
-			*reply = masterproto.GetLeaderReply{i}
+			*reply = masterproto.GetLeaderReply{i, master.nodeList[i]}
 			break
 		}
 	}
@@ -210,7 +210,3 @@ func (master *Master) GetReplicaList(args *masterproto.GetReplicaListArgs, reply
 	return nil
 }
 
-func (master *Master) GetShardLeaderList(args *masterproto.GetShardLeaderListArgs, reply *masterproto.GetShardLeaderListReply) error {
-  //TODO implement me when doing multisharded
-  return nil
-}

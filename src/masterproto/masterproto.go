@@ -26,4 +26,3 @@ type GetReplicaListReply struct {
 	ReplicaList []string
 	Ready       bool
 }
-

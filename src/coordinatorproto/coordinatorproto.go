@@ -6,8 +6,8 @@ type RegisterArgs struct {
 }
 
 type RegisterReply struct {
-	ReplicaId int
-	NodeList  []string
+	MasterId int
+	MasterList  []string
 	Ready     bool
 }
 
