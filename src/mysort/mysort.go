@@ -31,7 +31,7 @@ func merge(a []*genericsmr.MDLPropose, start1 int, start2 int, end int) {
   aux := make([]*genericsmr.MDLPropose, length)
   var elem *genericsmr.MDLPropose
 	for i := 0; i < length; i++ {
-		if (index1 == start2) || ((index2 != end) && (a[index1].SeqNo > a[index2].SeqNo)) {
+		if (index1 == start2) || ((index2 != end) && (a[index1].SeqNo < a[index2].SeqNo)) {
 			elem = a[index2]
 			index2 += 1
 		} else {
