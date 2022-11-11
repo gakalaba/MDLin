@@ -208,9 +208,6 @@ func (r *Replica) run() {
 
 		case propose := <-onOffProposeChan:
       log.Println("---------ProposalChan---------")
-      log.Printf("len = %d", len(r.MDLProposeChan))
-      log.Printf("CommandId = %d, Command = %d, Timestamp = %d, SeqNo = %d, PID = %d", propose.CommandId, propose.Command, propose.Timestamp, propose.SeqNo, propose.PID)
-
       r.handlePropose(propose)
       preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.Value(propose.PID), propose.Timestamp, propose.SeqNo}
       r.MDReplyPropose(preply, propose.Reply)
@@ -421,14 +418,15 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	}
 
   // Get batch size
-	batchSize := 1
+	batchSize := 2
   numProposals := len(r.MDLProposeChan)+1
-	if r.batchingEnabled {
-		batchSize := numProposals + 1
-		if batchSize > MAX_BATCH {
-			batchSize = MAX_BATCH
-		}
-	}
+	//if r.batchingEnabled {
+	//	batchSize := numProposals + 1
+	//	if batchSize > MAX_BATCH {
+	//		batchSize = MAX_BATCH
+	//	}
+	//}
+  log.Printf("the batch size isssss %d", batchSize)
 
   cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.MDLPropose, batchSize)
@@ -464,6 +462,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
       }
       log.Println("Out of order, buffering back into channel") //TODO do we need to sort?
     } else {
+      log.Println("Found an in order! adding it to log")
       cmds[found] = prop.Command
       proposals[found] = prop
       pids[found] = pid
@@ -472,15 +471,19 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
       r.nextSeqNo[pid]++
       // Check if any others are ready
       for true {
+        log.Printf("looking for any others that might be ready from this PID %d", pid)
         l := len(r.outstandingInst[pid])
+        log.Printf("apppears there are %d outstanding for this pid", l)
         expectedSeqno = r.nextSeqNo[pid]
         if (l > 0) && (r.outstandingInst[pid][l-1].SeqNo == expectedSeqno) {
           // We found previously outstanding requests that can be replicated now
           prop = r.outstandingInst[pid][l-1]
           r.outstandingInst[pid] = r.outstandingInst[pid][:l-1]
           r.nextSeqNo[pid]++ // Giving us linearizability!
+          log.Printf("head of it's buff Q is ready, with command %d", prop.CommandId)
           if (found < batchSize) {
             // Add it to this batch
+            log.Println("we're adding it to this batch")
             cmds[found] = prop.Command
             proposals[found] = prop
             pids[found] = prop.PID
@@ -489,6 +492,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
           } else {
             // Finish the current entry and create a new instance
             // for the outstanding request about to be added
+            log.Println("gotta make a separate log entry for this one now")
             if r.defaultBallot == -1 {
 		          r.instanceSpace[r.crtInstance] = &Instance{
 			        cmds,
@@ -518,13 +522,14 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
             found = 1
           }
         } else {
+          log.Println("Break")
           break
         }
       }
     }
     i++
     if (found < batchSize && i <= numProposals) {
-      log.Println("Pulled out the next one")
+      log.Println("--->Pulled out the next one")
       prop = <-r.MDLProposeChan
     }
   }
@@ -542,8 +547,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
   }
 
   r.noProposalsReady = false
+  log.Println("found was not 0!! we are returning now not REPLICATING")
   return //TODO remove
-  
   // Ship out this last round
   if r.defaultBallot == -1 {
     r.instanceSpace[r.crtInstance] = &Instance{
@@ -565,6 +570,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
   r.crtInstance++
 
   for instNo := firstInst; instNo < r.crtInstance; instNo++ {
+    log.Println("looping through all instances made %d", instNo)
 	  if r.defaultBallot == -1 {
 
       log.Println("(candidate) leader broadcasting prepares....")

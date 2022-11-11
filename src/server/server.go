@@ -37,6 +37,7 @@ var clockSyncEpsilon = flag.Float64("clockepsilon", 4, "The number of millisecon
 func main() {
 	flag.Parse()
 
+  log.Println("batching?", batch)
 	runtime.GOMAXPROCS(*procs)
 
 	if *cpuprofile != "" {
@@ -63,6 +64,7 @@ func main() {
 		rpc.Register(rep)
 	} else if *doMDLin {
 		log.Println("Starting MD Linearizability replica...")
+    log.Println("do batch?", *batch)
 		rep := mdlin.NewReplica(replicaId, nodeList, *thrifty, *durable, *batch)
 		rpc.Register(rep)
 	} else {
