@@ -209,8 +209,6 @@ func (r *Replica) run() {
 		case propose := <-onOffProposeChan:
       log.Println("---------ProposalChan---------")
       r.handlePropose(propose)
-      preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.Value(propose.PID), propose.Timestamp, propose.SeqNo}
-      r.MDReplyPropose(preply, propose.Reply)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
 			if (r.batchingEnabled && !r.noProposalsReady)  {
 				onOffProposeChan = nil
@@ -418,14 +416,14 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	}
 
   // Get batch size
-	batchSize := 2
+	batchSize := 1
   numProposals := len(r.MDLProposeChan)+1
-	//if r.batchingEnabled {
-	//	batchSize := numProposals + 1
-	//	if batchSize > MAX_BATCH {
-	//		batchSize = MAX_BATCH
-	//	}
-	//}
+	if r.batchingEnabled {
+		batchSize := numProposals + 1
+		if batchSize > MAX_BATCH {
+			batchSize = MAX_BATCH
+		}
+	}
   log.Printf("the batch size isssss %d", batchSize)
 
   cmds := make([]state.Command, batchSize)
@@ -538,17 +536,15 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
   // are ready to be added to the log
   if (found == 0) {
     log.Println("None of the proposals pulled out of the channel or in the buffers are ready!")
+    // We won't respond to the client, since that response 
+    // will come when the command gets unbuffered and later executed
     r.noProposalsReady = true
-    preply := &mdlinproto.ProposeReply{FALSE, -1, state.NIL, 0, -1} // TODO which expected Seqno will this be?
-		log.Println("Responding to client with OK = false (0) because no proposals were ready")
-    r.MDReplyPropose(preply, propose.Reply)
-    // TODO consider replying to client that it's out of order
     return
   }
 
   r.noProposalsReady = false
   log.Println("found was not 0!! we are returning now not REPLICATING")
-  return //TODO remove
+
   // Ship out this last round
   if r.defaultBallot == -1 {
     r.instanceSpace[r.crtInstance] = &Instance{
@@ -854,7 +850,7 @@ func (r *Replica) executeCommands() {
 							val,
 							inst.lb.clientProposals[j].Timestamp,
               inst.seqno[j]+1}
-						log.Println("Responding to client with OK = true (1) in executeCommand")
+						log.Println("Responding to client with OK = true (1) in executeCommand, we executed command %d", inst.lb.clientProposals[0].CommandId)
             r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
 					}
 				}

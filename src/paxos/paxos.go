@@ -194,6 +194,7 @@ func (r *Replica) run() {
 			break
 
 		case propose := <-onOffProposeChan:
+      log.Println("ProposeChan")
 			//got a Propose from a client
 			r.handlePropose(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
@@ -204,36 +205,42 @@ func (r *Replica) run() {
 			break
 
 		case prepareS := <-r.prepareChan:
-			prepare := prepareS.Message.(*paxosproto.Prepare) // Casting Message interface to concrete type *paxosproto.Prepare
+			log.Println("PrepareChan")
+      prepare := prepareS.Message.(*paxosproto.Prepare) // Casting Message interface to concrete type *paxosproto.Prepare
 			//got a Prepare message
 			r.handlePrepare(prepare)
 			break
 
 		case acceptS := <-r.acceptChan: // follower got something from leader's bCastAccept
+    log.Println("AcceptChan")
 			accept := acceptS.Message.(*paxosproto.Accept)
 			//got an Accept message
 			r.handleAccept(accept)
 			break
 
 		case commitS := <-r.commitChan:
+      log.Println("CommitChan")
 			commit := commitS.Message.(*paxosproto.Commit)
 			//got a Commit message
 			r.handleCommit(commit)
 			break
 
 		case commitS := <-r.commitShortChan:
+      log.Println("CommitShortChan")
 			commit := commitS.Message.(*paxosproto.CommitShort)
 			//got a Commit message
 			r.handleCommitShort(commit)
 			break
 
 		case prepareReplyS := <-r.prepareReplyChan:
+      log.Println("PrepareReplyChan")
 			prepareReply := prepareReplyS.Message.(*paxosproto.PrepareReply)
 			//got a Prepare reply
 			r.handlePrepareReply(prepareReply)
 			break
 
 		case acceptReplyS := <-r.acceptReplyChan:
+      log.Println("AcceptReplyChan")
 			acceptReply := acceptReplyS.Message.(*paxosproto.AcceptReply)
 			//got an Accept reply
 			r.handleAcceptReply(acceptReply)
@@ -381,8 +388,10 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 }
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
+  log.Println("handle proipose!")
 	if !r.IsLeader {
 		preply := &genericsmrproto.ProposeReply{FALSE, -1, state.NIL, 0}
+    log.Println("not the elader")
 		r.ReplyPropose(preply, propose.Reply)
 		return
 	}
@@ -407,6 +416,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	cmds[0] = propose.Command //Store the command the client sent
 	proposals[0] = propose    //Store the proposal message from client
 
+  log.Printf("The command id was %d", propose.CommandId)
 	for i := 1; i < batchSize; i++ {
 		prop := <-r.ProposeChan // pull everything out of the proposal chan (well, as much as we clocked batchSize at above)
 		cmds[i] = prop.Command
@@ -420,6 +430,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 			r.makeUniqueBallot(0),
 			PREPARING,
 			&LeaderBookkeeping{proposals, 0, 0, 0, 0}}
+    log.Println("Bcasp Prepare")
 		r.bcastPrepare(instNo, r.makeUniqueBallot(0), true)
 	} else {
 		r.instanceSpace[instNo] = &Instance{
@@ -431,6 +442,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		r.recordInstanceMetadata(r.instanceSpace[instNo])
 		r.recordCommands(cmds)
 		r.sync() //we record the entry in our stable storage log
+    log.Println("Bcasp Accept")
 
 		r.bcastAccept(instNo, r.defaultBallot, cmds) // and then we replicate it at a majority
 	}
@@ -691,6 +703,7 @@ func (r *Replica) executeCommands() {
 							inst.lb.clientProposals[j].CommandId,
 							val,
 							inst.lb.clientProposals[j].Timestamp}
+            log.Println("Responding to client with OK = true (1) in executeCommand, we executed command %d", inst.lb.clientProposals[0].CommandId)
 						r.ReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
 					}
 				}
