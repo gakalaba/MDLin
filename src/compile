@@ -3,4 +3,4 @@
 go install master
 go install server
 go install client
-go install client-unit
+go install client-ss-test
