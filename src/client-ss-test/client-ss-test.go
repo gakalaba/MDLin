@@ -109,20 +109,26 @@ func main() {
 	////////////////////////////////////////////////
 	// Sending the requests and waiting for replies
 	////////////////////////////////////////////////
-	file, ferr := os.OpenFile("~/MDLin/ss-test.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
+	file, ferr := os.OpenFile("/users/akalaba/ss-test.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
 	if ferr != nil {
-		log.Println("file error oh no")
+		log.Println("file error oh no", ferr)
 		return
 	}
 	defer file.Close()
-	fanout := [5]int{1, 10} //, 100, 1000, 10000}
+	if (*mdlin) {
+		file.WriteString("MDLin Test\n")
+	} else {
+		file.WriteString("SDLin Test\n")
+	}
+	fanout := [5]int{1, 10, 100, 1000, 10000}
 	base := 0
 	for _, f := range fanout {
+		log.Printf("doing fanout of %d", f)
 		time_results := make([]time.Duration, *trials)
 		for t := 0; t < *trials; t++ {
+			log.Printf(".....trial %d", t)
 			rsp := newResponseArray(f)
 			if *mdlin {
-				file.WriteString(fmt.Sprintf("MDLin Test"))
 				go waitRepliesMDL(readers, leader, &rsp, done) // number of reqs this round * threads
 				var arg mdlinproto.Propose
 				before := time.Now()
@@ -159,7 +165,6 @@ func main() {
 				}
 			} else {
 				log.Println("Paxos....")
-				file.WriteString(fmt.Sprintf("SDLin Test"))
 				go waitReplies(readers, leader, &rsp, done) // number of reqs this round * threads
 				var arg genericsmrproto.Propose
 				before := time.Now()
@@ -193,18 +198,20 @@ func main() {
 			}
 		}
 		// Check correctnessssss
-		s := 0
+		successes := 0
 		for _, succ := range successful {
-			s += succ
+			successes += succ
 		}
-		f := 0
+		fails := 0
 		for _, fai := range failed {
-			f += fai
+			fails += fai
 		}
 		//Log the avg across trials for this fanout
-		log.Printf("Successful: %d, Failed: %d\n", s, f)
-		total := int64(summ(time_results) / time.Millisecond) // convert time duration to milliseconds as integer
-		file.WriteString(fmt.Sprintf("Fanout %d took %d", f, total/int64(f)))
+		log.Printf("Successful: %d, Failed: %d\n", successes, fails)
+		total := int64(summ(time_results).Milliseconds()) // convert time duration to milliseconds as integer
+		log.Printf("The total, predivide %v %d", summ(time_results).Milliseconds(), total)
+		log.Printf("The AVERAGE is %d", total/int64(*trials))
+		file.WriteString(fmt.Sprintf("Fanout %d took %v\n", f, total/int64(*trials)))
 		base += f
 	}
 	for _, client := range servers {
@@ -216,12 +223,13 @@ func main() {
 }
 
 func summ(a []time.Duration) time.Duration {
-	total := time.Now()
-	dumb := total
+	total := 0*time.Millisecond
 	for _, e := range a {
-		total.Add(e)
+		log.Printf("SUMM, a time result is %v", e)
+		total += e
 	}
-	return total.Sub(dumb)
+	log.Printf("The total returned sum %v", total)
+	return total
 }
 
 func newResponseArray(f int) []int {
@@ -255,6 +263,8 @@ func waitRepliesMDL(readers []*bufio.Reader, leader int, rsp *[]int, done chan b
 		}
 		if (*rsp)[reply.CommandId] != -1 {
 			log.Println("Duplicate reply", reply.CommandId)
+			failed[leader]++
+			continue
 		}
 		(*rsp)[reply.CommandId] = int(reply.Value)
 		// log.Printf("Success! expected seqno = %d", reply.ExpectedSeqNo)
@@ -285,6 +295,8 @@ func waitReplies(readers []*bufio.Reader, leader int, rsp *[]int, done chan bool
 		} else {
 			if (*rsp)[reply.CommandId] != -1 {
 				log.Println("Duplicate reply", reply.CommandId)
+				failed[leader]++
+				continue
 			}
 			(*rsp)[reply.CommandId] = int(reply.Value)
 			// log.Printf("Success!")
