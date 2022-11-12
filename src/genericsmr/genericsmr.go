@@ -6,9 +6,9 @@ import (
 	"fastrpc"
 	"fmt"
 	"genericsmrproto"
-  "mdlinproto"
 	"io"
 	"log"
+	"mdlinproto"
 	"net"
 	"os"
 	"rdtsc"
@@ -36,8 +36,8 @@ type Propose struct {
 }
 
 type MDLPropose struct {
-  *mdlinproto.Propose
-  Reply *bufio.Writer
+	*mdlinproto.Propose
+	Reply *bufio.Writer
 }
 
 type MetricsRequest struct {
@@ -62,10 +62,10 @@ type Replica struct {
 
 	State *state.State
 
-	ProposeChan chan *Propose        // channel for client proposals
-  MDLProposeChan chan *MDLPropose
-	BeaconChan  chan *Beacon         // channel for beacons from peer replicas
-	MetricsChan chan *MetricsRequest // channel to send metrics to experiment code
+	ProposeChan    chan *Propose // channel for client proposals
+	MDLProposeChan chan *MDLPropose
+	BeaconChan     chan *Beacon         // channel for beacons from peer replicas
+	MetricsChan    chan *MetricsRequest // channel to send metrics to experiment code
 
 	Shutdown bool
 
@@ -258,7 +258,7 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 			if rpair, present := r.rpcTable[msgType]; present {
 				obj := rpair.Obj.New()
 				if err = obj.Unmarshal(reader); err != nil {
-          log.Println("Couldn't unmarshall")
+					log.Println("Couldn't unmarshall")
 					break
 				}
 				rpair.Chan <- &RPCMessage{obj, receivedAt, int64(rid)}
@@ -281,14 +281,14 @@ func (r *Replica) clientListener(conn net.Conn) {
 		}
 
 		switch uint8(msgType) {
-    case mdlinproto.PROPOSE:
-      prop := new(mdlinproto.Propose)
-      if err = prop.Unmarshal(reader); err != nil {
-        log.Println("genericsmr couldn't unmarshal the proposal")
-        break
-      }
-      r.MDLProposeChan <- &MDLPropose{prop, writer}
-      break
+		case mdlinproto.PROPOSE:
+			prop := new(mdlinproto.Propose)
+			if err = prop.Unmarshal(reader); err != nil {
+				log.Println("genericsmr couldn't unmarshal the proposal")
+				break
+			}
+			r.MDLProposeChan <- &MDLPropose{prop, writer}
+			break
 
 		case genericsmrproto.PROPOSE:
 			prop := new(genericsmrproto.Propose)
@@ -332,7 +332,9 @@ func (r *Replica) ReplyPropose(reply *genericsmrproto.ProposeReply, w *bufio.Wri
 }
 
 func (r *Replica) MDReplyPropose(reply *mdlinproto.ProposeReply, w *bufio.Writer) {
-  w.WriteByte(mdlinproto.PROPOSE_REPLY)
+  log.Println("hereere about to marshal")
+  log.Printf("CommandID = %d, Timestamp = %d, OK = %d, value = %v", reply.CommandId, reply.Timestamp, reply.OK, reply.Value)
+	w.WriteByte(mdlinproto.PROPOSE_REPLY)
 	reply.Marshal(w)
 	w.Flush()
 }

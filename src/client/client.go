@@ -338,8 +338,8 @@ func waitRepliesMDL(readers []*bufio.Reader, leader int, n int, done chan bool) 
 			e = true
 			continue
 		}
-    
-		log.Printf("Reply.OK = %d, CommandId = %d, PID = %d, Timestamp = %d, SeqNo = %d", reply.OK, reply.CommandId, reply.Value, reply.Timestamp, reply.ExpectedSeqNo)
+
+		log.Printf("Reply.OK = %d, CommandId = %d, PID = %d, Timestamp = %d", reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
     log.Printf("rsp len %d and commandID was %d and the index was %d", len(rsp), reply.CommandId, reply.CommandId/(int32(*rounds)))
     if reply.OK == 0 {
       log.Println("Client request failed")
@@ -353,7 +353,6 @@ func waitRepliesMDL(readers []*bufio.Reader, leader int, n int, done chan bool) 
 			rsp[reply.CommandId/(int32(*rounds))] = true
 		}
 		if reply.OK != 0 {
-      log.Printf("Success! expected seqno = %d", reply.ExpectedSeqNo)
 			successful[leader]++
 		}
 	}

@@ -109,18 +109,18 @@ func main() {
 	////////////////////////////////////////////////
 	// Sending the requests and waiting for replies
 	////////////////////////////////////////////////
-	file, ferr := os.OpenFile("/users/akalaba/ss-test.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
+	file, ferr := os.OpenFile("/home/anja/Desktop/MDLin/ss-test.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
 	if ferr != nil {
 		log.Println("file error oh no", ferr)
 		return
 	}
 	defer file.Close()
-	if (*mdlin) {
+	if *mdlin {
 		file.WriteString("MDLin Test\n")
 	} else {
 		file.WriteString("SDLin Test\n")
 	}
-	fanout := [5]int{1, 10, 100, 1000, 10000}
+	fanout := [2]int{1, 10} //, 100, 1000, 10000}
 	base := 0
 	for _, f := range fanout {
 		log.Printf("doing fanout of %d", f)
@@ -134,7 +134,7 @@ func main() {
 				before := time.Now()
 				for i := 0; i < f; i++ {
 					// CommandId = 0, Command = put(key 0 = val i), timestamp = 0, seqno = i, PID = 0
-					arg = mdlinproto.Propose{int32(i), state.Command{state.PUT, 0, state.Value(i)}, 0, int64(base + i), 0}
+					arg = mdlinproto.Propose{int32(i), state.Command{state.PUT, 0, state.Value(i)}, 0, int64(base + i + t*f), 0}
 					writers[leader].WriteByte(mdlinproto.PROPOSE)
 					arg.Marshal(writers[leader])
 					writers[leader].Flush()
@@ -212,7 +212,7 @@ func main() {
 		log.Printf("The total, predivide %v %d", summ(time_results).Milliseconds(), total)
 		log.Printf("The AVERAGE is %d", total/int64(*trials))
 		file.WriteString(fmt.Sprintf("Fanout %d took %v\n", f, total/int64(*trials)))
-		base += f
+		base += f * (*trials)
 	}
 	for _, client := range servers {
 		if client != nil {
@@ -223,7 +223,7 @@ func main() {
 }
 
 func summ(a []time.Duration) time.Duration {
-	total := 0*time.Millisecond
+	total := 0 * time.Millisecond
 	for _, e := range a {
 		log.Printf("SUMM, a time result is %v", e)
 		total += e
@@ -245,17 +245,24 @@ func waitRepliesMDL(readers []*bufio.Reader, leader int, rsp *[]int, done chan b
 
 	reply := new(mdlinproto.ProposeReply)
 
+	var msgType byte
 	var err error
 	n := len(*rsp)
 	for i := 0; i < n; i++ {
+		if msgType, err = readers[leader].ReadByte(); err != nil ||
+			msgType != mdlinproto.PROPOSE_REPLY {
+			log.Printf("Error when reading (op:%d): %v", msgType, err)
+			e = true
+			continue
+		}
 		if err = reply.Unmarshal(readers[leader]); err != nil {
 			log.Println("Error when reading:", err)
 			e = true
 			continue
 		}
 
-		//log.Printf("Reply.OK = %d, CommandId = %d, PID = %d, Timestamp = %d, SeqNo = %d", reply.OK, reply.CommandId, reply.Value, reply.Timestamp, reply.ExpectedSeqNo)
-		//log.Printf("rsp len %d and commandID was %d", len(rsp), reply.CommandId)
+		//log.Printf("Reply.OK = %d, CommandId = %d, Value = %d, Timestamp = %d", reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
+		//log.Printf("rsp len %d and commandID was %d", len(*rsp), reply.CommandId)
 		if reply.OK == 0 {
 			log.Println("Client request failed")
 			failed[leader]++

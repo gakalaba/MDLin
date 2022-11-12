@@ -24,11 +24,10 @@ type Propose struct {
 }
 
 type ProposeReply struct {
-	OK            uint8
-	CommandId     int32
-	Value         state.Value
-	Timestamp     int64
-	ExpectedSeqNo int64 // The group can reply with the expected seq no
+	OK        uint8
+	CommandId int32
+	Value     state.Value
+	Timestamp int64
 }
 
 type Prepare struct {

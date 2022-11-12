@@ -104,11 +104,6 @@ func (t *ProposeReply) New() fastrpc.Serializable {
 }
 
 func (t *ProposeReply) Marshal(wire io.Writer) {
-	// OK            uint8
-	// CommandId     int32
-	// Value         state.Value
-	// Timestamp     int64
-	// ExpectedSeqNo int64
 	var b [8]byte
 	var bs []byte
 	bs = b[:5]
@@ -122,17 +117,6 @@ func (t *ProposeReply) Marshal(wire io.Writer) {
 	t.Value.Marshal(wire)
 	bs = b[:8]
 	tmp64 := t.Timestamp
-	bs[0] = byte(tmp64)
-	bs[1] = byte(tmp64 >> 8)
-	bs[2] = byte(tmp64 >> 16)
-	bs[3] = byte(tmp64 >> 24)
-	bs[4] = byte(tmp64 >> 32)
-	bs[5] = byte(tmp64 >> 40)
-	bs[6] = byte(tmp64 >> 48)
-	bs[7] = byte(tmp64 >> 56)
-	wire.Write(bs)
-	bs = b[:8]
-	tmp64 = t.ExpectedSeqNo
 	bs[0] = byte(tmp64)
 	bs[1] = byte(tmp64 >> 8)
 	bs[2] = byte(tmp64 >> 16)
@@ -159,12 +143,6 @@ func (t *ProposeReply) Unmarshal(wire io.Reader) error {
 		return err
 	}
 	t.Timestamp = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-	bs = b[:8]
-	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-		return err
-	}
-	t.ExpectedSeqNo = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
 	return nil
 }
 
