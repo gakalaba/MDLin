@@ -37,7 +37,6 @@ var clockSyncEpsilon = flag.Float64("clockepsilon", 4, "The number of millisecon
 func main() {
 	flag.Parse()
 
-	log.Println("batching?", batch)
 	runtime.GOMAXPROCS(*procs)
 
 	if *cpuprofile != "" {
@@ -55,8 +54,19 @@ func main() {
 	log.Printf("Server starting on port %d\n", *portnum)
 
 	replicaId, nodeList := registerWithMaster(fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
-	shards := getShardsFromMaster(fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
 
+  rpc.HandleHTTP()
+  //listen for RPC on a different port (8070 by default)
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", *portnum+1000))
+	if err != nil {
+		log.Fatal("listen error:", err)
+	}
+
+  go run(replicaId, nodeList)
+	http.Serve(l, nil)
+}
+
+func run(replicaId int, nodeList []string) {
 	if *doEpaxos {
 		log.Println("Starting Egalitarian Paxos replica...")
 		rep := epaxos.NewReplica(replicaId, nodeList, *thrifty, *beacon,
@@ -65,7 +75,13 @@ func main() {
 		rpc.Register(rep)
 	} else if *doMDLin {
 		log.Println("Starting MD Linearizability replica...")
-		log.Println("do batch?", *batch)
+    // Get the shards for multi-sharded MD-Lin
+    shards := getShardsFromMaster(fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
+    if (shards != nil) {
+      for i,e := range shards {
+        log.Printf("-->Shard %d leader at %s", i, e)
+      }
+    }
 		rep := mdlin.NewReplica(replicaId, nodeList, shards, *thrifty, *durable, *batch)
 		rpc.Register(rep)
 	} else {
@@ -73,15 +89,6 @@ func main() {
 		rep := paxos.NewReplica(replicaId, nodeList, *thrifty, *durable, *batch)
 		rpc.Register(rep)
 	}
-
-	rpc.HandleHTTP()
-	//listen for RPC on a different port (8070 by default)
-	l, err := net.Listen("tcp", fmt.Sprintf(":%d", *portnum+1000))
-	if err != nil {
-		log.Fatal("listen error:", err)
-	}
-
-	http.Serve(l, nil)
 }
 
 func registerWithMaster(masterAddr string) (int, []string) {

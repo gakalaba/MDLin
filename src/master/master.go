@@ -21,7 +21,7 @@ var numNodes *int = flag.Int("N", 3, "Number of replicas. Defaults to 3.")
 var nodeIPs *string = flag.String("ips", "", "Space separated list of IP addresses (ordered). The leader will be 0")
 var coordAddr *string = flag.String("caddr", "", "Coordinator address. Defaults to localhost")
 var coordPort *int = flag.Int("cport", 7097, "Coordinator port. Defaults to 7097.")
-var nShards *int = flag.Int("N", 2, "Number of shards. Defaults to 2.")
+var nShards *int = flag.Int("nshrds", 2, "Number of shards. Defaults to 2.")
 
 type Master struct {
 	N              int
@@ -81,7 +81,10 @@ func main() {
 	}
 
   //TODO can use return value to obtain new leaders after failures?
-	registerWithCoordinator(fmt.Sprintf("%s:%d", *coordAddr, *coordPort))
+  if (*nShards > 1) {
+    log.Println("Master is registering itself with the coordinator")
+    registerWithCoordinator(fmt.Sprintf("%s:%d", *coordAddr, *coordPort))
+  }
 
 	go master.run()
 
@@ -93,6 +96,7 @@ func (master *Master) run() {
 		master.lock.Lock()
 		if master.nConnected == master.N {
 			master.lock.Unlock()
+      log.Println("All connected!", master.nodeList) //TODO delete
 			break
 		}
 		master.lock.Unlock()
@@ -102,7 +106,7 @@ func (master *Master) run() {
 
 	// connect to SMR servers
 	for i := 0; i < master.N; i++ {
-		var err error
+    var err error
 		addr := fmt.Sprintf("%s:%d", master.addrList[i], master.portList[i]+1000)
 		master.nodes[i], err = rpc.DialHTTP("tcp", addr)
 		if err != nil {
@@ -113,7 +117,9 @@ func (master *Master) run() {
 	master.leader[0] = true
 
 	// send the leader to the Coordinator
-	sendLeaderToCoord(fmt.Sprintf("%s:%d", *coordAddr, *coordPort), master.nodeList[0])
+  if (*nShards > 1) {
+	  sendLeaderToCoord(fmt.Sprintf("%s:%d", *coordAddr, *coordPort), master.nodeList[0])
+  }
 
 	for true {
 		time.Sleep(3000 * 1000 * 1000)
@@ -156,8 +162,6 @@ func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterprot
 
 	i := master.N + 1
 
-	log.Println("Received Register", addrPort, master.nodeList)
-
 	for index, ap := range master.nodeList {
 		if ap == addrPort {
 			i = index
@@ -181,8 +185,6 @@ func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterprot
 		return nil
 	}
 
-	log.Println("Ended up with index", i)
-
 	if !master.connected[i] {
 		master.nodeList[i] = addrPort
 		master.addrList[i] = args.Addr
@@ -192,7 +194,6 @@ func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterprot
 	}
 
 	if master.nConnected == master.N {
-		log.Println("All connected!")
 		reply.Ready = true
 		reply.ReplicaId = i
 		reply.NodeList = master.nodeList
@@ -247,6 +248,7 @@ func registerWithCoordinator(coordAddr string) []string {
 }
 
 func sendLeaderToCoord(coordAddr string, leader string) {
+  log.Printf("Registering Leader %s with Coordinator", leader)
 	args := &coordinatorproto.RegisterLeaderArgs{leader, fmt.Sprintf("%s:%d", *myAddr, *portnum)}
 	var reply coordinatorproto.RegisterLeaderReply
 
@@ -269,11 +271,18 @@ func (master *Master) RegisterShards(args *masterproto.RegisterShardsArgs, reply
 
 	master.shards = args.ShardList
 	master.numShards = len(master.shards)
+  for i,e := range master.shards {
+    log.Printf("-->Shard %d has leader at %s\n", i, e)
+  }
   return nil
 }
 
 // Servers --> Master: asking for shards
 func (master *Master) GetShardList(args *masterproto.GetShardListArgs, reply *masterproto.GetShardListReply) error {
+  if (*nShards <= 1) {
+    reply.ShardList = nil
+    return nil
+  }
 	for true {
 		master.lock.Lock()
 		if master.shards != nil {
