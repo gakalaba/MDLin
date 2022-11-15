@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"genericsmrproto"
 	"log"
 	"masterproto"
   "coordinatorproto"
@@ -26,161 +25,147 @@ type Coordinator struct {
 	portList       []int
 	lock           *sync.Mutex
 	masters          []*rpc.Client
-  shardLeaders []*rpc.Client
-	leader         []bool
+  shardLeaders []string
 	alive          []bool
 	expectAddrList []string
 	connected      []bool
 	nConnected     int
+  leadersConnected int
 }
 
 func main() {
 	flag.Parse()
 
 	log.Printf("Coordinator starting on port %d\n", *portnum)
-	log.Printf("...waiting for %d shards\n", *numShards)
+	log.Printf("...waiting for %d shards\n", *nShards)
 
 	ips := []string{}
 	if *masterIPs != "" {
 		ips = strings.Split(*masterIPs, ",")
 		log.Println("Ordered master ips:", ips, len(ips))
 	} else {
-    for i := 0; i < *numShards; i++ {
+    for i := 0; i < *nShards; i++ {
 	    ips = append(ips, "")
 	  }
   }
   log.Println(ips, len(ips))
-	master := &Master{
-		*numNodes,
-		make([]string, *numNodes),
-		make([]string, *numNodes),
-		make([]int, *numNodes),
+	coordinator := &Coordinator{
+		*nShards,
+		make([]string, *nShards),
+		make([]string, *nShards),
+		make([]int, *nShards),
 		new(sync.Mutex),
-		make([]*rpc.Client, *numNodes),
-		make([]bool, *numNodes),
-		make([]bool, *numNodes),
+		make([]*rpc.Client, *nShards),
+		make([]string, *nShards),
+		make([]bool, *nShards),
 		ips,
-		make([]bool, *numNodes),
+		make([]bool, *nShards),
 		0,
+    0,
 	}
 
-	rpc.Register(master)
+	rpc.Register(coordinator)
 	rpc.HandleHTTP()
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", *portnum))
 	if err != nil {
-		log.Fatal("Master listen error:", err)
+		log.Fatal("Coordinator listen error:", err)
 	}
 
-	go master.run()
+	go coordinator.run()
 
 	http.Serve(l, nil)
 }
 
-func (master *Master) run() {
+func (coordinator *Coordinator) run() {
 	for true {
-		master.lock.Lock()
-		if master.nConnected == master.N {
-			master.lock.Unlock()
+		coordinator.lock.Lock()
+		if coordinator.nConnected == coordinator.numShards {
+			coordinator.lock.Unlock()
 			break
 		}
-		master.lock.Unlock()
+		coordinator.lock.Unlock()
 		time.Sleep(100000000)
 	}
 	time.Sleep(2000000000)
 
-	// connect to SMR servers
-	for i := 0; i < master.N; i++ {
+	// connect to master servers
+	for i := 0; i < coordinator.numShards; i++ {
 		var err error
-		addr := fmt.Sprintf("%s:%d", master.addrList[i], master.portList[i]+1000)
-		master.nodes[i], err = rpc.DialHTTP("tcp", addr)
+		addr := fmt.Sprintf("%s:%d", coordinator.addrList[i], coordinator.portList[i]+1000)
+		coordinator.masters[i], err = rpc.DialHTTP("tcp", addr)
 		if err != nil {
-			log.Fatalf("Error connecting to replica %d: %v\n", i, err)
-		}
-		master.leader[i] = false
+			log.Fatalf("Error connecting to shard %d: %v\n", i, err)
+      coordinator.alive[i] = false
+		} else {
+		  coordinator.alive[i] = false
+    }
 	}
-	master.leader[0] = true
+
+  // Give the masters the ips of all other shard masters/leaders
+  for true {
+		coordinator.lock.Lock()
+		if coordinator.leadersConnected == coordinator.numShards {
+			coordinator.lock.Unlock()
+			break
+		}
+		coordinator.lock.Unlock()
+		time.Sleep(100000000)
+	}
+  coordinator.sendShardsToMasters()
 
 	for true {
 		time.Sleep(3000 * 1000 * 1000)
-		new_leader := false
-		for i, node := range master.nodes {
-			err := node.Call("Replica.Ping", new(genericsmrproto.PingArgs), new(genericsmrproto.PingReply))
-			if err != nil {
-				//log.Printf("Replica %d has failed to reply\n", i)
-				master.alive[i] = false
-				if master.leader[i] {
-					// neet to choose a new leader
-					new_leader = true
-					master.leader[i] = false
-				}
-			} else {
-				master.alive[i] = true
-			}
-		}
-		if !new_leader {
-			continue
-		}
-		for i, new_master := range master.nodes {
-			if master.alive[i] {
-				err := new_master.Call("Replica.BeTheLeader", new(genericsmrproto.BeTheLeaderArgs), new(genericsmrproto.BeTheLeaderReply))
-				if err == nil {
-					master.leader[i] = true
-					log.Printf("Replica %d is the new leader.", i)
-					break
-				}
-			}
-		}
-	}
+    //TODO can add something for handling leader failure
+  }
 }
 
-func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterproto.RegisterReply) error {
-	master.lock.Lock()
-	defer master.lock.Unlock()
+func (coordinator *Coordinator) Register(args *coordinatorproto.RegisterArgs, reply *coordinatorproto.RegisterReply) error {
+	coordinator.lock.Lock()
+	defer coordinator.lock.Unlock()
 
 	addrPort := fmt.Sprintf("%s:%d", args.Addr, args.Port)
 
-	i := master.N + 1
+	i := coordinator.numShards + 1
 
-	log.Println("Received Register", addrPort, master.nodeList)
+	log.Println("Received Register", addrPort, coordinator.masterList)
 
-	for index, ap := range master.nodeList {
+	for index, ap := range coordinator.masterList {
 		if ap == addrPort {
 			i = index
 			break
 		}
 	}
 
-	if i == master.N+1 {
-		for index, a := range master.expectAddrList {
+	if i == coordinator.numShards+1 {
+		for index, a := range coordinator.expectAddrList {
 			if args.Addr == a {
 				i = index
-				if !master.connected[i] {
+				if !coordinator.connected[i] {
 					break
 				}
 			}
 		}
 	}
 
-	if i == master.N+1 {
-		log.Println("Received register from bad IP:", addrPort)
+	if i == coordinator.numShards+1 {
+		log.Println("Received register from bad Master IP:", addrPort)
 		return nil
 	}
 
 	log.Println("Ended up with index", i)
 
-	if !master.connected[i] {
-		master.nodeList[i] = addrPort
-		master.addrList[i] = args.Addr
-		master.portList[i] = args.Port
-		master.connected[i] = true
-		master.nConnected++
+	if !coordinator.connected[i] {
+		coordinator.masterList[i] = addrPort
+		coordinator.addrList[i] = args.Addr
+		coordinator.portList[i] = args.Port
+		coordinator.connected[i] = true
+		coordinator.nConnected++
 	}
 
-	if master.nConnected == master.N {
+	if coordinator.nConnected == coordinator.numShards {
 		log.Println("All connected!")
 		reply.Ready = true
-		reply.ReplicaId = i
-		reply.NodeList = master.nodeList
+		reply.MasterList = coordinator.masterList
 	} else {
 		reply.Ready = false
 	}
@@ -188,18 +173,45 @@ func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterprot
 	return nil
 }
 
-func (coordinator *Coordinator) GetShardLeaderList(args *coordinatorproto.GetShardLeaderListArgs, reply *coordinatorproto.GetShardLeaderListReply) error {
+func (coordinator *Coordinator) RegisterLeader(args *coordinatorproto.RegisterLeaderArgs, reply *coordinatorproto.RegisterLeaderReply) error {
+  coordinator.lock.Lock()
+  defer coordinator.lock.Unlock()
+  for i:=0;i<coordinator.numShards;i++ {
+    if coordinator.masterList[i] == args.MasterAddr {
+      if coordinator.shardLeaders[i] == "" {
+        coordinator.leadersConnected++
+      }
+      coordinator.shardLeaders[i] = args.LeaderAddr
+    }
+  }
+  return nil
+}
+
+func (coordinator *Coordinator) sendShardsToMasters() error {
   coordinator.lock.Lock()
   defer coordinator.lock.Unlock()
 
-  if coordinator.nConnected == coordinator.numShards {
-    for e, i := range coordinator.masterList {
-      reply := new(masterproto.GetLeaderReply)
-      if err = master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply); err != nil {
-        log.Fatalf("Error making the GetLeader RPC\n")
-      }
-      coordinator.shardList[i] = reply.LeaderAddr
+  var reply masterproto.RegisterShardsReply
+  for _, mcli := range coordinator.masters {
+    args := &masterproto.RegisterShardsArgs{coordinator.shardLeaders}
+    if err := mcli.Call("Master.RegisterShards", args, &reply); err != nil {
+      log.Fatalf("Error making the RegisterShards RPC\n")
     }
-    reply.Ready = true
-  return master.nodeList
+  }
+  return nil
+}
+
+func (coordinator *Coordinator) GetShardLeaderList(args *coordinatorproto.GetShardLeaderListArgs, reply *coordinatorproto.GetShardLeaderListReply) error {
+  for true {
+    coordinator.lock.Lock()
+    if coordinator.leadersConnected == coordinator.numShards {
+      coordinator.lock.Unlock()
+      break
+    }
+    coordinator.lock.Unlock()
+    time.Sleep(100000000)
+  }
+
+  reply.LeaderList = coordinator.shardLeaders
+  return nil
 }

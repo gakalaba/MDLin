@@ -5,10 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"genericsmrproto"
-  "mdlinproto"
 	"log"
 	"masterproto"
 	"math/rand"
+	"mdlinproto"
 	"net"
 	"net/rpc"
 	"runtime"
@@ -137,7 +137,7 @@ func main() {
 	}
 
 	successful = make([]int, N)
-  failed = make([]int, N)
+	failed = make([]int, N)
 	leader := 0
 
 	if *noLeader == false {
@@ -172,54 +172,54 @@ func main() {
 				go waitReplies(readers, i, perReplicaCount[i], done)
 			}
 		} else {
-      if *mdlin {
-        go waitRepliesMDL(readers, leader, n*(*T), done) // number of reqs this round * threads
-      } else {
-        go waitReplies(readers, leader, n*(*T), done) //number of reqs this round * threads
-      }
+			if *mdlin {
+				go waitRepliesMDL(readers, leader, n*(*T), done) // number of reqs this round * threads
+			} else {
+				go waitReplies(readers, leader, n*(*T), done) //number of reqs this round * threads
+			}
 		}
 
 		before := time.Now()
 
 		if *mdlin {
-      for tid := 0; tid<(*T); tid++ {
-        go func(client_pid int64, id_base int32, arg mdlinproto.Propose) {
-          for i:=0; i<n+*eps; i++ {
-            arg.CommandId = id_base + int32(i)
-				    if put[i] {
-					    arg.Command.Op = state.PUT
-				    } else {
-					    arg.Command.Op = state.GET
-				    }
-				    arg.Command.K = state.Key(karray[i])
-				    arg.Command.V = state.Value(i)
-            arg.PID = client_pid // ADD the client's id so we can sequence these
-				    arg.Timestamp = time.Now().UnixNano()
-            arg.SeqNo = int64(i + j*(n+*eps)) //id increases across all the rounds
-            if !*fast {
-					    if *noLeader {
-						    leader = rarray[i]
-					    }
-              writers[leader].WriteByte(mdlinproto.PROPOSE) //gryff has clientproto.GEN_PROPOSE here
-					    arg.Marshal(writers[leader])
-              writers[leader].Flush() //Should we flush right away?
-				    } else {
-					    //send to everyone
-					    for rep := 0; rep < N; rep++ {
-						    writers[rep].WriteByte(mdlinproto.PROPOSE) //gryff has clientproto.GEN_PROPOSE
-						    arg.Marshal(writers[rep])
-						    writers[rep].Flush()
-					    }
-				    }
-				    log.Printf("Thread %d sent command %d with seqNo %d", client_pid, id_base+int32(i), arg.SeqNo)
-            log.Println(arg)
-			    }
-        }(int64(tid), id, mdlinproto.Propose{id, state.Command{state.PUT, 0, 0}, 0, 0, 0})
-        id += int32(n+*eps)
-      }
+			for tid := 0; tid < (*T); tid++ {
+				go func(client_pid int64, id_base int32, arg mdlinproto.Propose) {
+					for i := 0; i < n+*eps; i++ {
+						arg.CommandId = id_base + int32(i)
+						if put[i] {
+							arg.Command.Op = state.PUT
+						} else {
+							arg.Command.Op = state.GET
+						}
+						arg.Command.K = state.Key(karray[i])
+						arg.Command.V = state.Value(i)
+						arg.PID = client_pid // ADD the client's id so we can sequence these
+						arg.Timestamp = time.Now().UnixNano()
+						arg.SeqNo = int64(i + j*(n+*eps)) //id increases across all the rounds
+						if !*fast {
+							if *noLeader {
+								leader = rarray[i]
+							}
+							writers[leader].WriteByte(mdlinproto.PROPOSE) //gryff has clientproto.GEN_PROPOSE here
+							arg.Marshal(writers[leader])
+							writers[leader].Flush() //Should we flush right away?
+						} else {
+							//send to everyone
+							for rep := 0; rep < N; rep++ {
+								writers[rep].WriteByte(mdlinproto.PROPOSE) //gryff has clientproto.GEN_PROPOSE
+								arg.Marshal(writers[rep])
+								writers[rep].Flush()
+							}
+						}
+						log.Printf("Thread %d sent command %d with seqNo %d", client_pid, id_base+int32(i), arg.SeqNo)
+						log.Println(arg)
+					}
+				}(int64(tid), id, mdlinproto.Propose{id, state.Command{state.PUT, 0, 0}, 0, 0, 0})
+				id += int32(n + *eps)
+			}
 		} else {
 			for i := 0; i < n+*eps; i++ {
-        log.Printf("Sending proposal %d\n", id)
+				log.Printf("Sending proposal %d\n", id)
 				args.CommandId = id
 				if put[i] {
 					args.Command.Op = state.PUT
@@ -304,12 +304,12 @@ func main() {
 		s += succ
 	}
 
-  f := 0
-  for _, fai := range  failed {
-    f += fai
-  }
+	f := 0
+	for _, fai := range failed {
+		f += fai
+	}
 
-  log.Printf("Successful: %d, Failed: %d\n", s, f)
+	log.Printf("Successful: %d, Failed: %d\n", s, f)
 
 	for _, client := range servers {
 		if client != nil {
@@ -322,14 +322,14 @@ func main() {
 func waitRepliesMDL(readers []*bufio.Reader, leader int, n int, done chan bool) {
 	e := false
 
-  reply := new(mdlinproto.ProposeReply)
+	reply := new(mdlinproto.ProposeReply)
 
 	var err error
 	var msgType byte
 	for i := 0; i < n; i++ {
 		if msgType, err = readers[leader].ReadByte(); err != nil ||
-			msgType != mdlinproto.PROPOSE_REPLY{
-				log.Printf("Error when reading (op:%d): %v", msgType, err)
+			msgType != mdlinproto.PROPOSE_REPLY {
+			log.Printf("Error when reading (op:%d): %v", msgType, err)
 			e = true
 			continue
 		}
@@ -340,12 +340,12 @@ func waitRepliesMDL(readers []*bufio.Reader, leader int, n int, done chan bool) 
 		}
 
 		log.Printf("Reply.OK = %d, CommandId = %d, PID = %d, Timestamp = %d", reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
-    log.Printf("rsp len %d and commandID was %d and the index was %d", len(rsp), reply.CommandId, reply.CommandId/(int32(*rounds)))
-    if reply.OK == 0 {
-      log.Println("Client request failed")
-      failed[leader]++
-      continue
-    }
+		log.Printf("rsp len %d and commandID was %d and the index was %d", len(rsp), reply.CommandId, reply.CommandId/(int32(*rounds)))
+		if reply.OK == 0 {
+			log.Println("Client request failed")
+			failed[leader]++
+			continue
+		}
 		if *check {
 			if rsp[reply.CommandId/(int32(*rounds))] {
 				log.Println("Duplicate reply", reply.CommandId)
@@ -362,7 +362,7 @@ func waitRepliesMDL(readers []*bufio.Reader, leader int, n int, done chan bool) 
 func waitReplies(readers []*bufio.Reader, leader int, n int, done chan bool) {
 	e := false
 
-  reply := new(genericsmrproto.ProposeReply)
+	reply := new(genericsmrproto.ProposeReply)
 
 	var err error
 	//var msgType byte
@@ -373,7 +373,7 @@ func waitReplies(readers []*bufio.Reader, leader int, n int, done chan bool) {
 			continue
 		}
 
-    if *check {
+		if *check {
 			if rsp[reply.CommandId] {
 				log.Println("Duplicate reply", reply.CommandId)
 			}

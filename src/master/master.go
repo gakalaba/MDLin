@@ -1,6 +1,7 @@
 package main
 
 import (
+	"coordinatorproto"
 	"flag"
 	"fmt"
 	"genericsmrproto"
@@ -15,11 +16,16 @@ import (
 )
 
 var portnum *int = flag.Int("port", 7087, "Port # to listen on. Defaults to 7087")
+var myAddr *string = flag.String("addr", "", "Server address (this machine). Defaults to localhost.")
 var numNodes *int = flag.Int("N", 3, "Number of replicas. Defaults to 3.")
 var nodeIPs *string = flag.String("ips", "", "Space separated list of IP addresses (ordered). The leader will be 0")
+var coordAddr *string = flag.String("caddr", "", "Coordinator address. Defaults to localhost")
+var coordPort *int = flag.Int("cport", 7097, "Coordinator port. Defaults to 7097.")
+var nShards *int = flag.Int("N", 2, "Number of shards. Defaults to 2.")
 
 type Master struct {
 	N              int
+	myaddr         string
 	nodeList       []string
 	addrList       []string
 	portList       []int
@@ -30,6 +36,8 @@ type Master struct {
 	expectAddrList []string
 	connected      []bool
 	nConnected     int
+	numShards      int
+	shards         []string
 }
 
 func main() {
@@ -43,13 +51,14 @@ func main() {
 		ips = strings.Split(*nodeIPs, ",")
 		log.Println("Ordered replica ips:", ips, len(ips))
 	} else {
-    for i := 0; i < *numNodes; i++ {
-	    ips = append(ips, "")
-	  }
-  }
-  log.Println(ips, len(ips))
+		for i := 0; i < *numNodes; i++ {
+			ips = append(ips, "")
+		}
+	}
+	log.Println(ips, len(ips))
 	master := &Master{
 		*numNodes,
+		*myAddr,
 		make([]string, *numNodes),
 		make([]string, *numNodes),
 		make([]int, *numNodes),
@@ -60,6 +69,8 @@ func main() {
 		ips,
 		make([]bool, *numNodes),
 		0,
+		-1,
+		nil,
 	}
 
 	rpc.Register(master)
@@ -68,6 +79,9 @@ func main() {
 	if err != nil {
 		log.Fatal("Master listen error:", err)
 	}
+
+  //TODO can use return value to obtain new leaders after failures?
+	registerWithCoordinator(fmt.Sprintf("%s:%d", *coordAddr, *coordPort))
 
 	go master.run()
 
@@ -97,6 +111,9 @@ func (master *Master) run() {
 		master.leader[i] = false
 	}
 	master.leader[0] = true
+
+	// send the leader to the Coordinator
+	sendLeaderToCoord(fmt.Sprintf("%s:%d", *coordAddr, *coordPort), master.nodeList[0])
 
 	for true {
 		time.Sleep(3000 * 1000 * 1000)
@@ -210,3 +227,63 @@ func (master *Master) GetReplicaList(args *masterproto.GetReplicaListArgs, reply
 	return nil
 }
 
+func registerWithCoordinator(coordAddr string) []string {
+	args := &coordinatorproto.RegisterArgs{*myAddr, *portnum}
+	var reply coordinatorproto.RegisterReply
+
+	for done := false; !done; {
+		ccli, err := rpc.DialHTTP("tcp", coordAddr)
+		if err == nil {
+			err = ccli.Call("Coordinator.Register", args, &reply)
+			if err == nil && reply.Ready == true {
+				done = true
+				break
+			}
+		}
+		time.Sleep(1e9)
+	}
+
+	return reply.MasterList
+}
+
+func sendLeaderToCoord(coordAddr string, leader string) {
+	args := &coordinatorproto.RegisterLeaderArgs{leader, fmt.Sprintf("%s:%d", *myAddr, *portnum)}
+	var reply coordinatorproto.RegisterLeaderReply
+
+	for true {
+		ccli, err := rpc.DialHTTP("tcp", coordAddr)
+		if err == nil {
+			err = ccli.Call("Coordinator.RegisterLeader", args, &reply)
+			if err == nil {
+				break
+			}
+		}
+		time.Sleep(1e9)
+	}
+}
+
+//Coordinator --> Master: giving list of shards when available
+func (master *Master) RegisterShards(args *masterproto.RegisterShardsArgs, reply *masterproto.RegisterShardsReply) error {
+	master.lock.Lock()
+	defer master.lock.Unlock()
+
+	master.shards = args.ShardList
+	master.numShards = len(master.shards)
+  return nil
+}
+
+// Servers --> Master: asking for shards
+func (master *Master) GetShardList(args *masterproto.GetShardListArgs, reply *masterproto.GetShardListReply) error {
+	for true {
+		master.lock.Lock()
+		if master.shards != nil {
+			master.lock.Unlock()
+			break
+		}
+		master.lock.Unlock()
+		time.Sleep(100000000)
+	}
+
+	reply.ShardList = master.shards
+	return nil
+}

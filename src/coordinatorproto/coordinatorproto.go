@@ -6,9 +6,16 @@ type RegisterArgs struct {
 }
 
 type RegisterReply struct {
-	MasterId int
-	MasterList  []string
-	Ready     bool
+	MasterList []string
+	Ready      bool
+}
+
+type RegisterLeaderArgs struct {
+	LeaderAddr string
+	MasterAddr string
+}
+
+type RegisterLeaderReply struct {
 }
 
 type GetShardLeaderListArgs struct {
@@ -16,5 +23,4 @@ type GetShardLeaderListArgs struct {
 
 type GetShardLeaderListReply struct {
 	LeaderList []string
-	Ready      bool
 }

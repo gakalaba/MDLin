@@ -11,12 +11,19 @@ type RegisterReply struct {
 	Ready     bool
 }
 
+type RegisterShardsArgs struct {
+	ShardList []string
+}
+
+type RegisterShardsReply struct {
+}
+
 type GetLeaderArgs struct {
 }
 
 type GetLeaderReply struct {
-	LeaderId int
-  LeaderAddr string
+	LeaderId   int
+	LeaderAddr string
 }
 
 type GetReplicaListArgs struct {
@@ -25,4 +32,11 @@ type GetReplicaListArgs struct {
 type GetReplicaListReply struct {
 	ReplicaList []string
 	Ready       bool
+}
+
+type GetShardListArgs struct {
+}
+
+type GetShardListReply struct {
+	ShardList []string
 }

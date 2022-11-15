@@ -37,7 +37,7 @@ var clockSyncEpsilon = flag.Float64("clockepsilon", 4, "The number of millisecon
 func main() {
 	flag.Parse()
 
-  log.Println("batching?", batch)
+	log.Println("batching?", batch)
 	runtime.GOMAXPROCS(*procs)
 
 	if *cpuprofile != "" {
@@ -55,6 +55,7 @@ func main() {
 	log.Printf("Server starting on port %d\n", *portnum)
 
 	replicaId, nodeList := registerWithMaster(fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
+	shards := getShardsFromMaster(fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
 
 	if *doEpaxos {
 		log.Println("Starting Egalitarian Paxos replica...")
@@ -64,8 +65,8 @@ func main() {
 		rpc.Register(rep)
 	} else if *doMDLin {
 		log.Println("Starting MD Linearizability replica...")
-    log.Println("do batch?", *batch)
-		rep := mdlin.NewReplica(replicaId, nodeList, *thrifty, *durable, *batch)
+		log.Println("do batch?", *batch)
+		rep := mdlin.NewReplica(replicaId, nodeList, shards, *thrifty, *durable, *batch)
 		rpc.Register(rep)
 	} else {
 		log.Println("Starting classic Paxos replica...")
@@ -100,6 +101,23 @@ func registerWithMaster(masterAddr string) (int, []string) {
 	}
 
 	return reply.ReplicaId, reply.NodeList
+}
+
+func getShardsFromMaster(masterAddr string) []string {
+	var args masterproto.GetShardListArgs
+	var reply masterproto.GetShardListReply
+
+	for done := false; !done; {
+		mcli, err := rpc.DialHTTP("tcp", masterAddr)
+		if err == nil {
+			err = mcli.Call("Master.GetShardList", &args, &reply)
+			if err == nil {
+				done = true
+				break
+			}
+		}
+	}
+	return reply.ShardList
 }
 
 func catchKill(interrupt chan os.Signal) {

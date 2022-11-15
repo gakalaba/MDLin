@@ -47,6 +47,7 @@ type Replica struct {
 	nextSeqNo        map[int64]int64                    // Mapping client PID to next expected sequence number
 	outstandingInst  map[int64][]*genericsmr.MDLPropose // Mapping client PID to `sorted` list of outstanding proposals received
 	noProposalsReady bool
+  //TODO add shards connections using shards arg in NewReplica
 }
 
 type InstanceStatus int
@@ -75,7 +76,7 @@ type LeaderBookkeeping struct {
 	nacks           int
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool,
+func NewReplica(id int, peerAddrList []string, shards []string, thrifty bool,
 	durable bool, batch bool) *Replica {
 	r := &Replica{
 		genericsmr.NewReplica(id, peerAddrList, thrifty),
