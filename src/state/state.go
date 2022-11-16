@@ -1,5 +1,7 @@
 package state
 
+import "sync"
+
 type Operation uint8
 
 const (
@@ -14,11 +16,36 @@ type Value int64
 const NIL Value = 0
 
 type Key int64
+type Version int64
 
 type Command struct {
 	Op Operation
 	K  Key
 	V  Value
+}
+
+var versions map[Key]Version
+var vlock *sync.Mutex
+
+func GetVersion(command *Command) Version {
+	vlock.Lock()
+	defer vlock.Unlock()
+
+	if _, ok := versions[command.K]; !ok {
+		versions[command.K] = 0
+	}
+	return versions[command.K]
+}
+
+func IncrVersion(command *Command) Version {
+	vlock.Lock()
+	defer vlock.Unlock()
+
+	if _, ok := versions[command.K]; !ok {
+		versions[command.K] = 0
+	}
+	versions[command.K]++
+	return versions[command.K]
 }
 
 // Key-Value hashmap (ints->ints)
@@ -27,6 +54,8 @@ type State struct {
 }
 
 func InitState() *State {
+	versions = make(map[Key]Version)
+	vlock = new(sync.Mutex)
 	return &State{make(map[Key]Value)}
 }
 

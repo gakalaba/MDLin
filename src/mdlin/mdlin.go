@@ -31,12 +31,16 @@ type Replica struct {
 	commitShortChan     chan *genericsmr.RPCMessage
 	prepareReplyChan    chan *genericsmr.RPCMessage
 	acceptReplyChan     chan *genericsmr.RPCMessage
-	prepareRPC          uint8
+	reorderChan         chan *genericsmr.RPCMessage
+  reorderReplyChan    chan *genericsmr.RPCMessage
+  prepareRPC          uint8
 	acceptRPC           uint8
 	commitRPC           uint8
 	commitShortRPC      uint8
 	prepareReplyRPC     uint8
 	acceptReplyRPC      uint8
+  reorderRPC          uint8
+  reorderReplyRPC     uint8
 	IsLeader            bool        // does this replica think it is the leader
 	instanceSpace       []*Instance // the space of all instances (used and not yet used)
 	crtInstance         int32       // highest active instance number that this replica knows about
@@ -57,7 +61,9 @@ type Replica struct {
   shardReaders  []*bufio.Reader
   shardWriters  []*bufio.Writer
   interShardChan chan *genericsmr.RPCMessage
+  interShardReplyChan chan *genericsmr.RPCMessage
   shListener net.Listener
+  //logDeps       []mdlinproto.Tag
 }
 
 type InstanceStatus int
@@ -66,6 +72,7 @@ const (
 	PREPARING InstanceStatus = iota
 	PREPARED
 	ACCEPTED
+  REORDERED
 	COMMITTED
 )
 
@@ -76,6 +83,8 @@ type Instance struct {
 	lb     *LeaderBookkeeping
 	pid    []int64
 	seqno  []int64
+  version []state.Version
+  batchdep [][]mdlinproto.Tag
 }
 
 type LeaderBookkeeping struct {
@@ -83,7 +92,8 @@ type LeaderBookkeeping struct {
 	maxRecvBallot   int32
 	prepareOKs      int
 	acceptOKs       int
-	nacks           int
+	reorderOKs      int
+  nacks           int
 }
 
 func NewReplica(id int, peerAddrList []string, shardsList []string, shId int, thrifty bool,
@@ -96,7 +106,9 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int, th
 		make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan *genericsmr.RPCMessage, 3*genericsmr.CHAN_BUFFER_SIZE),
-		0, 0, 0, 0, 0, 0,
+    make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
+    make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
+		0, 0, 0, 0, 0, 0, 0, 0,
 		false,
 		make([]*Instance, 15*1024*1024),
 		0,
@@ -115,6 +127,7 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int, th
     make([]*bufio.Reader, len(shardsList)),
     make([]*bufio.Writer, len(shardsList)),
     make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
+    make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
     nil}
 
 	r.Durable = durable
@@ -125,6 +138,8 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int, th
 	r.commitShortRPC = r.RegisterRPC(new(mdlinproto.CommitShort), r.commitShortChan)
 	r.prepareReplyRPC = r.RegisterRPC(new(mdlinproto.PrepareReply), r.prepareReplyChan)
 	r.acceptReplyRPC = r.RegisterRPC(new(mdlinproto.AcceptReply), r.acceptReplyChan)
+  r.reorderRPC = r.RegisterRPC(new(mdlinproto.Reorder), r.reorderChan)
+  r.reorderReplyRPC = r.RegisterRPC(new(mdlinproto.ReorderReply), r.reorderReplyChan)
 
 	go r.run()
 
@@ -198,7 +213,8 @@ func (r *Replica) waitForShardConnections(done chan bool) {
 func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 	var msgType uint8
 	var err error = nil
-  istest := new(mdlinproto.InterShardTest).New()
+  intershard := new(mdlinproto.InterShard).New()
+  intershardreply := new(mdlinproto.InterShardReply).New()
 
 	for err == nil && !r.Shutdown {
 
@@ -208,12 +224,19 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 
 		switch uint8(msgType) {
 
-		case mdlinproto.INTERSHARD_TEST:
-			if err = istest.Unmarshal(reader); err != nil {
+		case mdlinproto.INTERSHARD:
+			if err = intershard.Unmarshal(reader); err != nil {
 				break
 			}
-      r.interShardChan <- &genericsmr.RPCMessage{istest, 0, int64(rid)}
+      r.interShardChan <- &genericsmr.RPCMessage{intershard, 0, int64(rid)}
 			break
+
+    case mdlinproto.INTERSHARD_REPLY:
+      if err = intershardreply.Unmarshal(reader); err != nil {
+        break
+      }
+      r.interShardReplyChan <- &genericsmr.RPCMessage{intershardreply, 0, int64(rid)}
+      break
 
 		default:
 			log.Println("Error: received unknown message type")
@@ -223,9 +246,13 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 
 // leaderId is the ID of the leader this message is being sent TO. it's an index
 // msg is the actual message being sent of mdlinproto.InterShard* type
-func (r *Replica) sendInterShardMsg(leaderId int, msg fastrpc.Serializable) {
+func (r *Replica) sendInterShardMsg(leaderId int, msg fastrpc.Serializable, code int) {
   w := r.shardWriters[leaderId]
-  w.WriteByte(mdlinproto.INTERSHARD_TEST) // to tell what kind of message this is
+  if (code == 0) {
+    w.WriteByte(mdlinproto.INTERSHARD) // to tell what kind of message this is
+  } else {
+    w.WriteByte(mdlinproto.INTERSHARD_REPLY)
+  }
   msg.Marshal(w) // marshall the message and send it into the w bufio object
   w.Flush()
 }
@@ -280,6 +307,10 @@ func (r *Replica) replyAccept(replicaId int32, reply *mdlinproto.AcceptReply) {
 	r.SendMsg(replicaId, r.acceptReplyRPC, reply)
 }
 
+func (r *Replica) replyReorder(replicaId int32, reply *mdlinproto.ReorderReply) {
+  r.SendMsg(replicaId, r.reorderReplyRPC, reply)
+}
+
 /* ============= */
 
 var clockChan chan bool
@@ -324,21 +355,12 @@ func (r *Replica) run() {
 		case <-clockChan:
 			//activate the new proposals channel
 			log.Println("---------clockChan---------")
-      //FIXME remove this
-      if (r.IsLeader) {
-        for i:=0; i<len(r.shards);i++ {
-          if i != r.shardId {
-            log.Printf("Shard leader %d sending to shard leader %d", r.shardId, i)
-            msg := &mdlinproto.InterShardTest{int32(r.shardId)}
-            r.sendInterShardMsg(i, msg)
-          }
-        }
-      }
 			onOffProposeChan = r.MDLProposeChan
 			break
 
 		case propose := <-onOffProposeChan:
 			log.Println("---------ProposalChan---------")
+      log.Println("Step 1. Shard leader gets")
 			r.handlePropose(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
 			if r.batchingEnabled && !r.noProposalsReady {
@@ -348,9 +370,14 @@ func (r *Replica) run() {
 
     case ismsg := <-r.interShardChan:
       log.Println("----------InterShardChan--------")
-      ismessage := ismsg.Message.(*mdlinproto.InterShardTest)
-      r.handleISMessage(ismessage, ismsg.From)
+      ismessage := ismsg.Message.(*mdlinproto.InterShard)
+      r.handleInterShard(ismessage, ismsg.From)
       break
+
+    case ismsgrep := <-r.interShardReplyChan:
+      log.Println("-----InterShardReplyChan-----")
+      isrmessage := ismsgrep.Message.(*mdlinproto.InterShardReply)
+      r.handleInterShardReply(isrmessage, ismsgrep.From)
 
 		case prepareS := <-r.prepareChan:
 			log.Println("---------PrepareChan---------")
@@ -393,6 +420,20 @@ func (r *Replica) run() {
 			//got an Accept reply
 			r.handleAcceptReply(acceptReply)
 			break
+
+    case reorderS := <-r.reorderChan:
+      log.Println("--------ReorderChan-------")
+      reorder := reorderS.Message.(*mdlinproto.Reorder)
+      //got a reorder message
+      r.handleReorder(reorder)
+      break
+
+    case reorderReplyS := <-r.reorderReplyChan:
+      log.Println("------ReorderReplyChan-----")
+      reorderReply := reorderReplyS.Message.(*mdlinproto.ReorderReply)
+      //go a reorder reply
+      r.handleReorderReply(reorderReply)
+      break
 
 		case metricsRequest := <-r.MetricsChan:
 			log.Println("---------MetricsChan---------")
@@ -556,17 +597,19 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	batchSize := 1
 	numProposals := len(r.MDLProposeChan) + 1
 	if r.batchingEnabled {
+    panic("There should be no batching rn")
 		batchSize := numProposals + 1
 		if batchSize > MAX_BATCH {
 			batchSize = MAX_BATCH
 		}
 	}
-	log.Printf("the batch size isssss %d", batchSize)
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.MDLPropose, batchSize)
 	pids := make([]int64, batchSize)
 	seqnos := make([]int64, batchSize)
+  versions := make([]state.Version, batchSize)
+  batchdeps := make([][]mdlinproto.Tag, batchSize)
 
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
@@ -584,9 +627,9 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		if val, ok := r.nextSeqNo[pid]; ok {
 			expectedSeqno = val
 		}
-		log.Printf("found = %d, pid = %d, seqno = %d, expectedSeqNo = %d, len channel = %d", found, pid, seqno, expectedSeqno, numProposals)
 		if seqno != expectedSeqno {
 			// Add to buffer
+      panic("This shouldn't be happening in our tests right now")
 			if _, ok := r.outstandingInst[pid]; !ok {
 				r.outstandingInst[pid] = make([]*genericsmr.MDLPropose, 0)
 			}
@@ -596,14 +639,27 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			}
 			log.Println("Out of order, buffering back into channel") //TODO do we need to sort?
 		} else {
-			log.Println("Found an in order! adding it to log")
 			cmds[found] = prop.Command
 			proposals[found] = prop
 			pids[found] = pid
 			seqnos[found] = seqno
+      versions[found] = handleVersion(prop.Command)
+      batchdeps[found] = prop.BatchDeps
 			found++
 			r.nextSeqNo[pid]++
-			// Check if any others are ready
+      //TODO delete this logic used for printing
+      var s string
+      if state.IsRead(&prop.Command) {
+        s = "R"
+      } else {
+        s = "W"
+      }
+      log.Printf("Step 2. Shard Leader Creating Log Entry{%s(%d), Version: %d, Client_PID: %d, SeqNo: %d, Dependencies: %v", s, prop.Command.K, versions[found], pid, seqno, batchdeps[found])
+      //TODO^^
+      go r.askShardsForVersions(batchdeps[found]) //TODO should this be separate goroutine or not?
+
+      // Check if any others are ready
+      /*
 			for true {
 				log.Printf("looking for any others that might be ready from this PID %d", pid)
 				l := len(r.outstandingInst[pid])
@@ -659,7 +715,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 					log.Println("Break")
 					break
 				}
-			}
+			}*/
 		}
 		i++
 		if found < batchSize && i <= numProposals {
@@ -679,25 +735,29 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	}
 
 	r.noProposalsReady = false
-	log.Println("found was not 0!! we are returning now not REPLICATING")
 
+  log.Println("Replicating this (potentially later reordered) entry to the other replicas")
 	// Ship out this last round
 	if r.defaultBallot == -1 {
 		r.instanceSpace[r.crtInstance] = &Instance{
 			cmds,
 			r.makeUniqueBallot(0),
 			PREPARING,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0},
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0, 0},
 			pids,
-			seqnos}
+			seqnos,
+      versions,
+      batchdeps}
 	} else {
 		r.instanceSpace[r.crtInstance] = &Instance{
 			cmds,
 			r.defaultBallot,
 			PREPARED,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0},
+			&LeaderBookkeeping{proposals, 0, 0, 0, 0, 0},
 			pids,
-			seqnos}
+			seqnos,
+      versions,
+      batchdeps}
 	}
 	r.crtInstance++
 
@@ -728,6 +788,64 @@ func copyMap(map1 map[int64]int64, map2 map[int64]int64) {
 	}
 }
 
+func handleVersion(c state.Command) state.Version {
+  if state.IsRead(&c) {
+    return state.GetVersion(&c)
+  }
+  return state.IncrVersion(&c)
+}
+
+func (r *Replica) askShardsForVersions(deps []mdlinproto.Tag) {
+  log.Println("Step 3. Send out req. to shard leaders for version numbers")
+  // sendInterShardMsg(shardTo, InterShard, 0)
+}
+
+var pis mdlinproto.InterShard
+func (r *Replica) handleInterShard(ismessage *mdlinproto.InterShard, from int64) {
+  log.Println("Being asked for dependencies from shard %d", from)
+  // sendInterShardMsg(shardTo, InterShardReply, 1)
+}
+
+func (r *Replica) handleInterShardReply(ismessage *mdlinproto.InterShardReply, from int64) {
+  log.Println("Step 4. Detect conflicts and reorder")
+  //r.bcastReorder()
+}
+
+var pr mdlinproto.Reorder
+func (r *Replica) bcastReorder(oldInstance int32, newInstance int32, ballot int32, pids []int64, seqnos []int64, newversions []state.Version) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println("Accept bcast failed:", err)
+		}
+	}()
+	pr.LeaderId = r.Id
+	pr.OldInstance = oldInstance
+	pr.NewInstance = newInstance
+	pr.Ballot = ballot
+	pr.PIDs = pids
+	pr.SeqNos = seqnos
+	pr.NewVersions = newversions
+  args := &pr
+
+	n := r.N - 1
+	if r.Thrifty {
+		n = r.N >> 1 //n = n//2
+	}
+	q := r.Id
+
+	for sent := 0; sent < n; {
+		q = (q + 1) % int32(r.N)
+		if q == r.Id {
+			break
+		}
+		if !r.Alive[q] {
+			continue
+		}
+		sent++
+		r.SendMsg(q, r.reorderRPC, args)
+	}
+}
+
 func (r *Replica) handlePrepare(prepare *mdlinproto.Prepare) {
 	inst := r.instanceSpace[prepare.Instance]
 	var preply *mdlinproto.PrepareReply
@@ -753,10 +871,6 @@ func (r *Replica) handlePrepare(prepare *mdlinproto.Prepare) {
 	}
 }
 
-func (r *Replica) handleISMessage(ismessage *mdlinproto.InterShardTest, from int64) {
-  log.Printf("The test worked, we got %d from %d, we are %d", ismessage.TestMessage, from, r.shardId)
-}
-
 func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
 	//TODO for now.... are we making any of the decisions based on the nextSeqnos???
 	inst := r.instanceSpace[accept.Instance]
@@ -773,7 +887,9 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
 				ACCEPTED,
 				nil,
 				accept.PIDs,
-				accept.SeqNos}
+				accept.SeqNos,
+        accept.Versions,
+        accept.BatchDeps}
 			areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
 		}
 	} else if inst.ballot > accept.Ballot {
@@ -821,7 +937,9 @@ func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
 			COMMITTED,
 			nil,
 			commit.PIDs,
-			commit.SeqNos}
+			commit.SeqNos,
+      commit.Versions,
+      commit.BatchDeps}
 	} else {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
 		r.instanceSpace[commit.Instance].status = COMMITTED
@@ -849,7 +967,9 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 			COMMITTED,
 			nil,
 			nil,
-			nil}
+			nil,
+      nil,
+      nil}
 	} else {
 		r.instanceSpace[commit.Instance].status = COMMITTED
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
@@ -965,6 +1085,31 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
 			// TODO
 		}
 	}
+}
+
+//TODO
+func (r *Replica) handleReorder(reorder *mdlinproto.Reorder) {
+  var rreply *mdlinproto.ReorderReply
+  // use REORDER constant!
+  r.replyReorder(reorder.LeaderId, rreply)
+}
+
+//TODO
+func (r *Replica) handleReorderReply(rreply *mdlinproto.ReorderReply) {
+  /*if rreply.OK == TRUE {
+    inst.lb.reorderOKs++
+    if inst.lb.reorderOKs+1 > r.N>>1 {
+      inst = r.instanceSpace[rreply.Instance]
+      inst.status = COMMITTED
+    }
+  }
+
+  r.recordInstanceMetadata(r.instanceSpace[areply.Instance])
+	r.sync() //is this necessary?
+
+	r.updateCommittedUpTo()
+
+	r.bcastCommit(areply.Instance, inst.ballot, inst.cmds, inst.pid, inst.seqno)*/
 }
 
 func (r *Replica) executeCommands() {

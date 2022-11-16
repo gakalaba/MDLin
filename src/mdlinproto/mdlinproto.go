@@ -13,15 +13,22 @@ const (
 	ACCEPT_REPLY
 	COMMIT
 	COMMIT_SHORT
-	INTERSHARD_TEST
+	INTERSHARD
+	INTERSHARD_REPLY
 )
+
+type Tag struct {
+	SeqNo int64
+	PID   int64
+}
 
 type Propose struct {
 	CommandId int32
 	Command   state.Command
 	Timestamp int64
-	SeqNo     int64 // Add this for multidispatch
+	SeqNo     int64 // Add these for multidispatch
 	PID       int64
+	BatchDeps []Tag
 }
 
 type ProposeReply struct {
@@ -53,6 +60,8 @@ type Accept struct {
 	PIDs         []int64
 	SeqNos       []int64
 	ExpectedSeqs map[int64]int64
+	Versions     []state.Version
+	BatchDeps    [][]Tag
 }
 
 type AcceptReply struct {
@@ -62,12 +71,14 @@ type AcceptReply struct {
 }
 
 type Commit struct {
-	LeaderId int32
-	Instance int32
-	Ballot   int32
-	Command  []state.Command
-	PIDs     []int64
-	SeqNos   []int64
+	LeaderId  int32
+	Instance  int32
+	Ballot    int32
+	Command   []state.Command
+	PIDs      []int64
+	SeqNos    []int64
+	Versions  []state.Version
+	BatchDeps [][]Tag
 }
 
 type CommitShort struct {
@@ -77,6 +88,27 @@ type CommitShort struct {
 	Ballot   int32
 }
 
-type InterShardTest struct {
+// Message types for MultiShard MDL
+type InterShard struct {
 	TestMessage int32
+}
+
+type InterShardReply struct {
+	TestMessage int32
+}
+
+type Reorder struct {
+	LeaderId    int32
+	OldInstance int32
+	NewInstance int32
+	Ballot      int32
+	PIDs        []int64
+	SeqNos      []int64
+	NewVersions []state.Version
+}
+
+type ReorderReply struct {
+	Instance int32
+	OK       uint8
+	Ballot   int32
 }
