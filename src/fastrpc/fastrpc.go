@@ -5,6 +5,7 @@ import (
 )
 
 type Serializable interface {
+	// Note: interface doesn't include binarySize() fn
 	Marshal(io.Writer)
 	Unmarshal(io.Reader) error
 	New() Serializable

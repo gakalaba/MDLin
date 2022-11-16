@@ -10,6 +10,9 @@ import (
 	"mysort"
 	"state"
 	"time"
+  "net"
+  "bufio"
+  "fastrpc"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -47,7 +50,14 @@ type Replica struct {
 	nextSeqNo        map[int64]int64                    // Mapping client PID to next expected sequence number
 	outstandingInst  map[int64][]*genericsmr.MDLPropose // Mapping client PID to `sorted` list of outstanding proposals received
 	noProposalsReady bool
-  //TODO add shards connections using shards arg in NewReplica
+  // Add these for multi-sharded multi-dispatch
+  shardId       int
+  shardAddrList []string
+  shards        []net.Conn // cache of connections to all other replicas
+  shardReaders  []*bufio.Reader
+  shardWriters  []*bufio.Writer
+  interShardChan chan *genericsmr.RPCMessage
+  shListener net.Listener
 }
 
 type InstanceStatus int
@@ -76,7 +86,7 @@ type LeaderBookkeeping struct {
 	nacks           int
 }
 
-func NewReplica(id int, peerAddrList []string, shards []string, thrifty bool,
+func NewReplica(id int, peerAddrList []string, shardsList []string, shId int, thrifty bool,
 	durable bool, batch bool) *Replica {
 	r := &Replica{
 		genericsmr.NewReplica(id, peerAddrList, thrifty),
@@ -98,7 +108,14 @@ func NewReplica(id int, peerAddrList []string, shards []string, thrifty bool,
 		batch,
 		make(map[int64]int64),
 		make(map[int64][]*genericsmr.MDLPropose),
-		true}
+		true,
+    shId,
+    shardsList,
+    make([]net.Conn, len(shardsList)),
+    make([]*bufio.Reader, len(shardsList)),
+    make([]*bufio.Writer, len(shardsList)),
+    make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
+    nil}
 
 	r.Durable = durable
 
@@ -112,6 +129,105 @@ func NewReplica(id int, peerAddrList []string, shards []string, thrifty bool,
 	go r.run()
 
 	return r
+}
+
+func (r *Replica) connectToShards() {
+	var b [4]byte
+	bs := b[:4]
+	done := make(chan bool)
+
+	go r.waitForShardConnections(done)
+
+	//connect to peers
+	for i := 0; i < r.shardId; i++ {
+		for done := false; !done; {
+			if conn, err := net.Dial("tcp", r.shardAddrList[i]); err == nil {
+				r.shards[i] = conn
+				done = true
+			} else {
+				time.Sleep(1e9)
+			}
+		}
+		binary.LittleEndian.PutUint32(bs, uint32(r.shardId))
+		if _, err := r.shards[i].Write(bs); err != nil {
+			log.Println("Write id error:", err)
+			continue
+		}
+		r.Alive[i] = true
+		r.shardReaders[i] = bufio.NewReader(r.shards[i])
+		r.shardWriters[i] = bufio.NewWriter(r.shards[i])
+
+		go r.shardListener(i, r.shardReaders[i])
+	}
+	<-done
+  log.Printf("Shard Leader %d: Done connecting to all shard leaders\n", r.Id)
+}
+
+/* Peer (replica) connections dispatcher */
+func (r *Replica) waitForShardConnections(done chan bool) {
+	var b [4]byte
+	bs := b[:4]
+
+  var sherr error
+	r.shListener, sherr = net.Listen("tcp", r.shardAddrList[r.shardId])
+  if (sherr != nil) {
+    panic(sherr)
+  }
+	for i := r.shardId + 1; i < len(r.shardAddrList); i++ {
+		conn, err := r.shListener.Accept()
+		if err != nil {
+			log.Println("Accept error:", err)
+			continue
+		}
+		if _, err := io.ReadFull(conn, bs); err != nil {
+			log.Println("Connection establish error:", err)
+			continue
+		}
+		id := int32(binary.LittleEndian.Uint32(bs))
+		r.shards[id] = conn
+		r.shardReaders[id] = bufio.NewReader(conn)
+		r.shardWriters[id] = bufio.NewWriter(conn)
+		r.Alive[id] = true
+
+		go r.shardListener(int(id), r.shardReaders[id])
+	}
+
+	done <- true
+}
+
+func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
+	var msgType uint8
+	var err error = nil
+  istest := new(mdlinproto.InterShardTest).New()
+
+	for err == nil && !r.Shutdown {
+
+		if msgType, err = reader.ReadByte(); err != nil { // received a SendMsg(code)
+			break
+		}
+
+		switch uint8(msgType) {
+
+		case mdlinproto.INTERSHARD_TEST:
+			if err = istest.Unmarshal(reader); err != nil {
+				break
+			}
+      r.interShardChan <- &genericsmr.RPCMessage{istest, 0, int64(rid)}
+			break
+
+		default:
+			log.Println("Error: received unknown message type")
+		}
+	}
+}
+
+// leaderId is the ID of the leader this message is being sent TO. it's an index
+// msg is the actual message being sent of mdlinproto.InterShard* type
+func (r *Replica) sendInterShardMsg(leaderId int, msg fastrpc.Serializable) {
+  w := r.shardWriters[leaderId]
+  w.WriteByte(mdlinproto.INTERSHARD_TEST) // to tell what kind of message this is
+  msg.Marshal(w) // marshall the message and send it into the w bufio object
+  w.Flush()
 }
 
 // append a log entry to stable storage
@@ -190,6 +306,10 @@ func (r *Replica) run() {
 		log.Println("I'm the leader")
 	}
 
+  if (r.shardId > -1) && (r.shards != nil) && r.IsLeader {
+    r.connectToShards()
+  }
+
 	clockChan = make(chan bool, 1)
 	if r.batchingEnabled {
 		go r.clock()
@@ -204,6 +324,16 @@ func (r *Replica) run() {
 		case <-clockChan:
 			//activate the new proposals channel
 			log.Println("---------clockChan---------")
+      //FIXME remove this
+      if (r.IsLeader) {
+        for i:=0; i<len(r.shards);i++ {
+          if i != r.shardId {
+            log.Printf("Shard leader %d sending to shard leader %d", r.shardId, i)
+            msg := &mdlinproto.InterShardTest{int32(r.shardId)}
+            r.sendInterShardMsg(i, msg)
+          }
+        }
+      }
 			onOffProposeChan = r.MDLProposeChan
 			break
 
@@ -215,6 +345,12 @@ func (r *Replica) run() {
 				onOffProposeChan = nil
 			}
 			break
+
+    case ismsg := <-r.interShardChan:
+      log.Println("----------InterShardChan--------")
+      ismessage := ismsg.Message.(*mdlinproto.InterShardTest)
+      r.handleISMessage(ismessage, ismsg.From)
+      break
 
 		case prepareS := <-r.prepareChan:
 			log.Println("---------PrepareChan---------")
@@ -615,6 +751,10 @@ func (r *Replica) handlePrepare(prepare *mdlinproto.Prepare) {
 	if prepare.ToInfinity == TRUE && prepare.Ballot > r.defaultBallot {
 		r.defaultBallot = prepare.Ballot
 	}
+}
+
+func (r *Replica) handleISMessage(ismessage *mdlinproto.InterShardTest, from int64) {
+  log.Printf("The test worked, we got %d from %d, we are %d", ismessage.TestMessage, from, r.shardId)
 }
 
 func (r *Replica) handleAccept(accept *mdlinproto.Accept) {

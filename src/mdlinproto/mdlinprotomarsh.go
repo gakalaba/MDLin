@@ -841,3 +841,35 @@ func (t *CommitShort) Unmarshal(wire io.Reader) error {
 	t.Ballot = int32((uint32(bs[12]) | (uint32(bs[13]) << 8) | (uint32(bs[14]) << 16) | (uint32(bs[15]) << 24)))
 	return nil
 }
+
+// For multi-sharded, intershard communication
+func (t *InterShardTest) New() fastrpc.Serializable {
+	return new(InterShardTest)
+}
+
+func (t *InterShardTest) BinarySize() (nbytes int, sizeKnown bool) {
+  return 4, true
+}
+
+func (t *InterShardTest) Marshal(wire io.Writer) {
+	var b [4]byte
+	var bs []byte
+	bs = b[:4]
+	tmp32 := t.TestMessage
+	bs[0] = byte(tmp32)
+	bs[1] = byte(tmp32 >> 8)
+	bs[2] = byte(tmp32 >> 16)
+	bs[3] = byte(tmp32 >> 24)
+	wire.Write(bs)
+}
+
+func (t *InterShardTest) Unmarshal(wire io.Reader) error {
+	var b [4]byte
+	var bs []byte
+	bs = b[:4]
+	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+		return err
+	}
+	t.TestMessage = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
+	return nil
+}

@@ -181,7 +181,13 @@ func (r *Replica) waitForPeerConnections(done chan bool) {
 	var b [4]byte
 	bs := b[:4]
 
-	r.Listener, _ = net.Listen("tcp", r.PeerAddrList[r.Id])
+  var lerr error
+	r.Listener, lerr = net.Listen("tcp", r.PeerAddrList[r.Id])
+  if (lerr != nil) {
+    panic(lerr)
+  }
+  // only need one way, so to create N total (and not N^2)
+  // you call .Dial N/2 times and .Accept N/2 times
 	for i := r.Id + 1; i < int32(r.N); i++ {
 		conn, err := r.Listener.Accept()
 		if err != nil {
@@ -321,8 +327,8 @@ func (r *Replica) RegisterRPC(msgObj fastrpc.Serializable, notify chan *RPCMessa
 
 func (r *Replica) SendMsg(peerId int32, code uint8, msg fastrpc.Serializable) {
 	w := r.PeerWriters[peerId]
-	w.WriteByte(code)
-	msg.Marshal(w) //marshall the message and send it into the w bufio object
+	w.WriteByte(code) // to tell what kind of message this is
+	msg.Marshal(w) // marshall the message and send it into the w bufio object
 	w.Flush()
 }
 
@@ -332,8 +338,6 @@ func (r *Replica) ReplyPropose(reply *genericsmrproto.ProposeReply, w *bufio.Wri
 }
 
 func (r *Replica) MDReplyPropose(reply *mdlinproto.ProposeReply, w *bufio.Writer) {
-  log.Println("hereere about to marshal")
-  log.Printf("CommandID = %d, Timestamp = %d, OK = %d, value = %v", reply.CommandId, reply.Timestamp, reply.OK, reply.Value)
 	w.WriteByte(mdlinproto.PROPOSE_REPLY)
 	reply.Marshal(w)
 	w.Flush()

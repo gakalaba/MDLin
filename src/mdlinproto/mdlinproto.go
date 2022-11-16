@@ -13,6 +13,7 @@ const (
 	ACCEPT_REPLY
 	COMMIT
 	COMMIT_SHORT
+	INTERSHARD_TEST
 )
 
 type Propose struct {
@@ -74,4 +75,8 @@ type CommitShort struct {
 	Instance int32
 	Count    int32
 	Ballot   int32
+}
+
+type InterShardTest struct {
+	TestMessage int32
 }

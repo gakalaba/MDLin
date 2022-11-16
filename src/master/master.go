@@ -118,7 +118,8 @@ func (master *Master) run() {
 
 	// send the leader to the Coordinator
   if (*nShards > 1) {
-	  sendLeaderToCoord(fmt.Sprintf("%s:%d", *coordAddr, *coordPort), master.nodeList[0])
+    //Needs to be different connection for intershard RPC, so we +100 to leader portnum
+	  sendLeaderToCoord(fmt.Sprintf("%s:%d", *coordAddr, *coordPort), fmt.Sprintf("%s:%d", master.addrList[0], master.portList[0]+100))
   }
 
 	for true {

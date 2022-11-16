@@ -77,12 +77,16 @@ func run(replicaId int, nodeList []string) {
 		log.Println("Starting MD Linearizability replica...")
     // Get the shards for multi-sharded MD-Lin
     shards := getShardsFromMaster(fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
+    shardId := -1
     if (shards != nil) {
       for i,e := range shards {
+        if e == fmt.Sprintf("%s:%d", *myAddr, *portnum+100) {
+          shardId = i
+        }
         log.Printf("-->Shard %d leader at %s", i, e)
       }
     }
-		rep := mdlin.NewReplica(replicaId, nodeList, shards, *thrifty, *durable, *batch)
+		rep := mdlin.NewReplica(replicaId, nodeList, shards, shardId, *thrifty, *durable, *batch)
 		rpc.Register(rep)
 	} else {
 		log.Println("Starting classic Paxos replica...")
