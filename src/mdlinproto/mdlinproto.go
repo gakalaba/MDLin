@@ -91,11 +91,14 @@ type CommitShort struct {
 
 // Message types for MultiShard MDL
 type InterShard struct {
-	TestMessage int32
+	AskerCommandId int32
+	AskeeCommandId int32
 }
 
 type InterShardReply struct {
-	TestMessage int32
+	AskerCommandId int32
+	AskeeCommandId int32
+	Version        state.Version
 }
 
 type Reorder struct {

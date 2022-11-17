@@ -272,6 +272,7 @@ func (master *Master) RegisterShards(args *masterproto.RegisterShardsArgs, reply
 
 	master.shards = args.ShardList
 	master.numShards = len(master.shards)
+  master.keyspace = args.Keyspace
   for i,e := range master.shards {
     log.Printf("-->Shard %d has leader at %s\n", i, e)
   }
@@ -282,6 +283,7 @@ func (master *Master) RegisterShards(args *masterproto.RegisterShardsArgs, reply
 func (master *Master) GetShardList(args *masterproto.GetShardListArgs, reply *masterproto.GetShardListReply) error {
   if (*nShards <= 1) {
     reply.ShardList = nil
+    reply.Keyspace = nil
     return nil
   }
 	for true {
@@ -295,5 +297,6 @@ func (master *Master) GetShardList(args *masterproto.GetShardListArgs, reply *ma
 	}
 
 	reply.ShardList = master.shards
+  reply.Keyspace = master.keyspace
 	return nil
 }

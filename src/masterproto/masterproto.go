@@ -13,6 +13,7 @@ type RegisterReply struct {
 
 type RegisterShardsArgs struct {
 	ShardList []string
+	Keyspace  map[int][2]int
 }
 
 type RegisterShardsReply struct {
@@ -39,4 +40,5 @@ type GetShardListArgs struct {
 
 type GetShardListReply struct {
 	ShardList []string
+	Keyspace  map[int][2]int
 }

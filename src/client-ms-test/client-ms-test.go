@@ -48,6 +48,16 @@ func newResponseArray(f int) []int {
 	return rsp
 }
 
+func giveCoordKeys(ks map[int][2]int) {
+  rkArgs := new(coordinatorproto.RegisterKeyspaceArgs)
+  rkArgs.Keyspace = ks
+  err = coordinator.Call("Coordinator.RegisterKeyspace", rkArgs, new(coordinatorproto.RegisterKeyspaceReply))
+  if err != nil {
+    log.Fatalf("Error making the GetShardLeaderList RPC: %v\n", err)
+  }
+  time.Sleep(5 * time.Second)
+}
+
 func main() {
 	flag.Parse()
 
@@ -110,7 +120,7 @@ func main() {
   rsp := newResponseArray(4)
   test1(readers, writers, done, rsp)
   //rsp := newResponseArray(6)
-	//test1(readers, writers, leader, done, rsp)
+	//test2(readers, writers, leader, done, rsp)
 
   ////////////////////////////////////////////////
   // Close Connections
@@ -285,6 +295,16 @@ func test2(readers []*bufio.Reader, writers []*bufio.Writer, leader int, done ch
 }
 */
 func test1(readers []*bufio.Reader, writers []*bufio.Writer, done chan bool, rsp []int) {
+  // Give the coordinator the keyspace!
+  ks := make(map[int][2]int, 2)
+  ks[0] = make(int, 2)
+  ks[1] = make(int, 2)
+  ks[0][0] = 0
+  ks[0][1] = 0
+  ks[1][0] = 1
+  ks[1][1] = 1
+  giveCoordKeys(ks)
+
   if *mdlin {
 		for shard := 0; shard < len(readers); shard++ {
 			go waitRepliesMDL(readers, shard, &rsp, done)

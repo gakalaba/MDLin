@@ -30,6 +30,7 @@ type Coordinator struct {
 	connected      []bool
 	nConnected     int
   leadersConnected int
+  keyspace  map[int][2]int
 }
 
 func main() {
@@ -60,6 +61,7 @@ func main() {
 		make([]bool, *nShards),
 		0,
     0,
+    nil,
 	}
 
 	rpc.Register(coordinator)
@@ -100,13 +102,16 @@ func (coordinator *Coordinator) run() {
   // Give the masters the ips of all other shard masters/leaders
   for true {
 		coordinator.lock.Lock()
-		if coordinator.leadersConnected == coordinator.numShards {
+    // we must wait until all the other leaders have been registered by their respective
+    // master servers. We also wait until the client has sent us the keyspace
+		if (coordinator.leadersConnected == coordinator.numShards) && (coordinator.keyspace != nil) {
 			coordinator.lock.Unlock()
 			break
 		}
 		coordinator.lock.Unlock()
 		time.Sleep(100000000)
 	}
+
   coordinator.sendShardsToMasters()
 
   log.Println("Shard setup complete!")
@@ -185,7 +190,7 @@ func (coordinator *Coordinator) sendShardsToMasters() error {
 
   var reply masterproto.RegisterShardsReply
   for _, mcli := range coordinator.masters {
-    args := &masterproto.RegisterShardsArgs{coordinator.shardLeaders}
+    args := &masterproto.RegisterShardsArgs{coordinator.shardLeaders, coordinator.keyspace}
     if err := mcli.Call("Master.RegisterShards", args, &reply); err != nil {
       log.Fatalf("Error making the RegisterShards RPC\n")
     }
@@ -206,4 +211,20 @@ func (coordinator *Coordinator) GetShardLeaderList(args *coordinatorproto.GetSha
 
   reply.LeaderList = coordinator.shardLeaders
   return nil
+}
+
+// Client --> Coordinator: The client sends the coordinator the keyspace
+func (coordinator *Coordinator) RegisterKeyspace(args *coordinatorproto.RegisterKeyspaceArgs, reply *coordinator.RegisterKeyspaceReply) {
+  coordinator.lock.Lock()
+  defer coordinator.lock.Unlock()
+  if !wellFormedKeys(args.Keyspace) {
+    panic("Keyspace is malformed")
+    //TODO create some error type
+  }
+  coordinator.keyspace = args.Keyspace
+}
+
+func wellFormedKeys(ks map[int][2]int) bool {
+  //TODO implement me ha
+  return true
 }

@@ -60,6 +60,7 @@ type Replica struct {
   shards        []net.Conn // cache of connections to all other replicas
   shardReaders  []*bufio.Reader
   shardWriters  []*bufio.Writer
+  keyspace      map[int][2]int
   interShardChan chan *genericsmr.RPCMessage
   interShardReplyChan chan *genericsmr.RPCMessage
   shListener net.Listener
@@ -94,10 +95,11 @@ type LeaderBookkeeping struct {
 	acceptOKs       int
 	reorderOKs      int
   nacks           int
+  depOKs          []int
 }
 
-func NewReplica(id int, peerAddrList []string, shardsList []string, shId int, thrifty bool,
-	durable bool, batch bool) *Replica {
+func NewReplica(id int, peerAddrList []string, shardsList []string, shId int, ks map[int][2]int,
+	thrifty bool, durable bool, batch bool) *Replica {
 	r := &Replica{
 		genericsmr.NewReplica(id, peerAddrList, thrifty),
 		make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
@@ -126,6 +128,7 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int, th
     make([]net.Conn, len(shardsList)),
     make([]*bufio.Reader, len(shardsList)),
     make([]*bufio.Writer, len(shardsList)),
+    ks, // keyspace
     make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
     make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
     nil}
@@ -654,9 +657,10 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
       } else {
         s = "W"
       }
-      log.Printf("Step 2. Shard Leader Creating Log Entry{%s(%d), Version: %d, Client_PID: %d, SeqNo: %d, Dependencies: %v", s, prop.Command.K, versions[found], pid, seqno, batchdeps[found])
+      log.Printf("Step 2. Shard Leader Creating Log Entry{%s(%d), Version: %d, CommandId: %d, Client_PID: %d, SeqNo: %d, Dependencies: %v", 
+                      s, prop.Command.K, versions[found], prop.CommandId, pid, seqno, batchdeps[found])
       //TODO^^
-      go r.askShardsForVersions(batchdeps[found]) //TODO should this be separate goroutine or not?
+      go r.askShardsForVersions(batchdeps[found], prop.CommandId) //TODO should this be separate goroutine or not?
 
       // Check if any others are ready
       /*
@@ -795,24 +799,97 @@ func handleVersion(c state.Command) state.Version {
   return state.IncrVersion(&c)
 }
 
-func (r *Replica) askShardsForVersions(deps []mdlinproto.Tag) {
+func (r *Replica) askShardsForVersions(deps []mdlinproto.Tag, myCommandId int) {
   log.Println("Step 3. Send out req. to shard leaders for version numbers")
-  // sendInterShardMsg(shardTo, InterShard, 0)
+  var shardTo int
+  for i, d:= range deps {
+    //TODO 1. can optimize this if you cache version numbers previously asked for!
+    //TODO 2. can also optimize if you combine messages to per shard... rn we'll be 
+    //        sending n messages to a shard for n dependencies to the same shard
+    shardTo = r.resolveShardFromKey(d.K)
+    if (shardTo == -1) {
+      panic("We couldn't find the shard responsible for this key??")
+    }
+    msg := &mdlinproto.InterShard{myCommandId, d.CommandId}
+    r.sendInterShardMsg(shardTo, msg, 0)
+  }
+}
+
+func (r *Replica) resolveShardFromKey(k state.Key) int {
+  // Return the shardId of the shard that is responsible for this key
+  for id, keyrange := range r.keyspace {
+    if (k >= keyrange[0] && k <= keyrange[1]) {
+      return id
+    }
+    //TODO is there some structure for this keyspace that makes it faster?
+  }
+  return -1
+}
+
+func (r *Replica) findEntry(commandId int) (*Instance, int) {
+  for i:=r.crtInstance-1; i>=0; i-- {
+    if (r.instanceSpace[i] == nil) {
+      panic("instanceSpace at this index should never be nil")
+    }
+    props := r.instanceSpace[i].lb.clientProposals
+    for j:=0; j<len(props); j++ {
+      if props[j].CommandId == commandId {
+        return r.instanceSpace[i], j
+      }
+    }
+  }
+  return nil, -1
 }
 
 var pis mdlinproto.InterShard
 func (r *Replica) handleInterShard(ismessage *mdlinproto.InterShard, from int64) {
   log.Println("Being asked for dependencies from shard %d", from)
-  // sendInterShardMsg(shardTo, InterShardReply, 1)
+  // First, find the dependency, this is based on the ismessage.AskeeCommandId
+  e, j := findEntry(ismessage.AskeeCommandId)
+  if (j > len(e.versions)) {
+    panic("WHy aren't these the same length? they should be")
+  }
+  // If it exists, then reply to the shard
+  if e != nil {
+    msg := &mdlinproto.InterShardReply{ismessage.AskerCommandId, ismessage.AskeeCommandId, e.versions[j]}
+    r.sendInterShardMsg(from, InterShardReply, 1)
+  } else {
+    // If it doesn't exist, then put this message back in the channel to process later
+    r.interShardChan <- &genericsmr.RPCMessage{ismessage, 0, from)
+    //TODO consider having a clock for these so that we can make progress on 
+    //assigning versions without needlessly asking for them before they're ready
+  }
 }
 
 func (r *Replica) handleInterShardReply(ismessage *mdlinproto.InterShardReply, from int64) {
   log.Println("Step 4. Detect conflicts and reorder")
-  //r.bcastReorder()
+  // We have the version but we have to match it to the entry that wanted this information
+  e, j := findEntry(ismessage.AskerCommandId)
+  e.lb.depOKs[j]++ //FIXME where are we adding this version number? oh shit we also need the PID lol
+  if (e.lb.depOKs[j] != len(e.batchdeps[j])) {
+    // We need to await the other dependency versions before we can detect conflicts
+    if e.lb.depOKs[j] > len(e.batchdeps[j]) {
+      panic("somehow... we got more acks than we asked for")
+    }
+    log.Printf("Got a version number, buttt we're still not ready. We have %d acks out of %d", e.lb.depOKs[j], len(e.batchdeps[j]))
+    return //TODO early conflict detection???
+  }
+
+  // Detect conflicts
+  k := e.cmds[j].K
+  for i:=0; i<len(deps); i++ {
+    if (deps[i].k == k) && (deps[i].version >= e.versions[j])
+        && (deps[i].PID >= e.pids[j]) {
+          // conflict detected
+          assignNewInstance()//FIXME wtf goes in here?
+          r.bcastReorder()
+    }
+  }
 }
 
 var pr mdlinproto.Reorder
 func (r *Replica) bcastReorder(oldInstance int32, newInstance int32, ballot int32, pids []int64, seqnos []int64, newversions []state.Version) {
+  log.Println("Found a conflict! Going to reorder...")
 	defer func() {
 		if err := recover(); err != nil {
 			log.Println("Accept bcast failed:", err)

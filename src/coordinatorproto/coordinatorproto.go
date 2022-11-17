@@ -24,3 +24,10 @@ type GetShardLeaderListArgs struct {
 type GetShardLeaderListReply struct {
 	LeaderList []string
 }
+
+type RegisterKeyspaceArgs struct {
+	Keyspace map[int][2]int
+}
+
+type RegisterKeyspaceReply struct {
+}
