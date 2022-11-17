@@ -69,6 +69,7 @@ func (t *Propose) Marshal(wire io.Writer) {
 		wire.Write(b[0:wlen])
 	}
 	for i := int64(0); i < alen1; i++ {
+		t.BatchDeps[i].K.Marshal(wire)
 		bs = b[:8]
 		tmp64 = t.BatchDeps[i].SeqNo
 		bs[0] = byte(tmp64)
@@ -100,13 +101,13 @@ func (t *Propose) Unmarshal(rr io.Reader) error {
 	// Timestamp int64
 	// SeqNo     int64
 	// PID       int64
-	// BatchDeps []Tag, Tag is 16 bytes
+	// BatchDeps []Tag, Tag is 24 bytes
 	var wire byteReader
 	var ok bool
 	if wire, ok = rr.(byteReader); !ok {
 		wire = bufio.NewReader(rr)
 	}
-  var b [8]byte
+	var b [8]byte
 	var bs []byte
 	bs = b[:4]
 	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
@@ -138,6 +139,7 @@ func (t *Propose) Unmarshal(rr io.Reader) error {
 	}
 	t.BatchDeps = make([]Tag, alen1)
 	for i := int64(0); i < alen1; i++ {
+		t.BatchDeps[i].K.Unmarshal(wire)
 		bs = b[:8]
 		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
 			return err
@@ -528,13 +530,15 @@ func (t *Accept) Marshal(wire io.Writer) {
 	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
 		wire.Write(b[0:wlen])
 	}
-  var alen2 int64
+	var alen2 int64
 	for i := int64(0); i < alen1; i++ {
 		alen2 = int64(len(t.BatchDeps[i]))
 		if wlen := binary.PutVarint(bs, alen2); wlen >= 0 {
 			wire.Write(b[0:wlen])
 		}
 		for j := int64(0); j < alen2; j++ {
+			t.BatchDeps[i][j].K.Marshal(wire)
+
 			bs = b[:8]
 			tmp64 = t.BatchDeps[i][j].SeqNo
 			bs[0] = byte(tmp64)
@@ -657,7 +661,7 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
 		return err
 	}
 	t.BatchDeps = make([][]Tag, alen1)
-  var alen2 int64
+	var alen2 int64
 	for i := int64(0); i < alen1; i++ {
 		alen2, err = binary.ReadVarint(wire)
 		if err != nil {
@@ -665,6 +669,7 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
 		}
 		t.BatchDeps[i] = make([]Tag, alen2)
 		for j := int64(0); j < alen2; j++ {
+			t.BatchDeps[i][j].K.Unmarshal(wire)
 			bs = b[:8]
 			if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
 				return err
@@ -869,13 +874,14 @@ func (t *Commit) Marshal(wire io.Writer) {
 	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
 		wire.Write(b[0:wlen])
 	}
-  var alen2 int64
+	var alen2 int64
 	for i := int64(0); i < alen1; i++ {
 		alen2 = int64(len(t.BatchDeps[i]))
 		if wlen := binary.PutVarint(bs, alen2); wlen >= 0 {
 			wire.Write(b[0:wlen])
 		}
 		for j := int64(0); i < alen2; i++ {
+			t.BatchDeps[i][j].K.Marshal(wire)
 			bs = b[:8]
 			tmp64 = t.BatchDeps[i][j].SeqNo
 			bs[0] = byte(tmp64)
@@ -971,13 +977,14 @@ func (t *Commit) Unmarshal(rr io.Reader) error {
 	}
 	t.BatchDeps = make([][]Tag, alen1)
 	var alen2 int64
-  for i := int64(0); i < alen1; i++ {
+	for i := int64(0); i < alen1; i++ {
 		alen2, err = binary.ReadVarint(wire)
 		if err != nil {
 			return err
 		}
 		t.BatchDeps[i] = make([]Tag, alen2)
 		for j := int64(0); j < alen2; j++ {
+			t.BatchDeps[i][j].K.Unmarshal(wire)
 			bs = b[:8]
 			if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
 				return err
@@ -1153,7 +1160,7 @@ func (t *Reorder) Unmarshal(wire io.Reader) error {
 		return err
 	}
 	t.TestMessage = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-  */
+	*/
 	return nil
 }
 
@@ -1172,18 +1179,18 @@ func (t *ReorderReply) Marshal(wire io.Writer) {
 	bs[2] = byte(tmp32 >> 16)
 	bs[3] = byte(tmp32 >> 24)
 	wire.Write(bs)
-  */
+	*/
 }
 
 func (t *ReorderReply) Unmarshal(wire io.Reader) error {
 	/*
-  var b [4]byte
-	var bs []byte
-	bs = b[:4]
-	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-		return err
-	}
-	t.TestMessage = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-  */
+		  var b [4]byte
+			var bs []byte
+			bs = b[:4]
+			if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+				return err
+			}
+			t.TestMessage = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
+	*/
 	return nil
 }

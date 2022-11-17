@@ -18,6 +18,7 @@ const (
 )
 
 type Tag struct {
+	K     state.Key
 	SeqNo int64
 	PID   int64
 }

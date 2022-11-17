@@ -50,7 +50,7 @@ type Replica struct {
 	flush               bool
 	committedUpTo       int32
 	batchingEnabled     bool
-	// Add these for multidispatch
+	// Add these for single-sharded multidispatch
 	nextSeqNo        map[int64]int64                    // Mapping client PID to next expected sequence number
 	outstandingInst  map[int64][]*genericsmr.MDLPropose // Mapping client PID to `sorted` list of outstanding proposals received
 	noProposalsReady bool

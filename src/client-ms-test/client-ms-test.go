@@ -5,9 +5,9 @@ import (
 	"coordinatorproto"
 	"flag"
 	"fmt"
+	"genericsmrproto"
 	"log"
 	"mdlinproto"
-  "genericsmrproto"
 	"net"
 	"net/rpc"
 	"runtime"
@@ -67,7 +67,7 @@ func main() {
 		log.Fatalf("Error connecting to coordinator: %v\n", err)
 	}
 
-  // Get the shard leaders
+	// Get the shard leaders
 	llReply := new(coordinatorproto.GetShardLeaderListReply)
 	err = coordinator.Call("Coordinator.GetShardLeaderList", new(coordinatorproto.GetShardLeaderListArgs), llReply)
 	if err != nil {
@@ -90,7 +90,7 @@ func main() {
 	readers := make([]*bufio.Reader, N)
 	writers := make([]*bufio.Writer, N)
 
-  for i := 0; i < N; i++ {
+	for i := 0; i < N; i++ {
 		var err error
 		shard_leaders[i], err = net.Dial("tcp", llReply.LeaderList[i]) //place the tcp connection object inside shard_leaders[i]
 		if err != nil {
@@ -102,24 +102,39 @@ func main() {
 
 	successful = make([]int, N)
 	failed = make([]int, N)
-
 	done := make(chan bool, N)
-
-	before_total := time.Now()
-
 	////////////////////////////////////////////////
 	// Sending the requests and waiting for replies
 	////////////////////////////////////////////////
-  rsp := newResponseArray(6)
-  if *mdlin {
-    for shard:=0; shard<N; shard++ {
-      go waitRepliesMDL(readers, shard, &rsp, done)
-    }
+
+  rsp := newResponseArray(4)
+  test1(readers, writers, done, rsp)
+  //rsp := newResponseArray(6)
+	//test1(readers, writers, leader, done, rsp)
+
+  ////////////////////////////////////////////////
+  // Close Connections
+  ////////////////////////////////////////////////
+  for _, client := range shard_leaders {
+		if client != nil {
+			client.Close()
+		}
+	}
+	coordinator.Close()
+}
+
+/*
+func test2(readers []*bufio.Reader, writers []*bufio.Writer, leader int, done chan bool, rsp []int) {
+  before_total := time.Now()
+	if *mdlin {
+		for shard := 0; shard < N; shard++ {
+			go waitRepliesMDL(readers, shard, &rsp, done)
+		}
 		var arg mdlinproto.Propose
 		before := time.Now()
 
 		// Send C1 reqs 2 and 1
-    leader := 0
+		leader := 0
 		arg = mdlinproto.Propose{0, state.Command{state.PUT, 0, 0}, 0, 0, 0}
 		writers[leader].WriteByte(mdlinproto.PROPOSE)
 		arg.Marshal(writers[leader])
@@ -129,7 +144,7 @@ func main() {
 		arg.Marshal(writers[leader])
 		writers[leader].Flush()
 		// Send C2 reqs 2 and 1
-    leader = 1
+		leader = 1
 		arg = mdlinproto.Propose{2, state.Command{state.PUT, 0, 0}, 0, 0, 1}
 		writers[leader].WriteByte(mdlinproto.PROPOSE)
 		arg.Marshal(writers[leader])
@@ -139,13 +154,13 @@ func main() {
 		arg.Marshal(writers[leader])
 		writers[leader].Flush()
 		// Send C1 req 0
-    leader = 0
+		leader = 0
 		arg = mdlinproto.Propose{4, state.Command{state.PUT, 0, 0}, 0, 2, 0}
 		writers[leader].WriteByte(mdlinproto.PROPOSE)
 		arg.Marshal(writers[leader])
 		writers[leader].Flush()
 		// Send C2 req 0
-    leader = 1
+		leader = 1
 		//time.Sleep(2*time.Second)
 		arg = mdlinproto.Propose{5, state.Command{state.PUT, 0, 0}, 0, 2, 1}
 		writers[leader].WriteByte(mdlinproto.PROPOSE)
@@ -171,27 +186,25 @@ func main() {
 			}
 		}
 
-    /*
-		if err {
-			reply := new(masterproto.GetLeaderReply)
-			master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply)
-			leader = reply.LeaderId // Cannot contact leader, figure out new leader
-			log.Printf("New leader is replica %d\n", leader)
-		}
-    */
+			//if err {
+			//	reply := new(masterproto.GetLeaderReply)
+			//	master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply)
+			//	leader = reply.LeaderId // Cannot contact leader, figure out new leader
+			//	log.Printf("New leader is replica %d\n", leader)
+			//}
 
 		after_total := time.Now()
 		log.Printf("Test took %v\n", after_total.Sub(before_total))
 	} else {
 		log.Println("Paxos....")
-    for shard:=0; shard<N; shard++ {
-      go waitReplies(readers, shard, &rsp, done)
-    }
+		for shard := 0; shard < N; shard++ {
+			go waitReplies(readers, shard, &rsp, done)
+		}
 		var arg genericsmrproto.Propose
 		before := time.Now()
 
 		// Send C1 reqs 2 and 1
-    leader := 0
+		leader := 0
 		arg = genericsmrproto.Propose{0, state.Command{state.PUT, 0, 0}, 0}
 		writers[leader].WriteByte(genericsmrproto.PROPOSE)
 		arg.Marshal(writers[leader])
@@ -202,7 +215,7 @@ func main() {
 		writers[leader].Flush()
 		<-done //SINGLE DISPATCH
 		// Send C2 reqs 2 and 1
-    leader = 1
+		leader = 1
 		arg = genericsmrproto.Propose{2, state.Command{state.PUT, 0, 0}, 0}
 		writers[leader].WriteByte(genericsmrproto.PROPOSE)
 		arg.Marshal(writers[leader])
@@ -213,13 +226,13 @@ func main() {
 		writers[leader].Flush()
 		<-done //SINGLE DISPATCH
 		// Send C1 req 0
-    leader = 0
+		leader = 0
 		arg = genericsmrproto.Propose{4, state.Command{state.PUT, 0, 0}, 0}
 		writers[leader].WriteByte(genericsmrproto.PROPOSE)
 		arg.Marshal(writers[leader])
 		writers[leader].Flush()
 		// Send C2 req 0
-    leader = 1
+		leader = 1
 		//time.Sleep(2*time.Second)
 		arg = genericsmrproto.Propose{5, state.Command{state.PUT, 0, 0}, 0}
 		writers[leader].WriteByte(genericsmrproto.PROPOSE)
@@ -246,21 +259,19 @@ func main() {
 			}
 		}
 
-    /*
-		if err {
-			reply := new(masterproto.GetLeaderReply)
-			master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply)
-			leader = reply.LeaderId // Cannot contact leader, figure out new leader
-			log.Printf("New leader is replica %d\n", leader)
-		}
-    */
+			//if err {
+			//	reply := new(masterproto.GetLeaderReply)
+			//	master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply)
+			//	leader = reply.LeaderId // Cannot contact leader, figure out new leader
+			//	log.Printf("New leader is replica %d\n", leader)
+			//}
 
 		after_total := time.Now()
 		log.Printf("Test took %v\n", after_total.Sub(before_total))
 
 	}
 
-  succs := 0
+	succs := 0
 	for _, succ := range successful {
 		succs += succ
 	}
@@ -271,13 +282,156 @@ func main() {
 	}
 
 	log.Printf("Successful: %d, Failed: %d\n", succs, fails)
-
-	for _, client := range shard_leaders {
-		if client != nil {
-			client.Close()
+}
+*/
+func test1(readers []*bufio.Reader, writers []*bufio.Writer, done chan bool, rsp []int) {
+  if *mdlin {
+		for shard := 0; shard < len(readers); shard++ {
+			go waitRepliesMDL(readers, shard, &rsp, done)
 		}
+		var arg mdlinproto.Propose
+	  before_total := time.Now()
+    // Single Client, issueing 4 commands:
+    // W(X=1)
+    //  W(Y=1)
+    //   R(X)
+    //    R(Y)
+
+    // W(X=1)
+		leader := 0
+    deps := make([]mdlinproto.Tag, 0)
+		arg = mdlinproto.Propose{0, state.Command{state.PUT, 0, 1}, 0, 0, 100, deps}
+		writers[leader].WriteByte(mdlinproto.PROPOSE)
+		arg.Marshal(writers[leader])
+		writers[leader].Flush()
+		// W(Y=1)
+		leader = 1
+    deps = append(deps, mdlinproto.Tag{0,0,100})
+		arg = mdlinproto.Propose{1, state.Command{state.PUT, 1, 1}, 0, 0, 100, deps}
+		writers[leader].WriteByte(mdlinproto.PROPOSE)
+		arg.Marshal(writers[leader])
+		writers[leader].Flush()
+		// R(X)
+		leader = 0
+    deps = append(deps, mdlinproto.Tag{1,0,100})
+		arg = mdlinproto.Propose{2, state.Command{state.GET, 0, 0}, 0, 1, 100, deps}
+		writers[leader].WriteByte(mdlinproto.PROPOSE)
+		arg.Marshal(writers[leader])
+		writers[leader].Flush()
+		// R(Y)
+		leader = 1
+    deps = append(deps, mdlinproto.Tag{0,1,100})
+		arg = mdlinproto.Propose{3, state.Command{state.GET, 1, 0}, 0, 1, 100, deps}
+		writers[leader].WriteByte(mdlinproto.PROPOSE)
+		arg.Marshal(writers[leader])
+		writers[leader].Flush()
+
+		////////////////////////////////
+		// Sync with WaitReplies()
+		///////////////////////////
+		<-done
+		after_total := time.Now()
+
+		/////////////////////////////////////
+		// Do some checks on the results
+		///////////////////////////////////
+		if *check {
+			for j := 0; j < len(rsp); j++ {
+				if rsp[j] == -1 {
+					log.Println("Didn't receive", j)
+				}
+			}
+		}
+
+			//if err {
+			//	reply := new(masterproto.GetLeaderReply)
+			//	master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply)
+			//	leader = reply.LeaderId // Cannot contact leader, figure out new leader
+			//	log.Printf("New leader is replica %d\n", leader)
+			//}
+
+		log.Printf("Test took %v\n", after_total.Sub(before_total))
+	} else {
+		log.Println("Paxos....")
+		for shard := 0; shard < len(readers); shard++ {
+			go waitReplies(readers, shard, &rsp, done)
+		}
+		var arg genericsmrproto.Propose
+		before_total := time.Now()
+
+    // Single Client, issueing 4 commands:
+    // W(X=1)
+    //  W(Y=1)
+    //   R(X)
+    //    R(Y)
+
+    // W(X=1)
+		leader := 0
+		arg = genericsmrproto.Propose{0, state.Command{state.PUT, 0, 1}, 0}
+		writers[leader].WriteByte(mdlinproto.PROPOSE)
+		arg.Marshal(writers[leader])
+		writers[leader].Flush()
+    <-done
+		// W(Y=1)
+		leader = 1
+		arg = genericsmrproto.Propose{1, state.Command{state.PUT, 1, 1}, 0}
+		writers[leader].WriteByte(mdlinproto.PROPOSE)
+		arg.Marshal(writers[leader])
+		writers[leader].Flush()
+    <-done
+		// R(X)
+		leader = 0
+		arg = genericsmrproto.Propose{2, state.Command{state.GET, 0, 0}, 0}
+		writers[leader].WriteByte(mdlinproto.PROPOSE)
+		arg.Marshal(writers[leader])
+		writers[leader].Flush()
+    <-done
+		// R(Y)
+		leader = 1
+		arg = genericsmrproto.Propose{3, state.Command{state.GET, 1, 0}, 0}
+		writers[leader].WriteByte(mdlinproto.PROPOSE)
+		arg.Marshal(writers[leader])
+		writers[leader].Flush()
+    <-done
+		////////////////////////////////
+		// Sync with WaitReplies()
+		///////////////////////////
+
+		after_total := time.Now()
+
+		/////////////////////////////////////
+		// Do some checks on the results
+		///////////////////////////////////
+		if *check {
+			for j := 0; j < 6; j++ {
+				if rsp[j] == -1 {
+					log.Println("Didn't receive", j)
+				}
+			}
+		}
+
+			//if err {
+			//	reply := new(masterproto.GetLeaderReply)
+			//	master.Call("Master.GetLeader", new(masterproto.GetLeaderArgs), reply)
+			//	leader = reply.LeaderId // Cannot contact leader, figure out new leader
+			//	log.Printf("New leader is replica %d\n", leader)
+			//}
+
+		log.Printf("Test took %v\n", after_total.Sub(before_total))
+
 	}
-	coordinator.Close()
+
+	succs := 0
+	for _, succ := range successful {
+		succs += succ
+	}
+
+	fails := 0
+	for _, fai := range failed {
+		fails += fai
+	}
+
+	log.Printf("Successful: %d, Failed: %d\n", succs, fails)
 }
 
 func waitRepliesMDL(readers []*bufio.Reader, shard int, rsp *[]int, done chan bool) {
@@ -287,7 +441,7 @@ func waitRepliesMDL(readers []*bufio.Reader, shard int, rsp *[]int, done chan bo
 
 	var err error
 	var msgType byte
-  n := len(*rsp)
+	n := len(*rsp)
 	for i := 0; i < n; i++ {
 		if msgType, err = readers[shard].ReadByte(); err != nil ||
 			msgType != mdlinproto.PROPOSE_REPLY {
@@ -301,7 +455,7 @@ func waitRepliesMDL(readers []*bufio.Reader, shard int, rsp *[]int, done chan bo
 			continue
 		}
 
-    log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, PID = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
+		log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, PID = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
 		log.Printf("rsp len %d and commandID was %d", len(*rsp), reply.CommandId)
 		if reply.OK == 0 {
 			log.Printf("Client request failed on shard %d", shard)
@@ -309,9 +463,9 @@ func waitRepliesMDL(readers []*bufio.Reader, shard int, rsp *[]int, done chan bo
 			continue
 		}
 		if (*rsp)[reply.CommandId] != -1 {
-      log.Printf("Duplicate reply on shard %d: %d", shard, reply.CommandId)
-      failed[shard]++
-      continue
+			log.Printf("Duplicate reply on shard %d: %d", shard, reply.CommandId)
+			failed[shard]++
+			continue
 		}
 		(*rsp)[reply.CommandId] = int(reply.CommandId)
 		log.Printf("Success!")
@@ -325,7 +479,7 @@ func waitReplies(readers []*bufio.Reader, shard int, rsp *[]int, done chan bool)
 	reply := new(genericsmrproto.ProposeReply)
 
 	var err error
-  n:= len(*rsp)
+	n := len(*rsp)
 	for i := 0; i < n; i++ {
 		if err = reply.Unmarshal(readers[shard]); err != nil {
 			log.Printf("Error when reading on shard %d:%v", shard, err)
@@ -333,7 +487,7 @@ func waitReplies(readers []*bufio.Reader, shard int, rsp *[]int, done chan bool)
 			continue
 		}
 
-    log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, PID = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
+		log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, PID = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
 		log.Printf("rsp len %d and commandID was %d", len(*rsp), reply.CommandId)
 		if reply.OK == 0 {
 			log.Printf("Client request failed on shard %d", shard)
@@ -341,15 +495,14 @@ func waitReplies(readers []*bufio.Reader, shard int, rsp *[]int, done chan bool)
 			continue
 		} else {
 			if (*rsp)[reply.CommandId] != -1 {
-        log.Printf("Duplicate reply on shard %d: %d", shard, reply.CommandId)
-        failed[shard]++
-        continue
+				log.Printf("Duplicate reply on shard %d: %d", shard, reply.CommandId)
+				failed[shard]++
+				continue
 			}
-      (*rsp)[reply.CommandId] = int(reply.Value)
-		  log.Printf("Success!")
-		  successful[shard]++
+			(*rsp)[reply.CommandId] = int(reply.Value)
+			log.Printf("Success!")
+			successful[shard]++
 		}
 		done <- e
 	}
 }
-
