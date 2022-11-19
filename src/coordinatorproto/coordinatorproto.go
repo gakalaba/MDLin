@@ -1,5 +1,7 @@
 package coordinatorproto
 
+import "state"
+
 type RegisterArgs struct {
 	Addr string
 	Port int
@@ -26,7 +28,7 @@ type GetShardLeaderListReply struct {
 }
 
 type RegisterKeyspaceArgs struct {
-	Keyspace map[int][2]int
+	Keyspace map[int][2]state.Key
 }
 
 type RegisterKeyspaceReply struct {

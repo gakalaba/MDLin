@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"time"
+  "state"
 )
 
 var portnum *int = flag.Int("port", 7070, "Port # to listen on. Defaults to 7070")
@@ -114,7 +115,7 @@ func registerWithMaster(masterAddr string) (int, []string) {
 	return reply.ReplicaId, reply.NodeList
 }
 
-func getShardsFromMaster(masterAddr string) ([]string, map[int][2]int) {
+func getShardsFromMaster(masterAddr string) ([]string, map[int][2]state.Key) {
 	var args masterproto.GetShardListArgs
 	var reply masterproto.GetShardListReply
 

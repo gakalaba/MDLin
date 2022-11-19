@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+  "state"
 )
 
 var portnum *int = flag.Int("port", 7087, "Port # to listen on. Defaults to 7087")
@@ -38,6 +39,7 @@ type Master struct {
 	nConnected     int
 	numShards      int
 	shards         []string
+  keyspace       map[int][2]state.Key
 }
 
 func main() {
@@ -71,6 +73,7 @@ func main() {
 		0,
 		-1,
 		nil,
+    nil,
 	}
 
 	rpc.Register(master)

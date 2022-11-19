@@ -1,5 +1,7 @@
 package masterproto
 
+import "state"
+
 type RegisterArgs struct {
 	Addr string
 	Port int
@@ -13,7 +15,7 @@ type RegisterReply struct {
 
 type RegisterShardsArgs struct {
 	ShardList []string
-	Keyspace  map[int][2]int
+	Keyspace  map[int][2]state.Key
 }
 
 type RegisterShardsReply struct {
@@ -40,5 +42,5 @@ type GetShardListArgs struct {
 
 type GetShardListReply struct {
 	ShardList []string
-	Keyspace  map[int][2]int
+	Keyspace  map[int][2]state.Key
 }

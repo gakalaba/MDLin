@@ -48,10 +48,10 @@ func newResponseArray(f int) []int {
 	return rsp
 }
 
-func giveCoordKeys(ks map[int][2]int) {
+func giveCoordKeys(ks map[int][2]state.Key, coord *rpc.Client) {
   rkArgs := new(coordinatorproto.RegisterKeyspaceArgs)
   rkArgs.Keyspace = ks
-  err = coordinator.Call("Coordinator.RegisterKeyspace", rkArgs, new(coordinatorproto.RegisterKeyspaceReply))
+  err := coord.Call("Coordinator.RegisterKeyspace", rkArgs, new(coordinatorproto.RegisterKeyspaceReply))
   if err != nil {
     log.Fatalf("Error making the GetShardLeaderList RPC: %v\n", err)
   }
@@ -118,9 +118,9 @@ func main() {
 	////////////////////////////////////////////////
 
   rsp := newResponseArray(4)
-  test1(readers, writers, done, rsp)
+  test1(readers, writers, done, rsp, coordinator)
   //rsp := newResponseArray(6)
-	//test2(readers, writers, leader, done, rsp)
+	//test2(readers, writers, leader, done, rsp, coordinator)
 
   ////////////////////////////////////////////////
   // Close Connections
@@ -134,7 +134,9 @@ func main() {
 }
 
 /*
-func test2(readers []*bufio.Reader, writers []*bufio.Writer, leader int, done chan bool, rsp []int) {
+func test2(readers []*bufio.Reader, writers []*bufio.Writer, leader int, done chan bool, rsp []int, coord *rpc.Client) {
+  ks = nil
+  giveCoordKeys(ks, coord)
   before_total := time.Now()
 	if *mdlin {
 		for shard := 0; shard < N; shard++ {
@@ -294,16 +296,13 @@ func test2(readers []*bufio.Reader, writers []*bufio.Writer, leader int, done ch
 	log.Printf("Successful: %d, Failed: %d\n", succs, fails)
 }
 */
-func test1(readers []*bufio.Reader, writers []*bufio.Writer, done chan bool, rsp []int) {
+func test1(readers []*bufio.Reader, writers []*bufio.Writer, done chan bool, rsp []int, coord *rpc.Client) {
   // Give the coordinator the keyspace!
-  ks := make(map[int][2]int, 2)
-  ks[0] = make(int, 2)
-  ks[1] = make(int, 2)
-  ks[0][0] = 0
-  ks[0][1] = 0
-  ks[1][0] = 1
-  ks[1][1] = 1
-  giveCoordKeys(ks)
+  ks := make(map[int]([2]state.Key), 2)
+  ks[0] = [2]state.Key{0,0}
+  ks[1] = [2]state.Key{1,1}
+  log.Println(ks)
+  giveCoordKeys(ks, coord)
 
   if *mdlin {
 		for shard := 0; shard < len(readers); shard++ {
@@ -320,27 +319,27 @@ func test1(readers []*bufio.Reader, writers []*bufio.Writer, done chan bool, rsp
     // W(X=1)
 		leader := 0
     deps := make([]mdlinproto.Tag, 0)
-		arg = mdlinproto.Propose{0, state.Command{state.PUT, 0, 1}, 0, 0, 100, deps}
+		arg = mdlinproto.Propose{0, state.Command{state.PUT, 0, 1}, 0, 0, 100, nil}
 		writers[leader].WriteByte(mdlinproto.PROPOSE)
 		arg.Marshal(writers[leader])
 		writers[leader].Flush()
 		// W(Y=1)
 		leader = 1
-    deps = append(deps, mdlinproto.Tag{0,0,100})
+    deps = append(deps, mdlinproto.Tag{0,-1, 100, 0})
 		arg = mdlinproto.Propose{1, state.Command{state.PUT, 1, 1}, 0, 0, 100, deps}
 		writers[leader].WriteByte(mdlinproto.PROPOSE)
 		arg.Marshal(writers[leader])
 		writers[leader].Flush()
 		// R(X)
 		leader = 0
-    deps = append(deps, mdlinproto.Tag{1,0,100})
+    deps = append(deps, mdlinproto.Tag{1,-1, 100, 1})
 		arg = mdlinproto.Propose{2, state.Command{state.GET, 0, 0}, 0, 1, 100, deps}
 		writers[leader].WriteByte(mdlinproto.PROPOSE)
 		arg.Marshal(writers[leader])
 		writers[leader].Flush()
 		// R(Y)
 		leader = 1
-    deps = append(deps, mdlinproto.Tag{0,1,100})
+    deps = append(deps, mdlinproto.Tag{0,-1, 100, 2})
 		arg = mdlinproto.Propose{3, state.Command{state.GET, 1, 0}, 0, 1, 100, deps}
 		writers[leader].WriteByte(mdlinproto.PROPOSE)
 		arg.Marshal(writers[leader])

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+  "state"
 )
 
 var portnum *int = flag.Int("port", 7097, "Port # to listen on. Defaults to 7097")
@@ -30,7 +31,7 @@ type Coordinator struct {
 	connected      []bool
 	nConnected     int
   leadersConnected int
-  keyspace  map[int][2]int
+  keyspace  map[int][2]state.Key
 }
 
 func main() {
@@ -214,7 +215,7 @@ func (coordinator *Coordinator) GetShardLeaderList(args *coordinatorproto.GetSha
 }
 
 // Client --> Coordinator: The client sends the coordinator the keyspace
-func (coordinator *Coordinator) RegisterKeyspace(args *coordinatorproto.RegisterKeyspaceArgs, reply *coordinator.RegisterKeyspaceReply) {
+func (coordinator *Coordinator) RegisterKeyspace(args *coordinatorproto.RegisterKeyspaceArgs, reply *coordinatorproto.RegisterKeyspaceReply) {
   coordinator.lock.Lock()
   defer coordinator.lock.Unlock()
   if !wellFormedKeys(args.Keyspace) {
@@ -224,7 +225,7 @@ func (coordinator *Coordinator) RegisterKeyspace(args *coordinatorproto.Register
   coordinator.keyspace = args.Keyspace
 }
 
-func wellFormedKeys(ks map[int][2]int) bool {
+func wellFormedKeys(ks map[int][2]state.Key) bool {
   //TODO implement me ha
   return true
 }

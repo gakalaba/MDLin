@@ -18,9 +18,11 @@ const (
 )
 
 type Tag struct {
-	K     state.Key
-	SeqNo int64
-	PID   int64
+	K         state.Key
+	Version   state.Version
+	PID       int64
+	CommandId int32
+	//Instance  int32 // TODO this is an optimization!! Index in the log, comes from crtInstance
 }
 
 type Propose struct {
@@ -58,11 +60,11 @@ type Accept struct {
 	Instance     int32
 	Ballot       int32
 	Command      []state.Command
-	PIDs         []int64
-	SeqNos       []int64
+	PIDs         int64
+	SeqNos       int64
 	ExpectedSeqs map[int64]int64
-	Versions     []state.Version
-	BatchDeps    [][]Tag
+	Versions     state.Version
+	BatchDeps    []Tag
 }
 
 type AcceptReply struct {
@@ -76,10 +78,11 @@ type Commit struct {
 	Instance  int32
 	Ballot    int32
 	Command   []state.Command
-	PIDs      []int64
-	SeqNos    []int64
-	Versions  []state.Version
-	BatchDeps [][]Tag
+	PIDs      int64
+	SeqNos    int64
+	Versions  state.Version
+	BatchDeps []Tag
+	Status uint8
 }
 
 type CommitShort struct {
@@ -87,32 +90,28 @@ type CommitShort struct {
 	Instance int32
 	Count    int32
 	Ballot   int32
+	Status uint8
 }
 
 // Message types for MultiShard MDL
 type InterShard struct {
-	AskerCommandId int32
+	AskerInstance  int32
 	AskeeCommandId int32
 }
 
 type InterShardReply struct {
-	AskerCommandId int32
-	AskeeCommandId int32
-	Version        state.Version
+	AskerInstance   int32
+	AskeeCommandId  int32
+	LogDependencies []Tag
 }
 
 type Reorder struct {
 	LeaderId    int32
 	OldInstance int32
 	NewInstance int32
-	Ballot      int32
-	PIDs        []int64
-	SeqNos      []int64
-	NewVersions []state.Version
 }
 
 type ReorderReply struct {
-	Instance int32
+	OldInstance int32
 	OK       uint8
-	Ballot   int32
 }
