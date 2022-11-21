@@ -592,7 +592,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
   } else {
     s = "COMMITTED"
   }
-  log.Printf("Calling bcastCOmmit with status %s which converts %d to %d", s, status, uint8(status))
+  log.Printf("Calling bcastCOmmit with status %s which converts %d to %d", s, status, int32(status))
 	pc.LeaderId = r.Id
 	pc.Instance = instance
 	pc.Ballot = ballot
@@ -605,7 +605,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 	pcs.Instance = instance
 	pcs.Ballot = ballot
 	pcs.Count = int32(len(command))
-	pcs.Status = uint8(status)
+	pcs.Status = int32(status)
   argsShort := &pcs
 
 	//args := &mdlinproto.Commit{r.Id, instance, command}

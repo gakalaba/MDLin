@@ -897,7 +897,7 @@ func (p *CommitShortCache) Put(t *CommitShort) {
 	p.mu.Unlock()
 }
 func (t *CommitShort) Marshal(wire io.Writer) {
-	var b [17]byte
+	var b [16]byte
 	var bs []byte
 	bs = b[:16]
 	tmp32 := t.LeaderId
@@ -921,15 +921,21 @@ func (t *CommitShort) Marshal(wire io.Writer) {
 	bs[14] = byte(tmp32 >> 16)
 	bs[15] = byte(tmp32 >> 24)
 	wire.Write(bs)
-  //bs[16] = byte(t.Status)
-  //wire.Write(bs)
+
+  bs = b[:4]
+  tmp32 = t.Status
+  bs[0] = byte(tmp32)
+  bs[1] = byte(tmp32 >> 8)
+  bs[2] = byte(tmp32 >> 16)
+  bs[3] = byte(tmp32 >> 24)
+  wire.Write(bs)
 
 }
 
 func (t *CommitShort) Unmarshal(wire io.Reader) error {
-	var b [17]byte
+	var b [16]byte
 	var bs []byte
-	bs = b[:17]
+	bs = b[:16]
 	if _, err := io.ReadAtLeast(wire, bs, 16); err != nil {
 		return err
 	}
@@ -937,7 +943,11 @@ func (t *CommitShort) Unmarshal(wire io.Reader) error {
 	t.Instance = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
 	t.Count = int32((uint32(bs[8]) | (uint32(bs[9]) << 8) | (uint32(bs[10]) << 16) | (uint32(bs[11]) << 24)))
 	t.Ballot = int32((uint32(bs[12]) | (uint32(bs[13]) << 8) | (uint32(bs[14]) << 16) | (uint32(bs[15]) << 24)))
-  //t.Status = uint8(uint8(bs[16]))
+  bs = b[:4]
+  if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+    return err
+  }
+  t.Status = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	return nil
 }
 
