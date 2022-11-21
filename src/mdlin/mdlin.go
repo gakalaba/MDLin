@@ -1049,11 +1049,14 @@ func (r *Replica) reorderInLog(oldInstance int32, newInstance int32) {
   mypid := r.instanceSpace[oldInstance].pid
   for i := oldInstance; i < r.crtInstance; i++ {
     e := r.instanceSpace[i]
-    for _, c := range e.cmds {
+    for j, c := range e.cmds {
       //FIXME
       if c.K == k && e.pid == mypid {
         e.status = REORDERING
         newE.cmds = append(newE.cmds, c)
+        if r.IsLeader {
+          newE.lb.clientProposals = append(newE.lb.clientProposals, e.lb.clientProposals[j])
+        }
       }
     }
   }
@@ -1383,29 +1386,15 @@ func (r *Replica) executeCommands() {
 					  // they will get executed in consecutive order.
 					  // This is good because we assume this to provide MD-lin
 					  val := inst.cmds[j].Execute(r.State)
-            if j == 0 {
-					    if inst.lb != nil && !state.AllBlindWrites(inst.cmds) {
-						    propreply := &mdlinproto.ProposeReply{
-							    TRUE,
-							    inst.lb.clientProposals[j].CommandId,
-							    val,
-							    17}
-						    log.Printf("Responding to client with OK = true (1) in executeCommand, we executed command %d", inst.lb.clientProposals[j].CommandId)
-						    log.Printf("It has OK = TRUE, CommandID = %d, val = %v, Timestamp = %v", inst.lb.clientProposals[j].CommandId, val, 17)
-						    r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
-					    }
-            } else {
-              if inst.lb != nil && !state.AllBlindWrites(inst.cmds) {
-                propreply := &mdlinproto.ProposeReply{
-                  TRUE,
-                  //inst.lb.clientProposals[j].CommandId,
-                  2,
-                  val,
-                  17}
-                log.Printf("Responding to client with OK = true (1) in executeCommand, we executed command %d", 2)
-                log.Printf("It has OK = TRUE, CommandID = %d, val = %v, Timestamp = %v", 2, val, 17)
-                r.MDReplyPropose(propreply, inst.lb.clientProposals[0].Reply)
-              }
+					  if inst.lb != nil && !state.AllBlindWrites(inst.cmds) {
+						  propreply := &mdlinproto.ProposeReply{
+							  TRUE,
+							  inst.lb.clientProposals[j].CommandId,
+							  val,
+							  17}
+						  log.Printf("Responding to client with OK = true (1) in executeCommand, we executed command %d", inst.lb.clientProposals[j].CommandId)
+						  log.Printf("It has OK = TRUE, CommandID = %d, val = %v, Timestamp = %v", inst.lb.clientProposals[j].CommandId, val, 17)
+						  r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
             }
 				  }
         }
