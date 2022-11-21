@@ -494,7 +494,6 @@ func (r *Replica) makeUniqueBallot(ballot int32) int32 {
 }
 
 func (r *Replica) updateCommittedUpTo() {
-  log.Println(r.instanceSpace[r.committedUpTo+1].status, COMMITTED, REORDERED)
   ini := r.committedUpTo
 	for r.instanceSpace[r.committedUpTo+1] != nil &&
 		(r.instanceSpace[r.committedUpTo+1].status == COMMITTED ||
@@ -592,7 +591,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
   } else {
     s = "COMMITTED"
   }
-  log.Printf("Calling bcastCOmmit with status %s which converts %d to %d", s, status, int32(status))
+  log.Printf("Calling bcastCOmmit with status %s", s)
 	pc.LeaderId = r.Id
 	pc.Instance = instance
 	pc.Ballot = ballot
@@ -838,7 +837,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
       initial_logdeps,
       new_logdeps}
 	}
-  go r.askShardsForDeps(batchdeps, r.crtInstance)
+  r.askShardsForDeps(batchdeps, r.crtInstance) // TODO fix this later, just making sync for prints for now
 	r.crtInstance++
 
 	for instNo := firstInst; instNo < r.crtInstance; instNo++ {
@@ -974,11 +973,13 @@ func (r *Replica) detectConflicts(my_index int32) {
   var iindex int32
   for _, deps := range e.new_ld {
     for _, d := range deps {
-      log.Println("     DC: Shard %d looking for log entry %d", r.shardId, d.CommandId)
+      log.Printf("     DC: Shard %d looking for commandID %d", r.shardId, d.CommandId)
       e, _, iindex = r.findEntry(d.CommandId)
       if (e == nil) {
         panic("not sure what happened.... this shouldn't happen because if we got a response it's because the InterShardReply at the other shard happened because we gave the version to them")
       }
+      log.Printf("      DC: d.K(%d) == my_k(%d) && d.ver(%d) >= my_ver(%d) && d.PID(%d) > my_pid(%d) && d.index(%d) > my_index(%d)",
+            d.K, my_k, e.version, my_ver, d.PID, my_pid, iindex, my_index)
       if d.K == my_k && e.version >= my_ver && d.PID > my_pid && iindex > my_index {
         // conflict detected
         log.Println("     DC: !!!!!!!!!!!!CONF DETECTED")
@@ -1375,24 +1376,39 @@ func (r *Replica) executeCommands() {
           // We reordered these in the log, so when they're marked like this
           // we shouldn't execute them!
           log.Printf("****NOT executing log index %d cuz it's REORDERED", i)
-          continue
+        } else {
+          log.Println("Number of commands in this entry is", len(inst.cmds))
+				  for j := 0; j < len(inst.cmds); j++ {
+					  // If an instands has multiple commands (a batch)
+					  // they will get executed in consecutive order.
+					  // This is good because we assume this to provide MD-lin
+					  val := inst.cmds[j].Execute(r.State)
+            if j == 0 {
+					    if inst.lb != nil && !state.AllBlindWrites(inst.cmds) {
+						    propreply := &mdlinproto.ProposeReply{
+							    TRUE,
+							    inst.lb.clientProposals[j].CommandId,
+							    val,
+							    17}
+						    log.Printf("Responding to client with OK = true (1) in executeCommand, we executed command %d", inst.lb.clientProposals[j].CommandId)
+						    log.Printf("It has OK = TRUE, CommandID = %d, val = %v, Timestamp = %v", inst.lb.clientProposals[j].CommandId, val, 17)
+						    r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
+					    }
+            } else {
+              if inst.lb != nil && !state.AllBlindWrites(inst.cmds) {
+                propreply := &mdlinproto.ProposeReply{
+                  TRUE,
+                  //inst.lb.clientProposals[j].CommandId,
+                  2,
+                  val,
+                  17}
+                log.Printf("Responding to client with OK = true (1) in executeCommand, we executed command %d", 2)
+                log.Printf("It has OK = TRUE, CommandID = %d, val = %v, Timestamp = %v", 2, val, 17)
+                r.MDReplyPropose(propreply, inst.lb.clientProposals[0].Reply)
+              }
+            }
+				  }
         }
-				for j := 0; j < len(inst.cmds); j++ {
-					// If an instands has multiple commands (a batch)
-					// they will get executed in consecutive order.
-					// This is good because we assume this to provide MD-lin
-					val := inst.cmds[j].Execute(r.State)
-					if inst.lb != nil && !state.AllBlindWrites(inst.cmds) {
-						propreply := &mdlinproto.ProposeReply{
-							TRUE,
-							inst.lb.clientProposals[j].CommandId,
-							val,
-							17}
-						log.Printf("Responding to client with OK = true (1) in executeCommand, we executed command %d", inst.lb.clientProposals[j].CommandId)
-						log.Printf("It has OK = TRUE, CommandID = %d, val = %v, Timestamp = %v", inst.lb.clientProposals[j].CommandId, val, 17)
-						r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
-					}
-				}
 				i++
 				executed = true
 			} else {

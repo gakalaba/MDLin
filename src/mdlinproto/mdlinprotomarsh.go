@@ -70,6 +70,18 @@ func (t *Propose) Marshal(wire io.Writer) {
 	}
 	for i := int64(0); i < alen1; i++ {
 		t.BatchDeps[i].K.Marshal(wire)
+    bs = b[:8]
+    tmp64 = t.BatchDeps[i].PID
+    bs[0] = byte(tmp64)
+    bs[1] = byte(tmp64 >> 8)
+    bs[2] = byte(tmp64 >> 16)
+    bs[3] = byte(tmp64 >> 24)
+    bs[4] = byte(tmp64 >> 32)
+    bs[5] = byte(tmp64 >> 40)
+    bs[6] = byte(tmp64 >> 48)
+    bs[7] = byte(tmp64 >> 56)
+    wire.Write(bs)
+
 		bs = b[:4]
 		tmp32 = t.BatchDeps[i].CommandId
 		bs[0] = byte(tmp32)
@@ -125,7 +137,13 @@ func (t *Propose) Unmarshal(rr io.Reader) error {
 	t.BatchDeps = make([]Tag, alen1)
 	for i := int64(0); i < alen1; i++ {
 		t.BatchDeps[i].K.Unmarshal(wire)
-		bs = b[:4]
+		bs = b[:8]
+		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
+			return err
+		}
+    t.BatchDeps[i].PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+
+    bs = b[:4]
 		if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
 			return err
 		}
