@@ -13,6 +13,8 @@ import (
   "net"
   "bufio"
   "fastrpc"
+  "fmt"
+  "sync"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -60,11 +62,11 @@ type Replica struct {
   shards        []net.Conn // cache of connections to all other replicas
   shardReaders  []*bufio.Reader
   shardWriters  []*bufio.Writer
-  keyspace      map[int][2]state.Key
   interShardChan chan *genericsmr.RPCMessage
   interShardReplyChan chan *genericsmr.RPCMessage
   shListener net.Listener
   propagatedbd       []mdlinproto.Tag
+  buflock *sync.Mutex
 }
 
 type InstanceStatus int
@@ -100,7 +102,28 @@ type LeaderBookkeeping struct {
   nacks           int
 }
 
-func NewReplica(id int, peerAddrList []string, shardsList []string, shId int, ks map[int][2]state.Key,
+func tagtostring(t mdlinproto.Tag) string {
+  var kk string
+  if (t.K == 0) {
+    kk = "X"
+  } else {
+    kk = "Y"
+  }
+  return fmt.Sprintf("Tag = %s.%d.%d.CommandID(%d)", kk, t.Version, t.PID, t.CommandId)
+}
+
+func printDeps(deps []mdlinproto.Tag, s string) {
+  if (deps == nil || len(deps) == 0) {
+    log.Printf("   %s: -->nil", s)
+  } else {
+    log.Printf("   %s:", s)
+  }
+  for _, d := range deps {
+    log.Println("   ->", tagtostring(d))
+  }
+}
+
+func NewReplica(id int, peerAddrList []string, shardsList []string, shId int,
 	thrifty bool, durable bool, batch bool) *Replica {
 	r := &Replica{
 		genericsmr.NewReplica(id, peerAddrList, thrifty),
@@ -130,11 +153,11 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int, ks
     make([]net.Conn, len(shardsList)),
     make([]*bufio.Reader, len(shardsList)),
     make([]*bufio.Writer, len(shardsList)),
-    ks, // keyspace
     make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
     make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
     nil,
-    make([]mdlinproto.Tag, 0)}
+    make([]mdlinproto.Tag, 0),
+    new(sync.Mutex)}
 
 	r.Durable = durable
 
@@ -181,7 +204,7 @@ func (r *Replica) connectToShards() {
 		go r.shardListener(i, r.shardReaders[i])
 	}
 	<-done
-  log.Printf("Shard Leader %d: Done connecting to all shard leaders\n", r.Id)
+  log.Printf("Shard Leader %d: Done connecting to all shard leaders\n", r.shardId)
 }
 
 /* Peer (replica) connections dispatcher */
@@ -219,8 +242,6 @@ func (r *Replica) waitForShardConnections(done chan bool) {
 func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 	var msgType uint8
 	var err error = nil
-  intershard := new(mdlinproto.InterShard).New()
-  intershardreply := new(mdlinproto.InterShardReply).New()
 
 	for err == nil && !r.Shutdown {
 
@@ -231,21 +252,25 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 		switch uint8(msgType) {
 
 		case mdlinproto.INTERSHARD:
+      intershard := new(mdlinproto.InterShard)
 			if err = intershard.Unmarshal(reader); err != nil {
 				break
 			}
+      //log.Println(intershard)
       r.interShardChan <- &genericsmr.RPCMessage{intershard, 0, int64(rid)}
 			break
 
     case mdlinproto.INTERSHARD_REPLY:
+      intershardreply := new(mdlinproto.InterShardReply)
       if err = intershardreply.Unmarshal(reader); err != nil {
         break
       }
+      //log.Println(intershardreply)
       r.interShardReplyChan <- &genericsmr.RPCMessage{intershardreply, 0, int64(rid)}
       break
 
 		default:
-			log.Println("Error: received unknown message type")
+			panic("mdlin ERROR: received unknown message type")
 		}
 	}
 }
@@ -253,14 +278,27 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 // leaderId is the ID of the leader this message is being sent TO. it's an index
 // msg is the actual message being sent of mdlinproto.InterShard* type
 func (r *Replica) sendInterShardMsg(leaderId int64, msg fastrpc.Serializable, code int) {
-  w := r.shardWriters[leaderId]
-  if (code == 0) {
-    w.WriteByte(mdlinproto.INTERSHARD) // to tell what kind of message this is
+  r.buflock.Lock()
+  defer r.buflock.Unlock()
+
+  if (leaderId != int64(r.shardId)) {
+    w := r.shardWriters[leaderId]
+    if (code == 0) {
+      w.WriteByte(mdlinproto.INTERSHARD) // to tell what kind of message this is
+    } else {
+      w.WriteByte(mdlinproto.INTERSHARD_REPLY)
+    }
+    msg.Marshal(w) // marshall the message and send it into the w bufio object
+    w.Flush()
   } else {
-    w.WriteByte(mdlinproto.INTERSHARD_REPLY)
+    log.Println("SENDING MESSAGE TO SELF!!!!")
+    if (code == 0) {
+      r.interShardChan <- &genericsmr.RPCMessage{msg, 0, int64(leaderId)}
+    } else {
+      r.interShardReplyChan <- &genericsmr.RPCMessage{msg, 0, int64(leaderId)}
+    }
   }
-  msg.Marshal(w) // marshall the message and send it into the w bufio object
-  w.Flush()
+
 }
 
 // append a log entry to stable storage
@@ -366,7 +404,6 @@ func (r *Replica) run() {
 
 		case propose := <-onOffProposeChan:
 			log.Println("---------ProposalChan---------")
-      log.Println("Step 1. Shard leader gets")
 			r.handlePropose(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
 			if r.batchingEnabled && !r.noProposalsReady {
@@ -383,7 +420,7 @@ func (r *Replica) run() {
     case ismsgrep := <-r.interShardReplyChan:
       log.Println("-----InterShardReplyChan-----")
       isrmessage := ismsgrep.Message.(*mdlinproto.InterShardReply)
-      r.handleInterShardReply(isrmessage)
+      r.handleInterShardReply(isrmessage, ismsgrep.From)
 
 		case prepareS := <-r.prepareChan:
 			log.Println("---------PrepareChan---------")
@@ -437,7 +474,7 @@ func (r *Replica) run() {
     case reorderReplyS := <-r.reorderReplyChan:
       log.Println("------ReorderReplyChan-----")
       reorderReply := reorderReplyS.Message.(*mdlinproto.ReorderReply)
-      //go a reorder reply
+      //got a reorder reply
       r.handleReorderReply(reorderReply)
       break
 
@@ -457,15 +494,17 @@ func (r *Replica) makeUniqueBallot(ballot int32) int32 {
 }
 
 func (r *Replica) updateCommittedUpTo() {
+  log.Println(r.instanceSpace[r.committedUpTo+1].status, COMMITTED, REORDERED)
+  ini := r.committedUpTo
 	for r.instanceSpace[r.committedUpTo+1] != nil &&
 		(r.instanceSpace[r.committedUpTo+1].status == COMMITTED ||
      r.instanceSpace[r.committedUpTo+1].status == REORDERED) {
 		r.committedUpTo++
-    if len(r.propagatedbd) == 0 {
-      panic("issues updating size of propagatedbd")
+    if len(r.propagatedbd) > 0 {
+      r.propagatedbd = r.propagatedbd[1:]
     }
-    r.propagatedbd = r.propagatedbd[1:]
 	}
+  log.Printf("Updating commit index from %d to %d", ini, r.committedUpTo)
 }
 
 func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
@@ -547,6 +586,13 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 			log.Println("Commit bcast failed:", err)
 		}
 	}()
+  var s string
+  if (status == REORDERED) {
+    s = "REORDERED"
+  } else {
+    s = "COMMITTED"
+  }
+  log.Printf("Calling bcastCOmmit with status %s which converts %d to %d", s, status, uint8(status))
 	pc.LeaderId = r.Id
 	pc.Instance = instance
 	pc.Ballot = ballot
@@ -672,13 +718,20 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			r.nextSeqNo[pid]++
       //TODO delete this logic used for printing
       var s string
+      var kk string
       if state.IsRead(&prop.Command) {
         s = "R"
       } else {
         s = "W"
       }
-      log.Printf("Step 2. Shard Leader Creating Log Entry{%s(%d), Version: %d, CommandId: %d, Client_PID: %d, SeqNo: %d, Dependencies: %v", 
-                      s, prop.Command.K, versions, prop.CommandId, pid, seqno, batchdeps)
+      if prop.Command.K == 0 {
+        kk = "X"
+      } else {
+        kk = "Y"
+      }
+      log.Printf("Step 2. Shard Leader Creating Log Entry{%s(%s) = %d, ver: %d, CommandId: %d, PID: %d, SeqNo: %d",
+                      s, kk, prop.Command.V, versions, prop.CommandId, pid, seqno)
+      printDeps(batchdeps, "bd")
       //TODO^^
       // Check if any others are ready
       /*
@@ -759,7 +812,6 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 
 	r.noProposalsReady = false
 
-  log.Println("Replicating this (potentially later reordered) entry to the other replicas")
 	// Add entry to log
 	if r.defaultBallot == -1 {
 		r.instanceSpace[r.crtInstance] = &Instance{
@@ -790,16 +842,15 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	r.crtInstance++
 
 	for instNo := firstInst; instNo < r.crtInstance; instNo++ {
-		log.Printf("looping through all instances made %d", instNo)
 		if r.defaultBallot == -1 {
 
-			log.Println("(candidate) leader broadcasting prepares....")
+			log.Println("    Step2. (candidate) leader broadcasting prepares....")
 			r.bcastPrepare(instNo, r.makeUniqueBallot(0), true)
 		} else {
 			r.recordInstanceMetadata(r.instanceSpace[instNo])
 			r.recordCommands(cmds)
 			r.sync()
-			log.Println("Leader broadcasting Accepts")
+			log.Println("    Step2. Leader broadcasting Accepts")
 
 			// Make a copy of the nextSeqNo map
 			expectedSeqs := make(map[int64]int64)
@@ -824,7 +875,7 @@ func handleVersion(c state.Command) state.Version {
 }
 
 func (r *Replica) askShardsForDeps(deps []mdlinproto.Tag, myInstance int32) {
-  log.Println("Step 3. Send out req. to shard leaders for version numbers")
+  log.Println("Step 3. Send out req. to shard leaders for log dependencies")
   var shardTo int64
   for _, d:= range deps {
     //TODO 1. can optimize this if you cache deps previously asked for!
@@ -834,27 +885,17 @@ func (r *Replica) askShardsForDeps(deps []mdlinproto.Tag, myInstance int32) {
     if (shardTo == -1) {
       panic("We couldn't find the shard responsible for this key??")
     }
-    if (shardTo == int64(r.shardId)) {// it's us!
-      // just add in the version number
-      e := r.instanceSpace[myInstance]
-      e.new_ld = append(e.new_ld, nil) // if it's on the same shard it's fine TODO
-    } else {
-      // Need to send inter shard RPC to ask for log dependencies with versions
-      msg := &mdlinproto.InterShard{myInstance, d.CommandId}
-      r.sendInterShardMsg(shardTo, msg, 0)
-    }
+    // Need to send inter shard RPC to ask for log dependencies with versions
+    msg := &mdlinproto.InterShard{myInstance, d.CommandId}
+    e := r.instanceSpace[myInstance]
+    log.Printf("      Step3. Shard %d commanId %d asking Shard %d for commandId %d, AskerInstance %d", r.shardId, e.lb.clientProposals[0].CommandId, shardTo, d.CommandId, myInstance)
+    r.sendInterShardMsg(shardTo, msg, 0)
   }
 }
 
 func (r *Replica) resolveShardFromKey(k state.Key) int64 {
   // Return the shardId of the shard that is responsible for this key
-  for id, keyrange := range r.keyspace {
-    if (k >= keyrange[0] && k <= keyrange[1]) {
-      return int64(id)
-    }
-  }
-  return -1
-  //return (k % len(r.shards))
+  return state.KeyModulo(k, len(r.shards))
 }
 
 func (r *Replica) findEntry(commandId int32) (*Instance, int, int32) {
@@ -874,28 +915,31 @@ func (r *Replica) findEntry(commandId int32) (*Instance, int, int32) {
 
 var pis mdlinproto.InterShard
 func (r *Replica) handleInterShard(ismessage *mdlinproto.InterShard, from int64) {
-  log.Println("Being asked for dependencies from shard %d", from)
+  log.Printf("*Shard %d recv messge from Shard %d for ld of commandId %d, AskerInstance %d*", r.shardId, from, ismessage.AskeeCommandId, ismessage.AskerInstance)
   // First, find the dependency, this is based on the ismessage.AskeeCommandId
   e, _, _ := r.findEntry(ismessage.AskeeCommandId)
   // If it exists, then reply to the shard
   if e != nil {
     if e.status == COMMITTED {
+      log.Println("The log is already committed, so returning ld=nil")
       msg := &mdlinproto.InterShardReply{ismessage.AskerInstance, ismessage.AskeeCommandId, nil}
       r.sendInterShardMsg(from, msg, 1)
     } else {
+      printDeps(e.initial_ld, "*initial ld")
       msg := &mdlinproto.InterShardReply{ismessage.AskerInstance, ismessage.AskeeCommandId, e.initial_ld} //TODO is this supposed to be initial or new
       r.sendInterShardMsg(from, msg, 1)
     }
   } else {
     // If it doesn't exist, then put this message back in the channel to process later
+    log.Println("     *batch dependency didn't arrive yet, adding back to proposal channel")
     r.interShardChan <- &genericsmr.RPCMessage{ismessage, 0, from}
     //TODO consider having a clock for these so that we can make progress on 
     //assigning versions without needlessly asking for them before they're ready
   }
 }
 
-func (r *Replica) handleInterShardReply(ismessage *mdlinproto.InterShardReply) {
-  log.Println("Step 4. Detect conflicts and reorder")
+func (r *Replica) handleInterShardReply(ismessage *mdlinproto.InterShardReply, from int64) {
+  log.Printf("Step 4. Receiving deps from shard %d. AskerInstance: %d, AskeeCommandID: %d, ", from, ismessage.AskerInstance, ismessage.AskeeCommandId)
   // We have to identify the entry that wanted this information
   e := r.instanceSpace[ismessage.AskerInstance]
   if (e.bd == nil) {
@@ -903,17 +947,20 @@ func (r *Replica) handleInterShardReply(ismessage *mdlinproto.InterShardReply) {
   }
   // Add the dependencies/versions to new_ld
   e.new_ld = append(e.new_ld, ismessage.LogDependencies)
+  printDeps(ismessage.LogDependencies, "  Step4. Received this ld")
   if (len(e.new_ld) < len(e.bd)) {
     // We need to await the other dependency versions before we can detect conflicts
     // Not safe to do it early, since it might not be a holistic ordering
-    log.Printf("Got a some batch dependencies's log dependencies number, buttt we're still not ready. We have %d acks out of %d", len(e.new_ld), len(e.bd))
+    log.Printf("     Step4. Received ld for commandId %d, buttt we're still not ready. We have %d acks out of %d", e.lb.clientProposals[0].CommandId, len(e.new_ld), len(e.bd))
     return
   }
 
   if (e.lb.acceptOKs+1 <= r.N>>1) {
     // Don't detect conflicts yet, this logic will happen inside of handleAcceptReply
+    log.Printf("     Step4. We got all our intershard dependencies for command %d, but the log entry hasn't been replicated at a majority, NOT detecting confs", e.lb.clientProposals[0].CommandId)
     return
   }
+  log.Printf("Calling detectConflict from handleISReply for commandId %d...", e.lb.clientProposals[0].CommandId)
   r.detectConflicts(ismessage.AskerInstance)
 }
 
@@ -927,9 +974,16 @@ func (r *Replica) detectConflicts(my_index int32) {
   var iindex int32
   for _, deps := range e.new_ld {
     for _, d := range deps {
+      log.Println("     DC: Shard %d looking for log entry %d", r.shardId, d.CommandId)
       e, _, iindex = r.findEntry(d.CommandId)
+      if (e == nil) {
+        panic("not sure what happened.... this shouldn't happen because if we got a response it's because the InterShardReply at the other shard happened because we gave the version to them")
+      }
       if d.K == my_k && e.version >= my_ver && d.PID > my_pid && iindex > my_index {
         // conflict detected
+        log.Println("     DC: !!!!!!!!!!!!CONF DETECTED")
+        log.Printf("      DC: d.K(%d) == my_k(%d) && d.ver(%d) >= my_ver(%d) && d.PID(%d) > my_pid(%d) && d.index(%d) > my_index(%d)",
+                      d.K, my_k, e.version, my_ver, d.PID, my_pid, iindex, my_index)
         if (new_index == -1 || iindex > new_index) {
           new_index = iindex
         }
@@ -938,10 +992,13 @@ func (r *Replica) detectConflicts(my_index int32) {
   }
   if (new_index == -1) {
     // No conflicts found!
+    log.Println("     !!!!!!!!!!!!NO CONFLICTS FOUND!!")
     r.readyToCommit(my_index)
   } else if new_index >= r.crtInstance {
       panic("somehow we have a dependency that hasn't arrived yet... thsi shouldn't happen")
   } else {
+    log.Printf("     Trying to swap me %d with %d, my_old_index == %d my_new_index == %d",
+        r.instanceSpace[my_index].lb.clientProposals[0].CommandId, r.instanceSpace[new_index].lb.clientProposals[0].CommandId, my_index, new_index)
     r.bcastReorder(my_index, new_index)
   }
 }
@@ -970,7 +1027,22 @@ func (r *Replica) readyToCommit(instance int32) {
 	r.bcastCommit(instance, inst.ballot, inst.cmds, inst.pid, inst.seqno, COMMITTED)
 }
 
+func (r *Replica) printLog() {
+  for i := 0; int32(i) < r.crtInstance; i++ {
+    e := r.instanceSpace[i]
+    log.Printf("Log_entry@index = %d has status %d, and commands...", i, e.status)
+    for _, c := range e.cmds {
+      if state.IsRead(&c) {
+        log.Printf("%s(%v) = %v", "R", c.K, c.V)
+      } else {
+        log.Printf("%s(%v) = %v", "W", c.K, c.V)
+      }
+    }
+  }
+}
+
 func (r *Replica) reorderInLog(oldInstance int32, newInstance int32) {
+  log.Println("I think this function reorderInLog line 1007 is buggy")
   newE := r.instanceSpace[newInstance]
   k := r.instanceSpace[oldInstance].cmds[0].K
   mypid := r.instanceSpace[oldInstance].pid
@@ -984,11 +1056,13 @@ func (r *Replica) reorderInLog(oldInstance int32, newInstance int32) {
       }
     }
   }
+  log.Println("After the reordering the log looks like...")
+  r.printLog()
 }
 
 var pr mdlinproto.Reorder
 func (r *Replica) bcastReorder(oldInstance int32, newInstance int32) {
-  log.Println("Found a conflict! Going to reorder...")
+  log.Println("BroadCasting Reorder...")
 	defer func() {
 		if err := recover(); err != nil {
 			log.Println("Reorder bcast failed:", err)
@@ -1232,14 +1306,17 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
 	if inst.status != PREPARED && inst.status != ACCEPTED {
     // The status is COMMITTED or REORDERING
 		// we've move on, these are delayed replies, so just ignore
+    log.Printf("hello? %d", inst.lb.clientProposals[0].CommandId)
 		return
 	}
 
 	if areply.OK == TRUE {
 		inst.lb.acceptOKs++
 		if inst.lb.acceptOKs+1 > r.N>>1 {
+      log.Printf("Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
       // Check if reordering happened yet!
       if len(inst.new_ld) >= len(inst.bd) {
+        log.Printf("Calling detectConflict from handleAcceptReply for commandId %d...", inst.lb.clientProposals[0].CommandId)
         r.detectConflicts(areply.Instance)
       }
 		}
@@ -1257,6 +1334,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
 
 func (r *Replica) handleReorder(reorder *mdlinproto.Reorder) {
   var rreply *mdlinproto.ReorderReply
+  log.Println("Replica received reorder message, reordering!")
   r.reorderInLog(reorder.OldInstance, reorder.NewInstance)
 
   rreply = &mdlinproto.ReorderReply{reorder.OldInstance, 1}
@@ -1265,9 +1343,13 @@ func (r *Replica) handleReorder(reorder *mdlinproto.Reorder) {
 
 func (r *Replica) handleReorderReply(rreply *mdlinproto.ReorderReply) {
   inst := r.instanceSpace[rreply.OldInstance]
+  if (inst.status != REORDERING) {
+    return
+  }
   if rreply.OK == TRUE {
     inst.lb.reorderOKs++
     if inst.lb.reorderOKs+1 > r.N>>1 {
+      log.Println("Reordered at quorum, COMMITTING")
       inst.status = REORDERED
       r.recordInstanceMetadata(inst)
 	    r.sync()
@@ -1275,10 +1357,6 @@ func (r *Replica) handleReorderReply(rreply *mdlinproto.ReorderReply) {
 	    r.updateCommittedUpTo()
 
 	    r.bcastCommit(rreply.OldInstance, inst.ballot, inst.cmds, inst.pid, inst.seqno, REORDERED)
-    } else {
-      if inst.status != REORDERING {
-        panic("WRong status!")
-      }
     }
   } else {
     panic("why was the reorder RPC response OK==false?")
@@ -1296,6 +1374,7 @@ func (r *Replica) executeCommands() {
         if (inst.status == REORDERED) {
           // We reordered these in the log, so when they're marked like this
           // we shouldn't execute them!
+          log.Printf("****NOT executing log index %d cuz it's REORDERED", i)
           continue
         }
 				for j := 0; j < len(inst.cmds); j++ {

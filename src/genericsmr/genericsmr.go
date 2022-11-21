@@ -269,7 +269,7 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 				}
 				rpair.Chan <- &RPCMessage{obj, receivedAt, int64(rid)}
 			} else {
-				log.Println("Error: received unknown message type")
+				panic("genericsmr ERROR: received unknown message type")
 			}
 		}
 	}

@@ -37,6 +37,10 @@ func GetVersion(command *Command) Version {
 	return versions[command.K]
 }
 
+func KeyModulo(k Key, n int) int64 {
+	return int64(k) % int64(n)
+}
+
 func IncrVersion(command *Command) Version {
 	vlock.Lock()
 	defer vlock.Unlock()

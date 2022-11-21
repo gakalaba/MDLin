@@ -16,7 +16,6 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"time"
-  "state"
 )
 
 var portnum *int = flag.Int("port", 7070, "Port # to listen on. Defaults to 7070")
@@ -77,7 +76,7 @@ func run(replicaId int, nodeList []string) {
 	} else if *doMDLin {
 		log.Println("Starting MD Linearizability replica...")
     // Get the shards for multi-sharded MD-Lin
-    shards, keyspace := getShardsFromMaster(fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
+    shards := getShardsFromMaster(fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
     shardId := -1
     if (shards != nil) {
       for i,e := range shards {
@@ -87,7 +86,7 @@ func run(replicaId int, nodeList []string) {
         log.Printf("-->Shard %d leader at %s", i, e)
       }
     }
-		rep := mdlin.NewReplica(replicaId, nodeList, shards, shardId, keyspace, *thrifty, *durable, *batch)
+		rep := mdlin.NewReplica(replicaId, nodeList, shards, shardId, *thrifty, *durable, *batch)
 		rpc.Register(rep)
 	} else {
 		log.Println("Starting classic Paxos replica...")
@@ -115,7 +114,7 @@ func registerWithMaster(masterAddr string) (int, []string) {
 	return reply.ReplicaId, reply.NodeList
 }
 
-func getShardsFromMaster(masterAddr string) ([]string, map[int][2]state.Key) {
+func getShardsFromMaster(masterAddr string) []string {
 	var args masterproto.GetShardListArgs
 	var reply masterproto.GetShardListReply
 
@@ -129,7 +128,7 @@ func getShardsFromMaster(masterAddr string) ([]string, map[int][2]state.Key) {
 			}
 		}
 	}
-	return reply.ShardList, reply.Keyspace
+	return reply.ShardList
 }
 
 func catchKill(interrupt chan os.Signal) {

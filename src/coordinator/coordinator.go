@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-  "state"
 )
 
 var portnum *int = flag.Int("port", 7097, "Port # to listen on. Defaults to 7097")
@@ -31,7 +30,6 @@ type Coordinator struct {
 	connected      []bool
 	nConnected     int
   leadersConnected int
-  keyspace  map[int][2]state.Key
 }
 
 func main() {
@@ -62,7 +60,6 @@ func main() {
 		make([]bool, *nShards),
 		0,
     0,
-    nil,
 	}
 
 	rpc.Register(coordinator)
@@ -103,9 +100,10 @@ func (coordinator *Coordinator) run() {
   // Give the masters the ips of all other shard masters/leaders
   for true {
 		coordinator.lock.Lock()
-    // we must wait until all the other leaders have been registered by their respective
-    // master servers. We also wait until the client has sent us the keyspace
-		if (coordinator.leadersConnected == coordinator.numShards) && (coordinator.keyspace != nil) {
+    // we must wait until all the other leaders have been 
+    // registered by their respective master servers.
+		if coordinator.leadersConnected == coordinator.numShards {
+      log.Println("All the shard leaders have been registered")
 			coordinator.lock.Unlock()
 			break
 		}
@@ -122,6 +120,7 @@ func (coordinator *Coordinator) run() {
   }
 }
 
+// Masters registering themselves
 func (coordinator *Coordinator) Register(args *coordinatorproto.RegisterArgs, reply *coordinatorproto.RegisterReply) error {
 	coordinator.lock.Lock()
 	defer coordinator.lock.Unlock()
@@ -171,6 +170,7 @@ func (coordinator *Coordinator) Register(args *coordinatorproto.RegisterArgs, re
 	return nil
 }
 
+// Master --> Coordinator : giving the leaders of replication group
 func (coordinator *Coordinator) RegisterLeader(args *coordinatorproto.RegisterLeaderArgs, reply *coordinatorproto.RegisterLeaderReply) error {
   coordinator.lock.Lock()
   defer coordinator.lock.Unlock()
@@ -185,13 +185,14 @@ func (coordinator *Coordinator) RegisterLeader(args *coordinatorproto.RegisterLe
   return nil
 }
 
+// Coordinator --> Master
 func (coordinator *Coordinator) sendShardsToMasters() error {
   coordinator.lock.Lock()
   defer coordinator.lock.Unlock()
 
   var reply masterproto.RegisterShardsReply
   for _, mcli := range coordinator.masters {
-    args := &masterproto.RegisterShardsArgs{coordinator.shardLeaders, coordinator.keyspace}
+    args := &masterproto.RegisterShardsArgs{coordinator.shardLeaders}
     if err := mcli.Call("Master.RegisterShards", args, &reply); err != nil {
       log.Fatalf("Error making the RegisterShards RPC\n")
     }
@@ -199,6 +200,7 @@ func (coordinator *Coordinator) sendShardsToMasters() error {
   return nil
 }
 
+// Coordinator --> Client
 func (coordinator *Coordinator) GetShardLeaderList(args *coordinatorproto.GetShardLeaderListArgs, reply *coordinatorproto.GetShardLeaderListReply) error {
   for true {
     coordinator.lock.Lock()
@@ -214,18 +216,3 @@ func (coordinator *Coordinator) GetShardLeaderList(args *coordinatorproto.GetSha
   return nil
 }
 
-// Client --> Coordinator: The client sends the coordinator the keyspace
-func (coordinator *Coordinator) RegisterKeyspace(args *coordinatorproto.RegisterKeyspaceArgs, reply *coordinatorproto.RegisterKeyspaceReply) {
-  coordinator.lock.Lock()
-  defer coordinator.lock.Unlock()
-  if !wellFormedKeys(args.Keyspace) {
-    panic("Keyspace is malformed")
-    //TODO create some error type
-  }
-  coordinator.keyspace = args.Keyspace
-}
-
-func wellFormedKeys(ks map[int][2]state.Key) bool {
-  //TODO implement me ha
-  return true
-}

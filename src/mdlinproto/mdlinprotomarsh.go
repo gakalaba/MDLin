@@ -897,7 +897,7 @@ func (p *CommitShortCache) Put(t *CommitShort) {
 	p.mu.Unlock()
 }
 func (t *CommitShort) Marshal(wire io.Writer) {
-	var b [16]byte
+	var b [17]byte
 	var bs []byte
 	bs = b[:16]
 	tmp32 := t.LeaderId
@@ -921,12 +921,15 @@ func (t *CommitShort) Marshal(wire io.Writer) {
 	bs[14] = byte(tmp32 >> 16)
 	bs[15] = byte(tmp32 >> 24)
 	wire.Write(bs)
+  //bs[16] = byte(t.Status)
+  //wire.Write(bs)
+
 }
 
 func (t *CommitShort) Unmarshal(wire io.Reader) error {
-	var b [16]byte
+	var b [17]byte
 	var bs []byte
-	bs = b[:16]
+	bs = b[:17]
 	if _, err := io.ReadAtLeast(wire, bs, 16); err != nil {
 		return err
 	}
@@ -934,6 +937,7 @@ func (t *CommitShort) Unmarshal(wire io.Reader) error {
 	t.Instance = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
 	t.Count = int32((uint32(bs[8]) | (uint32(bs[9]) << 8) | (uint32(bs[10]) << 16) | (uint32(bs[11]) << 24)))
 	t.Ballot = int32((uint32(bs[12]) | (uint32(bs[13]) << 8) | (uint32(bs[14]) << 16) | (uint32(bs[15]) << 24)))
+  //t.Status = uint8(uint8(bs[16]))
 	return nil
 }
 
@@ -944,6 +948,8 @@ func (t *InterShard) New() fastrpc.Serializable {
 }
 
 func (t *InterShard) Marshal(wire io.Writer) {
+	// AskerInstance  int32
+	// AskeeCommandId int32
 	var b [4]byte
 	var bs []byte
 	bs = b[:4]
@@ -964,6 +970,8 @@ func (t *InterShard) Marshal(wire io.Writer) {
 }
 
 func (t *InterShard) Unmarshal(wire io.Reader) error {
+	// AskerInstance  int32
+	// AskeeCommandId int32
 	var b [4]byte
 	var bs []byte
 	bs = b[:4]
@@ -986,7 +994,10 @@ func (t *InterShardReply) New() fastrpc.Serializable {
 }
 
 func (t *InterShardReply) Marshal(wire io.Writer) {
-	var b [8]byte
+	// AskerInstance   int32
+	// AskeeCommandId  int32
+	// LogDependencies []Tag
+  var b [8]byte
 	var bs []byte
 	bs = b[:4]
 	tmp32 := t.AskerInstance
@@ -1035,6 +1046,9 @@ func (t *InterShardReply) Marshal(wire io.Writer) {
 }
 
 func (t *InterShardReply) Unmarshal(rr io.Reader) error {
+	// AskerInstance   int32
+	// AskeeCommandId  int32
+	// LogDependencies []Tag
   var wire byteReader
 	var ok bool
 	if wire, ok = rr.(byteReader); !ok {

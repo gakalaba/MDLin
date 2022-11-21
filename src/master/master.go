@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-  "state"
+  "strconv"
 )
 
 var portnum *int = flag.Int("port", 7087, "Port # to listen on. Defaults to 7087")
@@ -39,7 +39,6 @@ type Master struct {
 	nConnected     int
 	numShards      int
 	shards         []string
-  keyspace       map[int][2]state.Key
 }
 
 func main() {
@@ -73,7 +72,6 @@ func main() {
 		0,
 		-1,
 		nil,
-    nil,
 	}
 
 	rpc.Register(master)
@@ -122,7 +120,7 @@ func (master *Master) run() {
 	// send the leader to the Coordinator
   if (*nShards > 1) {
     //Needs to be different connection for intershard RPC, so we +100 to leader portnum
-	  sendLeaderToCoord(fmt.Sprintf("%s:%d", *coordAddr, *coordPort), fmt.Sprintf("%s:%d", master.addrList[0], master.portList[0]+100))
+	  sendLeaderToCoord(fmt.Sprintf("%s:%d", *coordAddr, *coordPort), fmt.Sprintf("%s:%d", master.addrList[0], master.portList[0]))
   }
 
 	for true {
@@ -275,9 +273,14 @@ func (master *Master) RegisterShards(args *masterproto.RegisterShardsArgs, reply
 
 	master.shards = args.ShardList
 	master.numShards = len(master.shards)
-  master.keyspace = args.Keyspace
   for i,e := range master.shards {
-    log.Printf("-->Shard %d has leader at %s\n", i, e)
+    l := strings.Split(e, ":")
+    p, err := strconv.Atoi(l[1])
+    if (err != nil) {
+      panic("Malformed port")
+    }
+    master.shards[i] = fmt.Sprintf("%s:%d", l[0], p+100)
+    log.Printf("-->Shard %d has leader at %s\n", i, master.shards[i])
   }
   return nil
 }
@@ -286,7 +289,6 @@ func (master *Master) RegisterShards(args *masterproto.RegisterShardsArgs, reply
 func (master *Master) GetShardList(args *masterproto.GetShardListArgs, reply *masterproto.GetShardListReply) error {
   if (*nShards <= 1) {
     reply.ShardList = nil
-    reply.Keyspace = nil
     return nil
   }
 	for true {
@@ -300,6 +302,5 @@ func (master *Master) GetShardList(args *masterproto.GetShardListArgs, reply *ma
 	}
 
 	reply.ShardList = master.shards
-  reply.Keyspace = master.keyspace
 	return nil
 }

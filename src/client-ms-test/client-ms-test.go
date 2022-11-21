@@ -48,16 +48,6 @@ func newResponseArray(f int) []int {
 	return rsp
 }
 
-func giveCoordKeys(ks map[int][2]state.Key, coord *rpc.Client) {
-  rkArgs := new(coordinatorproto.RegisterKeyspaceArgs)
-  rkArgs.Keyspace = ks
-  err := coord.Call("Coordinator.RegisterKeyspace", rkArgs, new(coordinatorproto.RegisterKeyspaceReply))
-  if err != nil {
-    log.Fatalf("Error making the GetShardLeaderList RPC: %v\n", err)
-  }
-  time.Sleep(5 * time.Second)
-}
-
 func main() {
 	flag.Parse()
 
@@ -135,8 +125,6 @@ func main() {
 
 /*
 func test2(readers []*bufio.Reader, writers []*bufio.Writer, leader int, done chan bool, rsp []int, coord *rpc.Client) {
-  ks = nil
-  giveCoordKeys(ks, coord)
   before_total := time.Now()
 	if *mdlin {
 		for shard := 0; shard < N; shard++ {
@@ -297,14 +285,9 @@ func test2(readers []*bufio.Reader, writers []*bufio.Writer, leader int, done ch
 }
 */
 func test1(readers []*bufio.Reader, writers []*bufio.Writer, done chan bool, rsp []int, coord *rpc.Client) {
-  // Give the coordinator the keyspace!
-  ks := make(map[int]([2]state.Key), 2)
-  ks[0] = [2]state.Key{0,0}
-  ks[1] = [2]state.Key{1,1}
-  log.Println(ks)
-  giveCoordKeys(ks, coord)
-
+  log.Println("Starting test1...")
   if *mdlin {
+    log.Println("MDLin...")
 		for shard := 0; shard < len(readers); shard++ {
 			go waitRepliesMDL(readers, shard, &rsp, done)
 		}
@@ -474,7 +457,7 @@ func waitRepliesMDL(readers []*bufio.Reader, shard int, rsp *[]int, done chan bo
 			continue
 		}
 
-		log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, PID = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
+		log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, VALUE = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
 		log.Printf("rsp len %d and commandID was %d", len(*rsp), reply.CommandId)
 		if reply.OK == 0 {
 			log.Printf("Client request failed on shard %d", shard)
