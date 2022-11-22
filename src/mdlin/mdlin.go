@@ -67,6 +67,7 @@ type Replica struct {
   shListener net.Listener
   propagatedbd       []mdlinproto.Tag
   buflock *sync.Mutex
+  num_conflicts int64
 }
 
 type InstanceStatus int
@@ -161,7 +162,8 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int,
     make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
     nil,
     make([]mdlinproto.Tag, 0),
-    new(sync.Mutex)}
+    new(sync.Mutex),
+    0}
 
 	r.Durable = durable
 
@@ -650,7 +652,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	if !r.IsLeader {
 		log.Println("I'm not the leader, sending client a FALSE reply")
-		preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.NIL, 0}
+		preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.NIL, 0, r.num_conflicts}
 		log.Println("Responding to client with OK = false (0) because this isn't the leader")
 		r.MDReplyPropose(preply, propose.Reply)
 		return
@@ -1010,6 +1012,7 @@ func (r *Replica) detectConflicts(my_index int32) {
   } else {
     log.Printf("     Trying to swap me %d with %d, my_old_index == %d my_new_index == %d",
         r.instanceSpace[my_index].lb.clientProposals[0].CommandId, r.instanceSpace[new_index].lb.clientProposals[0].CommandId, my_index, new_index)
+    r.num_conflicts++
     r.bcastReorder(my_index, new_index)
   }
 }
@@ -1024,7 +1027,8 @@ func (r *Replica) readyToCommit(instance int32) {
 				TRUE,
 				inst.lb.clientProposals[i].CommandId,
 				state.NIL,
-				inst.lb.clientProposals[i].Timestamp}
+				inst.lb.clientProposals[i].Timestamp,
+        r.num_conflicts}
 			log.Println("Responding to client with OK = true (1) in handleAcceptReply")
 			r.MDReplyPropose(propreply, inst.lb.clientProposals[i].Reply)
 		}
@@ -1411,7 +1415,8 @@ func (r *Replica) executeCommands() {
 							  TRUE,
 							  inst.lb.clientProposals[j].CommandId,
 							  val,
-							  17}
+							  17,
+                r.num_conflicts}
 						  log.Printf("Responding to client with OK = true (1) in executeCommand, we executed command %d", inst.lb.clientProposals[j].CommandId)
 						  log.Printf("It has OK = TRUE, CommandID = %d, val = %v, Timestamp = %v", inst.lb.clientProposals[j].CommandId, val, 17)
 						  r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)

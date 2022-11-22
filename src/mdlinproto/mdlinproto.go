@@ -39,6 +39,7 @@ type ProposeReply struct {
 	CommandId int32
 	Value     state.Value
 	Timestamp int64
+  NumConf int64
 }
 
 type Prepare struct {

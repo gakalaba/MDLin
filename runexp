@@ -50,5 +50,5 @@ export R22=$!
 bin/server -port 7075 -mport 7088 -mdl true &
 export R23=$!
 sleep 4
-bin/client-ms-test -mdl true &
+bin/client-ms-test -fo 3 -w 50 -c 8 -k 8 -mdl true &
 sleep 10000000000
