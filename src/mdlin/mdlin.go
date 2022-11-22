@@ -106,8 +106,12 @@ func tagtostring(t mdlinproto.Tag) string {
   var kk string
   if (t.K == 0) {
     kk = "X"
-  } else {
+  } else if t.K == 1 {
     kk = "Y"
+  } else if t.K == 2 {
+    kk = "A"
+  } else {
+    kk = "B"
   }
   return fmt.Sprintf("Tag = %s.%d.%d.CommandID(%d)", kk, t.Version, t.PID, t.CommandId)
 }
@@ -725,8 +729,12 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
       }
       if prop.Command.K == 0 {
         kk = "X"
-      } else {
+      } else if prop.Command.K == 1 {
         kk = "Y"
+      } else if prop.Command.K == 2 {
+        kk = "A"
+      } else {
+        kk = "B"
       }
       log.Printf("Step 2. Shard Leader Creating Log Entry{%s(%s) = %d, ver: %d, CommandId: %d, PID: %d, SeqNo: %d",
                       s, kk, prop.Command.V, versions, prop.CommandId, pid, seqno)
@@ -898,6 +906,8 @@ func (r *Replica) resolveShardFromKey(k state.Key) int64 {
 }
 
 func (r *Replica) findEntry(commandId int32) (*Instance, int, int32) {
+  // TODO what if instead of a linear search, we kept a map
+  // that maps the CommandId to the index in the log??
   for i:=r.crtInstance-1; i>=0; i-- {
     if (r.instanceSpace[i] == nil) {
       panic("instanceSpace at this index should never be nil")
@@ -919,15 +929,11 @@ func (r *Replica) handleInterShard(ismessage *mdlinproto.InterShard, from int64)
   e, _, _ := r.findEntry(ismessage.AskeeCommandId)
   // If it exists, then reply to the shard
   if e != nil {
-    if e.status == COMMITTED {
-      log.Println("The log is already committed, so returning ld=nil")
-      msg := &mdlinproto.InterShardReply{ismessage.AskerInstance, ismessage.AskeeCommandId, nil}
-      r.sendInterShardMsg(from, msg, 1)
-    } else {
-      printDeps(e.initial_ld, "*initial ld")
-      msg := &mdlinproto.InterShardReply{ismessage.AskerInstance, ismessage.AskeeCommandId, e.initial_ld} //TODO is this supposed to be initial or new
-      r.sendInterShardMsg(from, msg, 1)
-    }
+    //TODO it's not always safe to do this for uncommitted entries... but does that slow shit down?
+    //RN using initial_ld... but should it be new?
+    printDeps(e.initial_ld, "*initial ld")
+    msg := &mdlinproto.InterShardReply{ismessage.AskerInstance, ismessage.AskeeCommandId, e.initial_ld} //TODO is this supposed to be initial or new
+    r.sendInterShardMsg(from, msg, 1)
   } else {
     // If it doesn't exist, then put this message back in the channel to process later
     log.Println("     *batch dependency didn't arrive yet, adding back to proposal channel")
@@ -964,6 +970,8 @@ func (r *Replica) handleInterShardReply(ismessage *mdlinproto.InterShardReply, f
 }
 
 func (r *Replica) detectConflicts(my_index int32) {
+  //TODO - if i'm a read and i'm being swapped with a read with no writes between us
+  //TODO - if i'm a write being swapped, but my dependencies came from a read behind only reads
   e := r.instanceSpace[my_index]
   // Detect conflicts
   my_k := e.cmds[0].K //TODO remove when batching enabled
@@ -976,6 +984,8 @@ func (r *Replica) detectConflicts(my_index int32) {
       log.Printf("     DC: Shard %d looking for commandID %d", r.shardId, d.CommandId)
       e, _, iindex = r.findEntry(d.CommandId)
       if (e == nil) {
+        log.Printf("      DC: This command hasn't arrived at us yet! so we should detect conflicts later...")
+
         panic("not sure what happened.... this shouldn't happen because if we got a response it's because the InterShardReply at the other shard happened because we gave the version to them")
       }
       log.Printf("      DC: d.K(%d) == my_k(%d) && d.ver(%d) >= my_ver(%d) && d.PID(%d) > my_pid(%d) && d.index(%d) > my_index(%d)",
@@ -1033,10 +1043,20 @@ func (r *Replica) printLog() {
     e := r.instanceSpace[i]
     log.Printf("Log_entry@index = %d has status %d, and commands...", i, e.status)
     for _, c := range e.cmds {
-      if state.IsRead(&c) {
-        log.Printf("%s(%v) = %v", "R", c.K, c.V)
+      var kk string
+      if (c.K == 0) {
+        kk = "X"
+      }  else if c.K == 1 {
+        kk = "Y"
+      } else if c.K == 2 {
+        kk = "A"
       } else {
-        log.Printf("%s(%v) = %v", "W", c.K, c.V)
+        kk = "B"
+      }
+      if state.IsRead(&c) {
+        log.Printf("%s(%s) = %v", "R", kk, c.V)
+      } else {
+        log.Printf("%s(%s) = %v", "W", kk, c.V)
       }
     }
   }
@@ -1338,7 +1358,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
 
 func (r *Replica) handleReorder(reorder *mdlinproto.Reorder) {
   var rreply *mdlinproto.ReorderReply
-  log.Println("Replica received reorder message, reordering!")
+  log.Printf("Replica received reorder message, reordering! from %d to %d", reorder.OldInstance, reorder.NewInstance)
   r.reorderInLog(reorder.OldInstance, reorder.NewInstance)
 
   rreply = &mdlinproto.ReorderReply{reorder.OldInstance, 1}

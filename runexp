@@ -1,0 +1,54 @@
+#!/bin/bash
+ 
+# this function is called when Ctrl-C is sent
+function trap_ctrlc ()
+{
+    # perform cleanup here
+    echo "Ctrl-C caught...performing clean up"
+ 
+    echo "Doing cleanup"
+    sudo kill $COORD
+    sudo kill $M1
+    sudo kill $M2
+    sudo kill $L1
+    sudo kill $L2
+    sudo kill $R12
+    sudo kill $R13
+    sudo kill $R22
+    sudo kill $R23
+ 
+    # exit shell script with error code 2
+    # if omitted, shell script will continue execution
+    exit 2
+}
+ 
+# initialise trap to call trap_ctrlc function
+# when signal 2 (SIGINT) is received
+trap "trap_ctrlc" 2
+ 
+# your script goes here
+bin/coordinator &
+export COORD=$!
+bin/master &
+export M1=$!
+sleep 2
+bin/master -port 7088 &
+export M2=$!
+bin/server -port 7070 -mdl true &> /proc/120508/fd/1 &
+sleep 2
+export L1=$!
+bin/server -port 7071 -mdl true &
+export R12=$!
+bin/server -port 7072 -mdl true &
+export R13=$!
+sleep 2
+bin/server -port 7073 -mport 7088 -mdl true &> /proc/127907/fd/1 &
+export L2=$!
+sleep 2
+bin/server -port 7074 -mport 7088 -mdl true &
+export R22=$!
+bin/server -port 7075 -mport 7088 -mdl true &
+export R23=$!
+sleep 4
+bin/client-ms-test -mdl true &
+sleep 10000000000
