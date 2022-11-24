@@ -8,14 +8,25 @@ function trap_ctrlc ()
  
     echo "Doing cleanup"
     sudo kill $COORD
+    echo "Killed coordinator"
     sudo kill $M1
+    echo "Killed master1"
     sudo kill $M2
+    echo "Killed master2"
     sudo kill $L1
+    echo "Killed shard1 leader"
     sudo kill $L2
+    echo "Killed shard2 leader"
     sudo kill $R12
+    echo "Killed shard1 rep2"
     sudo kill $R13
+    echo "Killed shard1 rep3"
     sudo kill $R22
+    echo "Killed shard2 rep2"
     sudo kill $R23
+    echo "Killed shard2 rep3"
+    sudo kill $CLIENT
+    echo "Killed client"
  
     # exit shell script with error code 2
     # if omitted, shell script will continue execution
@@ -34,21 +45,22 @@ export M1=$!
 sleep 2
 bin/master -port 7088 &
 export M2=$!
-bin/server -port 7070 -mdl true &> /proc/120508/fd/1 &
+bin/server -port 7070 -mdl true &> /proc/8871/fd/1 &
 sleep 2
 export L1=$!
-bin/server -port 7071 -mdl true &
+bin/server -port 7071 -mdl true &> /dev/null &
 export R12=$!
-bin/server -port 7072 -mdl true &
+bin/server -port 7072 -mdl true &> /dev/null &
 export R13=$!
 sleep 2
-bin/server -port 7073 -mport 7088 -mdl true &> /proc/127907/fd/1 &
+bin/server -port 7073 -mport 7088 -mdl true &> /proc/8488/fd/1 &
 export L2=$!
 sleep 2
-bin/server -port 7074 -mport 7088 -mdl true &
+bin/server -port 7074 -mport 7088 -mdl true &> /dev/null &
 export R22=$!
-bin/server -port 7075 -mport 7088 -mdl true &
+bin/server -port 7075 -mport 7088 -mdl true &> /dev/null &
 export R23=$!
 sleep 4
-bin/client-ms-test -fo 3 -w 50 -c 8 -k 8 -mdl true &
+bin/client-ms-test -fo 50 -w 50 -c 20 -k 2 -mdl true &> /proc/3729/fd/1 &
+export CLIENT=$!
 sleep 10000000000

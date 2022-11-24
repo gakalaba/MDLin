@@ -104,17 +104,7 @@ type LeaderBookkeeping struct {
 }
 
 func tagtostring(t mdlinproto.Tag) string {
-  var kk string
-  if (t.K == 0) {
-    kk = "X"
-  } else if t.K == 1 {
-    kk = "Y"
-  } else if t.K == 2 {
-    kk = "A"
-  } else {
-    kk = "B"
-  }
-  return fmt.Sprintf("Tag = %s.%d.%d.CommandID(%d)", kk, t.Version, t.PID, t.CommandId)
+  return fmt.Sprintf("Tag = %d.%d.%d.CommandID(%d)", t.K, t.Version, t.PID, t.CommandId)
 }
 
 func printDeps(deps []mdlinproto.Tag, s string) {
@@ -411,6 +401,7 @@ func (r *Replica) run() {
 		case propose := <-onOffProposeChan:
 			log.Println("---------ProposalChan---------")
 			r.handlePropose(propose)
+      log.Println(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
 			if r.batchingEnabled && !r.noProposalsReady {
 				onOffProposeChan = nil
@@ -696,6 +687,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		}
 		if seqno != expectedSeqno {
 			// Add to buffer
+      log.Printf("CommandId: %d, PID: %d, SeqNo: %d, ExpectedSN: %d, command: %s", prop.CommandId, pid, seqno, expectedSeqno, commandToStr(prop.Command))
       panic("This shouldn't be happening in our tests right now")
 			if _, ok := r.outstandingInst[pid]; !ok {
 				r.outstandingInst[pid] = make([]*genericsmr.MDLPropose, 0)
@@ -722,24 +714,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			found++
 			r.nextSeqNo[pid]++
       //TODO delete this logic used for printing
-      var s string
-      var kk string
-      if state.IsRead(&prop.Command) {
-        s = "R"
-      } else {
-        s = "W"
-      }
-      if prop.Command.K == 0 {
-        kk = "X"
-      } else if prop.Command.K == 1 {
-        kk = "Y"
-      } else if prop.Command.K == 2 {
-        kk = "A"
-      } else {
-        kk = "B"
-      }
-      log.Printf("Step 2. Shard Leader Creating Log Entry{%s(%s) = %d, ver: %d, CommandId: %d, PID: %d, SeqNo: %d",
-                      s, kk, prop.Command.V, versions, prop.CommandId, pid, seqno)
+      log.Printf("Step 2. Shard Leader Creating Log Entry{%s, ver: %d, CommandId: %d, PID: %d, SeqNo: %d",
+                      commandToStr(prop.Command), versions, prop.CommandId, pid, seqno)
       printDeps(batchdeps, "bd")
       //TODO^^
       // Check if any others are ready
@@ -983,6 +959,9 @@ func (r *Replica) detectConflicts(my_index int32) {
   var iindex int32
   for _, deps := range e.new_ld {
     for _, d := range deps {
+      if (r.resolveShardFromKey(d.K) != int64(r.shardId)) {
+        continue
+      }
       log.Printf("     DC: Shard %d looking for commandID %d", r.shardId, d.CommandId)
       e, _, iindex = r.findEntry(d.CommandId)
       if (e == nil) {
@@ -994,7 +973,7 @@ func (r *Replica) detectConflicts(my_index int32) {
             d.K, my_k, e.version, my_ver, d.PID, my_pid, iindex, my_index)
       if d.K == my_k && e.version >= my_ver && d.PID > my_pid && iindex > my_index {
         // conflict detected
-        log.Println("     DC: !!!!!!!!!!!!CONF DETECTED")
+        log.Println("     DC: !!!!======***=======!!!!CONF DETECTED")
         log.Printf("      DC: d.K(%d) == my_k(%d) && d.ver(%d) >= my_ver(%d) && d.PID(%d) > my_pid(%d) && d.index(%d) > my_index(%d)",
                       d.K, my_k, e.version, my_ver, d.PID, my_pid, iindex, my_index)
         if (new_index == -1 || iindex > new_index) {
@@ -1047,23 +1026,19 @@ func (r *Replica) printLog() {
     e := r.instanceSpace[i]
     log.Printf("Log_entry@index = %d has status %d, and commands...", i, e.status)
     for _, c := range e.cmds {
-      var kk string
-      if (c.K == 0) {
-        kk = "X"
-      }  else if c.K == 1 {
-        kk = "Y"
-      } else if c.K == 2 {
-        kk = "A"
-      } else {
-        kk = "B"
-      }
-      if state.IsRead(&c) {
-        log.Printf("%s(%s) = %v", "R", kk, c.V)
-      } else {
-        log.Printf("%s(%s) = %v", "W", kk, c.V)
-      }
+      log.Println(commandToStr(c))
     }
   }
+}
+
+func commandToStr(c state.Command) string {
+  var s string
+  if (c.Op == state.GET) {
+    s = fmt.Sprintf("R(%d)", c.K)
+  } else {
+    s = fmt.Sprintf("W(%d) = %v", c.K, c.V)
+  }
+  return s
 }
 
 func (r *Replica) reorderInLog(oldInstance int32, newInstance int32) {

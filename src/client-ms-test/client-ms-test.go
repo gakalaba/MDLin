@@ -15,6 +15,8 @@ import (
 	"state"
 	"time"
   "math/rand"
+  "strings"
+  "sync"
 )
 
 // client -q 5 -r 5 -T 2
@@ -101,7 +103,7 @@ func main() {
 
 	successful = make([]int, N)
 	failed = make([]int, N)
-	done := make(chan bool, N)
+  complete := make(chan int64, *clients)
 
   numshards = int64(len(shard_leaders))
   total_conflicts = make([]int64, numshards)
@@ -123,17 +125,39 @@ func main() {
     }
   }
   start := 0
-  file, ferr := os.OpenFile("/home/anja/Desktop/MDLin/ss-test.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 777)
+  file, ferr := os.OpenFile("/home/anja/Desktop/MDLin/ms-test.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0777)
 	if ferr != nil {
 		log.Println("file error oh no", ferr)
 		return
 	}
 	defer file.Close()
+  buflock := new(sync.Mutex)
   for t:=0;t < *clients;t++ {
-    go runTestMDL(int64(t), *fanout, start, start + *fanout, done, writers, file)
+    go runTestMDL(int64(t), *fanout, start, start + *fanout, writers, file, complete, buflock)
     start += *fanout
   }
 
+  for i:=0;i<*clients;i++ {
+    pid:= <-complete
+    log.Printf("Client %d completed", pid)
+  }
+
+  /*
+  seqno := make(map[int64]int64, 0)
+  for k:=0; k<*keys;k++ {
+    leader := int64(k)%numshards
+    if _, ok := seqno[leader]; !ok {
+      seqno[leader] = 0
+    } else {
+      seqno[leader]++
+    }
+    arg := mdlinproto.Propose{0, state.Command{state.GET, state.Key(k), -1}, 0, seqno[leader], int64(*clients+1), nil}
+    buflock.Lock()
+    writers[leader].WriteByte(mdlinproto.PROPOSE)
+    arg.Marshal(writers[leader])
+    writers[leader].Flush()
+    buflock.Unlock()
+  }*/
 
   for i:=0; i<int(numshards); i++ {
     log.Printf("The total number of conflicts found on shard %d was %d", i, total_conflicts[i])
@@ -147,14 +171,17 @@ func main() {
 		}
 	}
 	coordinator.Close()
+
 }
 
-func runTestMDL(pid int64, f int, start_index int, end_index int, done chan bool, writers []*bufio.Writer, file *os.File) {
+func runTestMDL(pid int64, f int, start_index int, end_index int, writers []*bufio.Writer, file *os.File, complete chan int64, buflock *sync.Mutex) {
+  done := make(chan bool)
   go waitRepliesMDL(start_index, end_index, done)
   before_total := time.Now()
   var arg mdlinproto.Propose
   deps := make([]mdlinproto.Tag, 0)
   seqno := make(map[int64]int64, 0)
+  tab := strings.Repeat("    ", int(pid))
   for i:= start_index; i<end_index; i++ {
     leader := karray[i]%numshards
     if _, ok := seqno[leader]; !ok {
@@ -163,9 +190,12 @@ func runTestMDL(pid int64, f int, start_index int, end_index int, done chan bool
       seqno[leader]++
     }
     arg = mdlinproto.Propose{int32(i), state.Command{reqarray[i], state.Key(karray[i]), state.Value(i)}, 0, seqno[leader], pid, deps}
+    buflock.Lock()
 		writers[leader].WriteByte(mdlinproto.PROPOSE)
 		arg.Marshal(writers[leader])
 		writers[leader].Flush()
+    log.Printf("%sClient %d, CommandId %d: %s", tab, pid, i, commandToStr(arg.Command))
+    buflock.Unlock()
     deps = append(deps, mdlinproto.Tag{state.Key(karray[i]), -1, pid, int32(i)})
   }
   <-done
@@ -173,6 +203,17 @@ func runTestMDL(pid int64, f int, start_index int, end_index int, done chan bool
   tot := after_total.Sub(before_total)
   log.Printf("Test took %v\n", tot)
   file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", f, pid, tot.Milliseconds()))
+  complete <- pid
+}
+
+func commandToStr(c state.Command) string {
+  var s string
+  if c.Op == state.GET {
+    s = fmt.Sprintf("R(%d)", c.K)
+  } else {
+    s = fmt.Sprintf("W(%d) = %v", c.K, c.V)
+  }
+  return s
 }
 
 func runTestSDL(pid int64, f int, start_index int, end_index int, done chan bool, writers []*bufio.Writer) {
@@ -190,8 +231,6 @@ func runTestSDL(pid int64, f int, start_index int, end_index int, done chan bool
   after_total := time.Now()
   log.Printf("Test took %v\n", after_total.Sub(before_total))
 }
-
-
 
 func waitRepliesMDL(start int, end int, done chan bool) {
 	for true {
@@ -214,15 +253,16 @@ func shardListener(readers []*bufio.Reader, shard int) {
 	for true {
 		if msgType, err = readers[shard].ReadByte(); err != nil ||
 			msgType != mdlinproto.PROPOSE_REPLY {
-			log.Printf("Error when reading (op:%d): %v on shard %d", msgType, err, shard)
+			//log.Printf("Error when reading response #%d from shard %d: %v", i, shard, err)
 			continue
 		}
 		if err = reply.Unmarshal(readers[shard]); err != nil {
-			log.Printf("Error when reading on shard %d: %v", shard, err)
+			log.Printf("Error when unmarshalling response from shard %d: %v", shard, err)
 			continue
 		}
 
 		//log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, VALUE = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
+		log.Printf("CommandId = %d, VALUE = %d", reply.CommandId, reply.Value)
     rarray[reply.CommandId] = 1
     if reply.NumConf > total_conflicts[shard] {
       total_conflicts[shard] = reply.NumConf
