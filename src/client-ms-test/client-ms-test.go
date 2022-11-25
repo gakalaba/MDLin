@@ -15,8 +15,6 @@ import (
 	"state"
 	"time"
   "math/rand"
-  "strings"
-  "sync"
 )
 
 // client -q 5 -r 5 -T 2
@@ -103,7 +101,8 @@ func main() {
 
 	successful = make([]int, N)
 	failed = make([]int, N)
-  complete := make(chan int64, *clients)
+  complete := make(chan struct {time.Time; int64})
+  submitted := make(chan int64, *clients)
 
   numshards = int64(len(shard_leaders))
   total_conflicts = make([]int64, numshards)
@@ -116,6 +115,7 @@ func main() {
   rarray = make([]int64, num_requests)
   reqarray = make([]state.Operation, num_requests)
   for i:=0; i<num_requests; i++ {
+    rand.Seed(time.Now().UnixNano())
     karray[i] = int64(rand.Intn(*keys)) //TODO change me when not uniform
     n := rand.Intn(100)
     if n < *writes {
@@ -131,33 +131,44 @@ func main() {
 		return
 	}
 	defer file.Close()
-  buflock := new(sync.Mutex)
+  reqs := make([]mdlinproto.Propose, num_requests)
+  larray := make([]int64, num_requests)
   for t:=0;t < *clients;t++ {
-    go runTestMDL(int64(t), *fanout, start, start + *fanout, writers, file, complete, buflock)
+    go runTestMDL(int64(t), *fanout, start, start + *fanout, file, complete, submitted, &reqs, &larray)
     start += *fanout
   }
 
   for i:=0;i<*clients;i++ {
-    pid:= <-complete
-    log.Printf("Client %d completed", pid)
+    <-submitted
   }
 
-  /*
-  seqno := make(map[int64]int64, 0)
-  for k:=0; k<*keys;k++ {
-    leader := int64(k)%numshards
-    if _, ok := seqno[leader]; !ok {
-      seqno[leader] = 0
-    } else {
-      seqno[leader]++
-    }
-    arg := mdlinproto.Propose{0, state.Command{state.GET, state.Key(k), -1}, 0, seqno[leader], int64(*clients+1), nil}
-    buflock.Lock()
+
+  // shuffle requests
+  rand.Seed(time.Now().UnixNano())
+  for i := range reqs {
+    j := rand.Intn(i + 1)
+    reqs[i], reqs[j] = reqs[j], reqs[i]
+    larray[i], larray[j] = larray[j], larray[i]
+  }
+
+  before_total := time.Now()
+  for i:=0; i<num_requests; i++ {
+    leader := larray[i]
+    arg := reqs[i]
     writers[leader].WriteByte(mdlinproto.PROPOSE)
     arg.Marshal(writers[leader])
     writers[leader].Flush()
-    buflock.Unlock()
-  }*/
+    log.Printf("Client %d, CommandId %d: %s", arg.PID, arg.CommandId, commandToStr(arg.Command))
+  }
+
+  for i:=0;i<*clients;i++ {
+    p := <-complete
+    log.Printf("Client %d completed", p.int64)
+    tot := (p.Time).Sub(before_total)
+    log.Printf("Test took %v\n", tot)
+    file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
+
+  }
 
   for i:=0; i<int(numshards); i++ {
     log.Printf("The total number of conflicts found on shard %d was %d", i, total_conflicts[i])
@@ -174,14 +185,11 @@ func main() {
 
 }
 
-func runTestMDL(pid int64, f int, start_index int, end_index int, writers []*bufio.Writer, file *os.File, complete chan int64, buflock *sync.Mutex) {
-  done := make(chan bool)
-  go waitRepliesMDL(start_index, end_index, done)
-  before_total := time.Now()
+func runTestMDL(pid int64, f int, start_index int, end_index int, file *os.File, completed chan struct {time.Time; int64}, submitted chan int64, reqs *[]mdlinproto.Propose, larray *[]int64) {
+  go waitRepliesMDL(start_index, end_index, completed, pid)
   var arg mdlinproto.Propose
   deps := make([]mdlinproto.Tag, 0)
   seqno := make(map[int64]int64, 0)
-  tab := strings.Repeat("    ", int(pid))
   for i:= start_index; i<end_index; i++ {
     leader := karray[i]%numshards
     if _, ok := seqno[leader]; !ok {
@@ -190,20 +198,11 @@ func runTestMDL(pid int64, f int, start_index int, end_index int, writers []*buf
       seqno[leader]++
     }
     arg = mdlinproto.Propose{int32(i), state.Command{reqarray[i], state.Key(karray[i]), state.Value(i)}, 0, seqno[leader], pid, deps}
-    buflock.Lock()
-		writers[leader].WriteByte(mdlinproto.PROPOSE)
-		arg.Marshal(writers[leader])
-		writers[leader].Flush()
-    log.Printf("%sClient %d, CommandId %d: %s", tab, pid, i, commandToStr(arg.Command))
-    buflock.Unlock()
+    (*reqs)[i] = arg
+    (*larray)[i] = leader
     deps = append(deps, mdlinproto.Tag{state.Key(karray[i]), -1, pid, int32(i)})
   }
-  <-done
-  after_total := time.Now()
-  tot := after_total.Sub(before_total)
-  log.Printf("Test took %v\n", tot)
-  file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", f, pid, tot.Milliseconds()))
-  complete <- pid
+  submitted<-pid
 }
 
 func commandToStr(c state.Command) string {
@@ -217,7 +216,7 @@ func commandToStr(c state.Command) string {
 }
 
 func runTestSDL(pid int64, f int, start_index int, end_index int, done chan bool, writers []*bufio.Writer) {
-  go waitRepliesMDL(start_index, end_index, done)
+  //go waitRepliesSDL(start_index, end_index, done)
   before_total := time.Now()
   var arg genericsmrproto.Propose
   for i:= start_index; i<end_index; i++ {
@@ -232,7 +231,7 @@ func runTestSDL(pid int64, f int, start_index int, end_index int, done chan bool
   log.Printf("Test took %v\n", after_total.Sub(before_total))
 }
 
-func waitRepliesMDL(start int, end int, done chan bool) {
+func waitRepliesMDL(start int, end int, complete chan struct {time.Time; int64}, pid int64) {
 	for true {
     total := 0
     for i:=start; i<end; i++ {
@@ -242,7 +241,8 @@ func waitRepliesMDL(start int, end int, done chan bool) {
       break
     }
   }
-  done <- true
+  after_total := time.Now()
+  complete <- struct {time.Time; int64}{after_total, pid}
 }
 
 func shardListener(readers []*bufio.Reader, shard int) {

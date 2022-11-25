@@ -660,7 +660,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		}
 	}
 
-	cmds := make([]state.Command, batchSize)
+	cmds := make([]state.Command, 0)
 	proposals := make([]*genericsmr.MDLPropose, batchSize)
   var pids int64
   var seqnos int64
@@ -687,8 +687,6 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		}
 		if seqno != expectedSeqno {
 			// Add to buffer
-      log.Printf("CommandId: %d, PID: %d, SeqNo: %d, ExpectedSN: %d, command: %s", prop.CommandId, pid, seqno, expectedSeqno, commandToStr(prop.Command))
-      panic("This shouldn't be happening in our tests right now")
 			if _, ok := r.outstandingInst[pid]; !ok {
 				r.outstandingInst[pid] = make([]*genericsmr.MDLPropose, 0)
 			}
@@ -698,8 +696,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			}
 			log.Println("Out of order, buffering back into channel") //TODO do we need to sort?
 		} else {
-			cmds[found] = prop.Command
-			proposals[found] = prop
+			cmds = append(cmds, prop.Command)
+			proposals = append(proposals, prop)
 			pids = pid
 			seqnos = seqno
       versions = handleVersion(prop.Command)
@@ -719,7 +717,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
       printDeps(batchdeps, "bd")
       //TODO^^
       // Check if any others are ready
-      /*
+
 			for true {
 				log.Printf("looking for any others that might be ready from this PID %d", pid)
 				l := len(r.outstandingInst[pid])
@@ -731,51 +729,15 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 					r.outstandingInst[pid] = r.outstandingInst[pid][:l-1]
 					r.nextSeqNo[pid]++ // Giving us linearizability!
 					log.Printf("head of it's buff Q is ready, with command %d", prop.CommandId)
-					if found < batchSize {
-						// Add it to this batch
-						log.Println("we're adding it to this batch")
-						cmds[found] = prop.Command
-						proposals[found] = prop
-						pids[found] = prop.PID
-						seqnos[found] = prop.SeqNo
-						found++
-					} else {
-						// Finish the current entry and create a new instance
-						// for the outstanding request about to be added
-						log.Println("gotta make a separate log entry for this one now")
-						if r.defaultBallot == -1 {
-							r.instanceSpace[r.crtInstance] = &Instance{
-								cmds,
-								r.makeUniqueBallot(0),
-								PREPARING,
-								&LeaderBookkeeping{proposals, 0, 0, 0, 0, 0},
-								pids,
-								seqnos}
-						} else {
-							r.instanceSpace[r.crtInstance] = &Instance{
-								cmds,
-								r.defaultBallot,
-								PREPARED,
-								&LeaderBookkeeping{proposals, 0, 0, 0, 0, 0},
-								pids,
-								seqnos}
-						}
-						r.crtInstance++
-						cmds = make([]state.Command, batchSize)
-						proposals = make([]*genericsmr.MDLPropose, batchSize)
-						pids = make([]int64, batchSize)
-						seqnos = make([]int64, batchSize)
-						cmds[0] = prop.Command
-						proposals[0] = prop
-						pids[0] = pid
-						seqnos[0] = prop.SeqNo
-						found = 1
-					}
+					// Add it to this batch
+					log.Println("we're adding it to this batch")
+					cmds = append(cmds, prop.Command)
+					proposals = append(proposals, prop)
+					found++
 				} else {
-					log.Println("Break")
-					break
-				}
-			}*/
+          break
+        }
+			}
 		}
 		i++
 		if found < batchSize && i <= numProposals {
@@ -787,11 +749,10 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	// None of the proposals in the channel
 	// are ready to be added to the log
 	if found == 0 {
-    panic("Shouldn't be going thru this case rn")
 		log.Println("None of the proposals pulled out of the channel or in the buffers are ready!")
 		// We won't respond to the client, since that response
 		// will come when the command gets unbuffered and later executed
-		r.noProposalsReady = true
+		r.noProposalsReady = false //TODO delete me
 		return
 	}
 
