@@ -151,6 +151,29 @@ func main() {
     larray[i], larray[j] = larray[j], larray[i]
   }
 
+  // Nicely print the batches and the shard arrival logs
+  for j:=0; j<*clients;j++ {
+    log.Printf("Client %d:", j)
+    for k:=0; k<*fanout; k++ {
+      for i:=0; i<num_requests; i++ {
+        arg := reqs[i]
+        if arg.PID == int64(j) && int(arg.CommandId) == k+j*(*fanout){
+          log.Printf("    CommandId %d: %s", arg.CommandId, commandToStr(arg.Command))
+        }
+      }
+    }
+  }
+  for j:=0; int64(j)<numshards;j++ {
+    log.Printf("Shard %d Log:", j)
+    for i:=0; i<num_requests; i++ {
+      arg := reqs[i]
+      leader := larray[i]
+      if leader == int64(j) {
+        log.Printf("     Client %d, CommandId %d: %s", arg.PID, arg.CommandId, commandToStr(arg.Command))
+      }
+    }
+  }
+
   before_total := time.Now()
   for i:=0; i<num_requests; i++ {
     leader := larray[i]
@@ -158,7 +181,6 @@ func main() {
     writers[leader].WriteByte(mdlinproto.PROPOSE)
     arg.Marshal(writers[leader])
     writers[leader].Flush()
-    log.Printf("Client %d, CommandId %d: %s", arg.PID, arg.CommandId, commandToStr(arg.Command))
   }
 
   for i:=0;i<*clients;i++ {

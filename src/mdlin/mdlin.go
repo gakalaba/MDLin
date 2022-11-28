@@ -401,7 +401,6 @@ func (r *Replica) run() {
 		case propose := <-onOffProposeChan:
 			log.Println("---------ProposalChan---------")
 			r.handlePropose(propose)
-      log.Println(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
 			if r.batchingEnabled && !r.noProposalsReady {
 				onOffProposeChan = nil
@@ -661,13 +660,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	}
 
 	cmds := make([]state.Command, 0)
-	proposals := make([]*genericsmr.MDLPropose, batchSize)
-  var pids int64
-  var seqnos int64
+	proposals := make([]*genericsmr.MDLPropose, 0)
   var versions state.Version
-  var batchdeps []mdlinproto.Tag
-  var initial_logdeps []mdlinproto.Tag
-  var new_logdeps [][]mdlinproto.Tag
 
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
@@ -694,28 +688,19 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			if len(r.outstandingInst[pid]) > 1 {
 				mysort.MergeSort(r.outstandingInst[pid])
 			}
-			log.Println("Out of order, buffering back into channel") //TODO do we need to sort?
+			log.Printf("Out of order, (got command %d seqno %d) buffering back into channel", prop.CommandId, seqno) //TODO do we need to sort?
 		} else {
 			cmds = append(cmds, prop.Command)
 			proposals = append(proposals, prop)
-			pids = pid
-			seqnos = seqno
       versions = handleVersion(prop.Command)
-      batchdeps = prop.BatchDeps
-      if len(r.propagatedbd) == 0 {
-        initial_logdeps = nil
-      } else {
-        initial_logdeps = r.propagatedbd //FIXME do we need a lock around this????
-      }
-      new_logdeps = make([][]mdlinproto.Tag, 0)
-      r.propagatedbd = append(r.propagatedbd, batchdeps...) // propagate more bds
 			found++
 			r.nextSeqNo[pid]++
       //TODO delete this logic used for printing
       log.Printf("Step 2. Shard Leader Creating Log Entry{%s, ver: %d, CommandId: %d, PID: %d, SeqNo: %d",
                       commandToStr(prop.Command), versions, prop.CommandId, pid, seqno)
-      printDeps(batchdeps, "bd")
+      printDeps(prop.BatchDeps, "bd")
       //TODO^^
+      r.addEntryToLog(cmds, proposals, pid, seqno, versions, prop.BatchDeps)
       // Check if any others are ready
 
 			for true {
@@ -728,11 +713,13 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 					prop = r.outstandingInst[pid][l-1]
 					r.outstandingInst[pid] = r.outstandingInst[pid][:l-1]
 					r.nextSeqNo[pid]++ // Giving us linearizability!
+          versions = handleVersion(prop.Command)
+          cmds = make([]state.Command, 1)
+          cmds[0] = prop.Command
+          proposals = make([]*genericsmr.MDLPropose, 1)
+          proposals[0] = prop
 					log.Printf("head of it's buff Q is ready, with command %d", prop.CommandId)
-					// Add it to this batch
-					log.Println("we're adding it to this batch")
-					cmds = append(cmds, prop.Command)
-					proposals = append(proposals, prop)
+					r.addEntryToLog(cmds, proposals, pid, expectedSeqno, versions, prop.BatchDeps)
 					found++
 				} else {
           break
@@ -758,36 +745,9 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 
 	r.noProposalsReady = false
 
-	// Add entry to log
-	if r.defaultBallot == -1 {
-		r.instanceSpace[r.crtInstance] = &Instance{
-			cmds,
-			r.makeUniqueBallot(0),
-			PREPARING,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0, 0},
-			pids,
-			seqnos,
-      versions,
-      batchdeps,
-      initial_logdeps,
-      new_logdeps}
-	} else {
-		r.instanceSpace[r.crtInstance] = &Instance{
-			cmds,
-			r.defaultBallot,
-			PREPARED,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0, 0},
-			pids,
-			seqnos,
-      versions,
-      batchdeps,
-      initial_logdeps,
-      new_logdeps}
-	}
-  r.askShardsForDeps(batchdeps, r.crtInstance) // TODO fix this later, just making sync for prints for now
-	r.crtInstance++
-
 	for instNo := firstInst; instNo < r.crtInstance; instNo++ {
+    e := r.instanceSpace[instNo]
+    r.askShardsForDeps(e.bd, instNo) // TODO fix this later, just making sync for prints for now
 		if r.defaultBallot == -1 {
 
 			log.Println("    Step2. (candidate) leader broadcasting prepares....")
@@ -801,9 +761,49 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			// Make a copy of the nextSeqNo map
 			expectedSeqs := make(map[int64]int64)
 			copyMap(expectedSeqs, r.nextSeqNo)
-			r.bcastAccept(instNo, r.defaultBallot, cmds, pids, seqnos, expectedSeqs, batchdeps)
+			r.bcastAccept(instNo, r.defaultBallot, e.cmds, e.pid, e.seqno, expectedSeqs, e.bd)
 		}
 	}
+}
+
+func (r *Replica) addEntryToLog(cmds []state.Command, proposals []*genericsmr.MDLPropose, pids int64,
+              seqnos int64, versions state.Version, batchdeps []mdlinproto.Tag) {
+
+  // Add entry to log
+  var initial_logdeps []mdlinproto.Tag
+  if len(r.propagatedbd) == 0 {
+    initial_logdeps = nil
+  } else {
+    initial_logdeps = r.propagatedbd //FIXME do we need a lock around this????
+  }
+  new_logdeps := make([][]mdlinproto.Tag, 0)
+  r.propagatedbd = append(r.propagatedbd, batchdeps...) // propagate more bds
+  if r.defaultBallot == -1 {
+    r.instanceSpace[r.crtInstance] = &Instance{
+      cmds,
+      r.makeUniqueBallot(0),
+      PREPARING,
+      &LeaderBookkeeping{proposals, 0, 0, 0, 0, 0},
+      pids,
+      seqnos,
+      versions,
+      batchdeps,
+      initial_logdeps,
+      new_logdeps}
+  } else {
+    r.instanceSpace[r.crtInstance] = &Instance{
+      cmds,
+      r.defaultBallot,
+      PREPARED,
+      &LeaderBookkeeping{proposals, 0, 0, 0, 0, 0},
+      pids,
+      seqnos,
+      versions,
+      batchdeps,
+      initial_logdeps,
+      new_logdeps}
+  }
+  r.crtInstance++
 }
 
 // Helper to copy contents of map2 to map1
@@ -834,6 +834,7 @@ func (r *Replica) askShardsForDeps(deps []mdlinproto.Tag, myInstance int32) {
     // Need to send inter shard RPC to ask for log dependencies with versions
     msg := &mdlinproto.InterShard{myInstance, d.CommandId}
     e := r.instanceSpace[myInstance]
+    log.Printf("The len of this entry's proposals is %d", len(e.lb.clientProposals))
     log.Printf("      Step3. Shard %d commanId %d asking Shard %d for commandId %d, AskerInstance %d", r.shardId, e.lb.clientProposals[0].CommandId, shardTo, d.CommandId, myInstance)
     r.sendInterShardMsg(shardTo, msg, 0)
   }
