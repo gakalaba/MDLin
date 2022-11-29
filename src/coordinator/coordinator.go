@@ -15,7 +15,7 @@ import (
 )
 
 var portnum *int = flag.Int("port", 7097, "Port # to listen on. Defaults to 7097")
-var nShards *int = flag.Int("N", 2, "Number of shards. Defaults to 2.")
+var nShards *int = flag.Int("N", 1, "Number of shards. Defaults to 1.")
 var masterIPs *string = flag.String("ips", "", "Space separated list of master IP addresses (ordered).")
 
 type Coordinator struct {

@@ -102,8 +102,6 @@ func main() {
 
 	successful = make([]int, N)
 	failed = make([]int, N)
-  complete := make(chan struct {time.Time; int64})
-  submitted := make(chan int64, *clients)
 
   numshards = int64(len(shard_leaders))
   total_conflicts = make([]int64, numshards)
@@ -133,9 +131,17 @@ func main() {
 	}
 	defer file.Close()
   reqs := make([]mdlinproto.Propose, num_requests)
+  reqs_sdl := make([]genericsmrproto.Propose, num_requests)
   larray := make([]int64, num_requests)
+  complete := make(chan struct {time.Time; int64}, *clients)
+  submitted := make(chan int64, *clients)
+  done := make(chan int, *clients)
   for t:=0;t < *clients;t++ {
-    go runTestMDL(int64(*pid_base+t), *fanout, start, start + *fanout, file, complete, submitted, &reqs, &larray)
+    if (*mdlin) {
+      go runTestMDL(int64(*pid_base+t), *fanout, start, start + *fanout, file, complete, submitted, &reqs, &larray)
+    } else {
+      go runTestSDL(int64(*pid_base+t), start, start + *fanout, complete, done, submitted, &reqs_sdl, &larray)
+    }
     start += *fanout
   }
 
@@ -145,7 +151,7 @@ func main() {
 
 
   // shuffle requests
-  if (*clients > 1) {
+  if (*mdlin && *clients > 1) {
     rand.Seed(time.Now().UnixNano())
     for i := range reqs {
       j := rand.Intn(i + 1)
@@ -160,13 +166,18 @@ func main() {
     for k:=0; k<*fanout; k++ {
       for i:=0; i<num_requests; i++ {
         arg := reqs[i]
+        argsdl := reqs_sdl[i]
         if arg.PID == int64(j+*pid_base) && int(arg.CommandId - int32(*pid_base*10000)) == k+j*(*fanout){
           log.Printf("    CommandId %d: %s", arg.CommandId, commandToStr(arg.Command))
+        } else if (*mdlin == false) {
+          if (int(argsdl.CommandId - int32(*pid_base*10000)) == k+j*(*fanout)) {
+            log.Printf("    CommandId %d: %s", argsdl.CommandId, commandToStr(argsdl.Command))
+          }
         }
       }
     }
   }
-  if (*clients > 1) {
+  if (*mdlin && *clients > 1) {
     for j:=0; int64(j)<numshards;j++ {
       log.Printf("Shard %d Log:", j)
       for i:=0; i<num_requests; i++ {
@@ -179,26 +190,58 @@ func main() {
     }
   }
 
-  before_total := time.Now()
-  for i:=0; i<num_requests; i++ {
-    leader := larray[i]
-    arg := reqs[i]
-    writers[leader].WriteByte(mdlinproto.PROPOSE)
-    arg.Marshal(writers[leader])
-    writers[leader].Flush()
-  }
+  if (*mdlin) {
+    before_total := time.Now()
+    for i:=0; i<num_requests; i++ {
+      leader := larray[i]
+      arg := reqs[i]
+      writers[leader].WriteByte(mdlinproto.PROPOSE)
+      arg.Marshal(writers[leader])
+      writers[leader].Flush()
+    }
+    for i:=0;i<*clients;i++ {
+      p := <-complete
+      log.Printf("Client %d completed", p.int64)
+      tot := (p.Time).Sub(before_total)
+      log.Printf("Test took %v\n", tot)
+      file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
 
-  for i:=0;i<*clients;i++ {
-    p := <-complete
-    log.Printf("Client %d completed", p.int64)
-    tot := (p.Time).Sub(before_total)
-    log.Printf("Test took %v\n", tot)
-    file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
-
-  }
-
-  for i:=0; i<int(numshards); i++ {
-    log.Printf("The total number of conflicts found on shard %d was %d", i, total_conflicts[i])
+    }
+    for i:=0; i<int(numshards); i++ {
+      log.Printf("The total number of conflicts found on shard %d was %d", i, total_conflicts[i])
+    }
+  } else {
+    before_total := time.Now()
+    for i:=0; i<*clients; i++ {
+      leader := larray[i*(*fanout)]
+      arg := reqs_sdl[i*(*fanout)]
+      writers[leader].WriteByte(genericsmrproto.PROPOSE)
+      arg.Marshal(writers[leader])
+      writers[leader].Flush()
+    }
+    total := 0
+    for true {
+      i := <-done
+      if i == -1 {
+        total+=1
+        if total == *clients {
+          break
+        }
+        continue
+      }
+      leader := larray[i]
+      arg := reqs_sdl[i]
+      writers[leader].WriteByte(genericsmrproto.PROPOSE)
+      arg.Marshal(writers[leader])
+      writers[leader].Flush()
+    }
+    for i:=0;i<*clients;i++ {
+      p := <-complete
+      log.Printf("Client %d completed", p.int64)
+      tot := (p.Time).Sub(before_total)
+      log.Printf("Test took %v\n", tot)
+      file.WriteString(fmt.Sprintf("SDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
+    }
   }
   ////////////////////////////////////////////////
   // Close Connections
@@ -212,6 +255,9 @@ func main() {
 
 }
 
+//////////////////////////////
+//////// MDL /////////////////
+//////////////////////////////
 func runTestMDL(pid int64, f int, start_index int, end_index int, file *os.File, completed chan struct {time.Time; int64}, submitted chan int64, reqs *[]mdlinproto.Propose, larray *[]int64) {
   go waitRepliesMDL(start_index, end_index, completed, pid)
   var arg mdlinproto.Propose
@@ -232,32 +278,6 @@ func runTestMDL(pid int64, f int, start_index int, end_index int, file *os.File,
   submitted<-pid
 }
 
-func commandToStr(c state.Command) string {
-  var s string
-  if c.Op == state.GET {
-    s = fmt.Sprintf("R(%d)", c.K)
-  } else {
-    s = fmt.Sprintf("W(%d) = %v", c.K, c.V)
-  }
-  return s
-}
-
-func runTestSDL(pid int64, f int, start_index int, end_index int, done chan bool, writers []*bufio.Writer) {
-  //go waitRepliesSDL(start_index, end_index, done)
-  before_total := time.Now()
-  var arg genericsmrproto.Propose
-  for i:= start_index; i<end_index; i++ {
-    leader := karray[i]%numshards
-    arg = genericsmrproto.Propose{int32(i), state.Command{reqarray[i], state.Key(karray[i]), state.Value(i)}, 0}
-		writers[leader].WriteByte(genericsmrproto.PROPOSE)
-		arg.Marshal(writers[leader])
-		writers[leader].Flush()
-    <-done
-  }
-  after_total := time.Now()
-  log.Printf("Test took %v\n", after_total.Sub(before_total))
-}
-
 func waitRepliesMDL(start int, end int, complete chan struct {time.Time; int64}, pid int64) {
 	for true {
     total := 0
@@ -272,60 +292,85 @@ func waitRepliesMDL(start int, end int, complete chan struct {time.Time; int64},
   complete <- struct {time.Time; int64}{after_total, pid}
 }
 
+func commandToStr(c state.Command) string {
+  var s string
+  if c.Op == state.GET {
+    s = fmt.Sprintf("R(%d)", c.K)
+  } else {
+    s = fmt.Sprintf("W(%d) = %v", c.K, c.V)
+  }
+  return s
+}
+
+//////////////////////////////
+//////// SDL /////////////////
+//////////////////////////////
+func runTestSDL(pid int64, start_index int, end_index int, completed chan struct {time.Time; int64}, done chan int, submitted chan int64, reqs_sdl *[]genericsmrproto.Propose, larray *[]int64) {
+  go waitRepliesSDL(start_index, end_index, completed, pid, done)
+  var arg genericsmrproto.Propose
+  for i:= start_index; i<end_index; i++ {
+    leader := karray[i]%numshards
+    arg = genericsmrproto.Propose{int32(i+(*pid_base*10000)), state.Command{reqarray[i], state.Key(karray[i]), state.Value(i)}, 0}
+    (*reqs_sdl)[i] = arg
+    (*larray)[i] = leader
+  }
+  submitted<-pid
+}
+
+func waitRepliesSDL(start int, end int, complete chan struct {time.Time; int64}, pid int64, done chan int) {
+  i := start
+  for true {
+    if rarray[i] == 0 {
+      continue
+    }
+    i++
+
+    if i == end {
+      done <- -1
+      break
+    } else {
+      done <- i
+    }
+  }
+  after_total := time.Now()
+  complete <- struct {time.Time; int64}{after_total, pid}
+}
+
+//////////////////////////////
+/// Generic Shard Listener ///
+//////////////////////////////
 func shardListener(readers []*bufio.Reader, shard int) {
   reply := new(mdlinproto.ProposeReply)
-
+  replysdl := new(genericsmrproto.ProposeReply)
 	var err error
 	var msgType byte
 	for true {
-		if msgType, err = readers[shard].ReadByte(); err != nil ||
-			msgType != mdlinproto.PROPOSE_REPLY {
-			//log.Printf("Error when reading response #%d from shard %d: %v", i, shard, err)
-			continue
-		}
-		if err = reply.Unmarshal(readers[shard]); err != nil {
-			log.Printf("Error when unmarshalling response from shard %d: %v", shard, err)
-			continue
-		}
+		if (*mdlin) {
+      if msgType, err = readers[shard].ReadByte(); err != nil ||
+			  msgType != mdlinproto.PROPOSE_REPLY {
+			  //log.Printf("Error when reading response #%d from shard %d: %v", i, shard, err)
+			  continue
+		  }
+		  if err = reply.Unmarshal(readers[shard]); err != nil {
+			  log.Printf("Error when unmarshalling response from shard %d: %v", shard, err)
+			  continue
+		  }
 
-		//log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, VALUE = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
-		log.Printf("CommandId = %d, VALUE = %d", reply.CommandId, reply.Value)
-    rarray[reply.CommandId-int32(*pid_base*10000)] = 1
-    if reply.NumConf > total_conflicts[shard] {
-      total_conflicts[shard] = reply.NumConf
+		  //log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, VALUE = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
+		  log.Printf("CommandId = %d, VALUE = %d", reply.CommandId, reply.Value)
+      rarray[reply.CommandId-int32(*pid_base*10000)] = 1
+      if reply.NumConf > total_conflicts[shard] {
+        total_conflicts[shard] = reply.NumConf
+      }
+    } else {
+      if err = replysdl.Unmarshal(readers[shard]); err != nil {
+        //log.Printf("Error when unmarshalling response from shard %d: %v", shard, err)
+        continue
+      }
+
+      log.Printf("CommandId = %d, VALUE = %d", replysdl.CommandId, replysdl.Value)
+      rarray[replysdl.CommandId-int32(*pid_base*10000)] = 1
     }
   }
 }
 
-func waitReplies(readers []*bufio.Reader, shard int, rsp *[]int, done chan bool) {
-	e := false
-
-	reply := new(genericsmrproto.ProposeReply)
-
-	var err error
-	for i := 0; i < *fanout; i++ {
-		if err = reply.Unmarshal(readers[shard]); err != nil {
-			log.Printf("Error when reading on shard %d:%v", shard, err)
-			e = true
-			continue
-		}
-
-		log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, PID = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
-		log.Printf("rsp len %d and commandID was %d", len(*rsp), reply.CommandId)
-		if reply.OK == 0 {
-			log.Printf("Client request failed on shard %d", shard)
-			failed[shard]++
-			continue
-		} else {
-			if (*rsp)[reply.CommandId] != -1 {
-				log.Printf("Duplicate reply on shard %d: %d", shard, reply.CommandId)
-				failed[shard]++
-				continue
-			}
-			(*rsp)[reply.CommandId] = int(reply.Value)
-			log.Printf("Success!")
-			successful[shard]++
-		}
-		done <- e
-	}
-}
