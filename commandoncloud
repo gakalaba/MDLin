@@ -1,0 +1,9 @@
+#!/bin/bash
+
+standard="cd MDLin; git checkout ms; git pull https://gakalaba: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@github.com/gakalaba/MDLin; ./src/compile"
+StringVal="460 548 529 444 499 448 545 535 441 558 510 445 555 492 498 559 534 491"
+for val in $StringVal; do
+    ssh -p 22 akalaba@pc$val.emulab.net $standard
+done
+
+
