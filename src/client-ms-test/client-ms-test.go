@@ -15,6 +15,7 @@ import (
 	"state"
 	"time"
   "math/rand"
+  "sync"
 )
 
 // client -q 5 -r 5 -T 2
@@ -138,12 +139,12 @@ func main() {
   larray := make([]int64, num_requests)
   complete := make(chan struct {time.Time; int64}, *clients)
   submitted := make(chan int64, *clients)
-  done := make(chan int, *clients)
+  buflock := new(sync.Mutex)
   for t:=0;t < *clients;t++ {
     if (*mdlin) {
       go runTestMDL(int64(*pid_base+t), *fanout, start, start + *fanout, file, complete, submitted, &reqs, &larray)
     } else {
-      go runTestSDL(int64(*pid_base+t), start, start + *fanout, complete, done, submitted, &reqs_sdl, &larray)
+      go runTestSDL(int64(*pid_base+t), start, start + *fanout, complete, submitted, &reqs_sdl, &larray, writers, buflock)
     }
     start += *fanout
   }
@@ -222,22 +223,6 @@ func main() {
       arg.Marshal(writers[leader])
       writers[leader].Flush()
     }
-    total := 0
-    for true {
-      i := <-done
-      if i == -1 {
-        total+=1
-        if total == *clients {
-          break
-        }
-        continue
-      }
-      leader := larray[i]
-      arg := reqs_sdl[i]
-      writers[leader].WriteByte(genericsmrproto.PROPOSE)
-      arg.Marshal(writers[leader])
-      writers[leader].Flush()
-    }
     for i:=0;i<*clients;i++ {
       p := <-complete
       log.Printf("Client %d completed", p.int64)
@@ -308,8 +293,9 @@ func commandToStr(c state.Command) string {
 //////////////////////////////
 //////// SDL /////////////////
 //////////////////////////////
-func runTestSDL(pid int64, start_index int, end_index int, completed chan struct {time.Time; int64}, done chan int, submitted chan int64, reqs_sdl *[]genericsmrproto.Propose, larray *[]int64) {
-  go waitRepliesSDL(start_index, end_index, completed, pid, done)
+func runTestSDL(pid int64, start_index int, end_index int, completed chan struct {time.Time; int64}, submitted chan int64, 
+          reqs_sdl *[]genericsmrproto.Propose, larray *[]int64, writers []*bufio.Writer, buflock *sync.Mutex) {
+  go waitRepliesSDL(start_index, end_index, completed, pid, writers, larray, reqs_sdl, buflock)
   var arg genericsmrproto.Propose
   for i:= start_index; i<end_index; i++ {
     leader := karray[i]%numshards
@@ -320,20 +306,23 @@ func runTestSDL(pid int64, start_index int, end_index int, completed chan struct
   submitted<-pid
 }
 
-func waitRepliesSDL(start int, end int, complete chan struct {time.Time; int64}, pid int64, done chan int) {
+func waitRepliesSDL(start int, end int, complete chan struct {time.Time; int64}, pid int64, writers []*bufio.Writer, larray *[]int64, reqs_sdl *[]genericsmrproto.Propose, buflock *sync.Mutex) {
   i := start
   for true {
     if rarray[i] == 0 {
       continue
     }
     i++
-
     if i == end {
-      done <- -1
       break
-    } else {
-      done <- i
     }
+    leader := (*larray)[i]
+    arg := (*reqs_sdl)[i]
+    buflock.Lock()
+    writers[leader].WriteByte(genericsmrproto.PROPOSE)
+    arg.Marshal(writers[leader])
+    writers[leader].Flush()
+    buflock.Unlock()
   }
   after_total := time.Now()
   complete <- struct {time.Time; int64}{after_total, pid}
