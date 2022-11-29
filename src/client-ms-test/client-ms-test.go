@@ -109,6 +109,9 @@ func main() {
   ////////////////////////////////////////////////
 	// Prepare the requests! 
 	////////////////////////////////////////////////
+  if (*mdlin == false) {
+    *clients = (*fanout)*(*clients)
+  }
   num_requests := (*fanout)*(*clients)
   karray = make([]int64, num_requests)
   rarray = make([]int64, num_requests)
