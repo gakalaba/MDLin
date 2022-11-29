@@ -695,14 +695,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
       versions = handleVersion(prop.Command)
 			found++
 			r.nextSeqNo[pid]++
-      //TODO delete this logic used for printing
-      log.Printf("Step 2. Shard Leader Creating Log Entry{%s, ver: %d, CommandId: %d, PID: %d, SeqNo: %d",
-                      commandToStr(prop.Command), versions, prop.CommandId, pid, seqno)
-      printDeps(prop.BatchDeps, "bd")
-      //TODO^^
       r.addEntryToLog(cmds, proposals, pid, seqno, versions, prop.BatchDeps)
       // Check if any others are ready
-
 			for true {
 				log.Printf("looking for any others that might be ready from this PID %d", pid)
 				l := len(r.outstandingInst[pid])
@@ -770,6 +764,9 @@ func (r *Replica) addEntryToLog(cmds []state.Command, proposals []*genericsmr.MD
               seqnos int64, versions state.Version, batchdeps []mdlinproto.Tag) {
 
   // Add entry to log
+  log.Printf("Step 2. Shard Leader Creating Log Entry{%s, ver: %d, CommandId: %d, PID: %d, SeqNo: %d",
+                      commandToStr(cmds[0]), versions, proposals[0].CommandId, pids, seqnos)
+  printDeps(batchdeps, "bd")
   var initial_logdeps []mdlinproto.Tag
   if len(r.propagatedbd) == 0 {
     initial_logdeps = nil

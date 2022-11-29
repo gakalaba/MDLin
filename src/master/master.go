@@ -22,7 +22,7 @@ var numNodes *int = flag.Int("N", 3, "Number of replicas. Defaults to 3.")
 var nodeIPs *string = flag.String("ips", "", "Space separated list of IP addresses (ordered). The leader will be 0")
 var coordAddr *string = flag.String("caddr", "", "Coordinator address. Defaults to localhost")
 var coordPort *int = flag.Int("cport", 7097, "Coordinator port. Defaults to 7097.")
-var nShards *int = flag.Int("nshrds", 2, "Number of shards. Defaults to 2.")
+var nShards *int = flag.Int("nshrds", 1, "Number of shards. Defaults to 1.")
 
 type Master struct {
 	N              int

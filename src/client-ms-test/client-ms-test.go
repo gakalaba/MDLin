@@ -21,11 +21,12 @@ import (
 
 var coordAddr *string = flag.String("caddr", "", "Coordinator address. Defaults to localhost")
 var coordPort *int = flag.Int("cport", 7097, "Coordinator port. Defaults to 7097.")
+var pid_base *int = flag.Int("pid", 0, "Client base pid. Defaults to 0.")
 var fanout *int = flag.Int("fo", 5, "Fanout. Defaults to 5.")
 var writes *int = flag.Int("w", 50, "Percentage of updates (writes). Defaults to 50%.")
 var mdlin *bool = flag.Bool("mdl", false, "Multi-dispatch Linearizability: allow clients to issue multiple outstanding requests. Defaults to true")
 var procs *int = flag.Int("p", 2, "GOMAXPROCS. Defaults to 2")
-var clients *int = flag.Int("c", 1, "Number of clients. Defaults to 1.")
+var clients *int = flag.Int("c", 1, "Number of clients per this client process. Defaults to 1.")
 var keys *int = flag.Int("k", 10, "Number of keys. Defaults to 10.")
 var check = flag.Bool("check", false, "Check correctness. Defaults to false.")
 var s = flag.Float64("s", 2, "Zipfian s parameter")
@@ -134,7 +135,7 @@ func main() {
   reqs := make([]mdlinproto.Propose, num_requests)
   larray := make([]int64, num_requests)
   for t:=0;t < *clients;t++ {
-    go runTestMDL(int64(t), *fanout, start, start + *fanout, file, complete, submitted, &reqs, &larray)
+    go runTestMDL(int64(*pid_base+t), *fanout, start, start + *fanout, file, complete, submitted, &reqs, &larray)
     start += *fanout
   }
 
@@ -144,32 +145,36 @@ func main() {
 
 
   // shuffle requests
-  rand.Seed(time.Now().UnixNano())
-  for i := range reqs {
-    j := rand.Intn(i + 1)
-    reqs[i], reqs[j] = reqs[j], reqs[i]
-    larray[i], larray[j] = larray[j], larray[i]
+  if (*clients > 1) {
+    rand.Seed(time.Now().UnixNano())
+    for i := range reqs {
+      j := rand.Intn(i + 1)
+      reqs[i], reqs[j] = reqs[j], reqs[i]
+      larray[i], larray[j] = larray[j], larray[i]
+    }
   }
 
   // Nicely print the batches and the shard arrival logs
   for j:=0; j<*clients;j++ {
-    log.Printf("Client %d:", j)
+    log.Printf("Client %d:", j+*pid_base)
     for k:=0; k<*fanout; k++ {
       for i:=0; i<num_requests; i++ {
         arg := reqs[i]
-        if arg.PID == int64(j) && int(arg.CommandId) == k+j*(*fanout){
+        if arg.PID == int64(j+*pid_base) && int(arg.CommandId - int32(*pid_base*10000)) == k+j*(*fanout){
           log.Printf("    CommandId %d: %s", arg.CommandId, commandToStr(arg.Command))
         }
       }
     }
   }
-  for j:=0; int64(j)<numshards;j++ {
-    log.Printf("Shard %d Log:", j)
-    for i:=0; i<num_requests; i++ {
-      arg := reqs[i]
-      leader := larray[i]
-      if leader == int64(j) {
-        log.Printf("     Client %d, CommandId %d: %s", arg.PID, arg.CommandId, commandToStr(arg.Command))
+  if (*clients > 1) {
+    for j:=0; int64(j)<numshards;j++ {
+      log.Printf("Shard %d Log:", j)
+      for i:=0; i<num_requests; i++ {
+        arg := reqs[i]
+        leader := larray[i]
+        if leader == int64(j) {
+          log.Printf("     Client %d, CommandId %d: %s", arg.PID, arg.CommandId, commandToStr(arg.Command))
+        }
       }
     }
   }
@@ -219,10 +224,10 @@ func runTestMDL(pid int64, f int, start_index int, end_index int, file *os.File,
     } else {
       seqno[leader]++
     }
-    arg = mdlinproto.Propose{int32(i), state.Command{reqarray[i], state.Key(karray[i]), state.Value(i)}, 0, seqno[leader], pid, deps}
+    arg = mdlinproto.Propose{int32(i+(*pid_base*10000)), state.Command{reqarray[i], state.Key(karray[i]), state.Value(i)}, 0, seqno[leader], pid, deps}
     (*reqs)[i] = arg
     (*larray)[i] = leader
-    deps = append(deps, mdlinproto.Tag{state.Key(karray[i]), -1, pid, int32(i)})
+    deps = append(deps, mdlinproto.Tag{state.Key(karray[i]), -1, pid, int32(i+(*pid_base*10000))})
   }
   submitted<-pid
 }
@@ -285,7 +290,7 @@ func shardListener(readers []*bufio.Reader, shard int) {
 
 		//log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, VALUE = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
 		log.Printf("CommandId = %d, VALUE = %d", reply.CommandId, reply.Value)
-    rarray[reply.CommandId] = 1
+    rarray[reply.CommandId-int32(*pid_base*10000)] = 1
     if reply.NumConf > total_conflicts[shard] {
       total_conflicts[shard] = reply.NumConf
     }
