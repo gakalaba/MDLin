@@ -106,7 +106,7 @@ func main() {
 
   numshards = int64(len(shard_leaders))
   total_conflicts = make([]int64, numshards)
-  log.Printf("Fanout = %d, writes = %d, clients = %d, keys = %d", *fanout, *writes, *clients, *keys)
+  //log.Printf("Fanout = %d, writes = %d, clients = %d, keys = %d", *fanout, *writes, *clients, *keys)
   ////////////////////////////////////////////////
 	// Prepare the requests! 
 	////////////////////////////////////////////////
@@ -205,9 +205,9 @@ func main() {
     }
     for i:=0;i<*clients;i++ {
       p := <-complete
-      log.Printf("Client %d completed", p.int64)
+      //log.Printf("Client %d completed", p.int64)
       tot := (p.Time).Sub(before_total)
-      log.Printf("Test took %v\n", tot)
+      //log.Printf("Test took %v\n", tot)
       file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
 
     }
@@ -349,7 +349,7 @@ func shardListener(readers []*bufio.Reader, shard int) {
 		  }
 
 		  //log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, VALUE = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
-		  log.Printf("CommandId = %d, VALUE = %d", reply.CommandId, reply.Value)
+		  //log.Printf("CommandId = %d, VALUE = %d", reply.CommandId, reply.Value)
       rarray[reply.CommandId-int32(*pid_base*10000)] = 1
       if reply.NumConf > total_conflicts[shard] {
         total_conflicts[shard] = reply.NumConf
@@ -360,7 +360,7 @@ func shardListener(readers []*bufio.Reader, shard int) {
         continue
       }
 
-      log.Printf("CommandId = %d, VALUE = %d", replysdl.CommandId, replysdl.Value)
+      //log.Printf("CommandId = %d, VALUE = %d", replysdl.CommandId, replysdl.Value)
       rarray[replysdl.CommandId-int32(*pid_base*10000)] = 1
     }
   }
