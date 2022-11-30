@@ -7,7 +7,7 @@ function trap_ctrlc ()
     # perform cleanup here
     echo "Ctrl-C caught...performing clean up"
 
-    for i in "${!cmds[@]}"; do
+    for i in "${!PIDS[@]}"; do
       ssh -AX akalaba@pc${addrId[i]}.emulab.net "sudo kill ${PIDS[i]}"
       echo "Killed ${names[i]}"
     done
@@ -24,9 +24,9 @@ trap "trap_ctrlc" 2
 # your script goes here
 coordcmd="bin/coordinator -N 3 -ips '10.10.1.6,10.10.1.2,10.10.1.10'"
 
-m1cmd="bin/master -port 7087 -addr '10.10.1.6'  -ips '10.10.1.7,10.10.1.8,10.10.1.9' -caddr '10.10.1.1' -nshrds 3"
-m2cmd="bin/master -port 7088 -addr '10.10.1.2'  -ips '10.10.1.3,10.10.1.4,10.10.1.5' -caddr '10.10.1.1' -nshrds 3"
-m3cmd="bin/master -port 7089 -addr '10.10.1.10'  -ips '10.10.1.11,10.10.1.12,10.10.1.13' -caddr '10.10.1.1' -nshrds 3"
+m1cmd="bin/master -port 7087 -addr '10.10.1.6'  -ips '10.10.1.9,10.10.1.8,10.10.1.7' -caddr '10.10.1.1' -nshrds 3"
+m2cmd="bin/master -port 7088 -addr '10.10.1.2'  -ips '10.10.1.5,10.10.1.4,10.10.1.3' -caddr '10.10.1.1' -nshrds 3"
+m3cmd="bin/master -port 7089 -addr '10.10.1.10'  -ips '10.10.1.13,10.10.1.12,10.10.1.11' -caddr '10.10.1.1' -nshrds 3"
 
 s1r1cmd="bin/server -port 7070 -maddr '10.10.1.6' -mport 7087 -addr '10.10.1.9' -mdl true"
 s1r2cmd="bin/server -port 7071 -maddr '10.10.1.6' -mport 7087 -addr '10.10.1.8' -mdl true"
@@ -44,16 +44,14 @@ s3r3cmd="bin/server -port 7078 -maddr '10.10.1.10' -mport 7089 -addr '10.10.1.11
 c1cmd="bin/client-ms-test -caddr "10.10.1.1" -pid 100 -fo 2 -w 50 -c 2 -k 2 -mdl true"
 c2cmd="bin/client-ms-test -caddr "10.10.1.1" -pid 200 -fo 2 -w 50 -c 2 -k 2 -mdl true"
 
-#precursor="cd ~/MDLin; nohup "
-precursor="nohup "
-postcursor=" </dev/null >out.txt 2>outerr.txt & echo \$!"
+precursor="cd ~/MDLin; nohup "
+postcursor=" </dev/null >/dev/null 2>outerr.txt & echo \$!"
 
 PIDS=()
-addrId=(477 419 427 440 474 439 429 479 432 473 480 420 423 475 430 434 422 438)
-cmds=(coordcmd m1cmd m2cmd m3cmd s1r1cmd s1r2cmd s1r3cmd s2r1cmd s2r2cmd s2r3cmd s3r1cmd s3r2cmd s3r3cmd c1cmd c2cmd)
+addrId=(477 419 427 440 474 439 429 479 432 473 480 420 423 475 430) #434 422 438)
+cmds=("$coordcmd" "$m1cmd" "$m2cmd" "$m3cmd" "$s1r1cmd" "$s1r2cmd" "$s1r3cmd" "$s2r1cmd" "$s2r2cmd" "$s2r3cmd" "$s3r1cmd" "$s3r2cmd" "$s3r3cmd" "$c1cmd" "$c2cmd")
 names=(coord m1 m2 m3 s1r1 s1r2 s1r3 s2r1 s2r2 s2r3 s3r1 s3r2 s3r3 c1 c2)
-
-for i in "${!cmds[@]}"; do
+for ((i = 0; i < ${#cmds[@]}; i++)); do
   read -r somevar < <(ssh -AX akalaba@pc${addrId[i]}.emulab.net $precursor${cmds[i]}$postcursor)
   PIDS[i]=$somevar
   sleep 2
