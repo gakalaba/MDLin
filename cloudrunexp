@@ -41,8 +41,8 @@ s3r2cmd="bin/server -port 7077 -maddr '10.10.1.10' -mport 7089 -addr '10.10.1.12
 s3r3cmd="bin/server -port 7078 -maddr '10.10.1.10' -mport 7089 -addr '10.10.1.11'"
 
 
-c1cmd="bin/client-ms-test -caddr "10.10.1.1" -pid 100 -fo 2 -w 50 -c 2 -k 2"
-c2cmd="bin/client-ms-test -caddr "10.10.1.1" -pid 200 -fo 2 -w 50 -c 2 -k 2"
+c1cmd="bin/client-ms-test -caddr "10.10.1.1" -pid 100 -fo 10 -w 50 -c 1 -k 1000000000"
+#c2cmd="bin/client-ms-test -caddr "10.10.1.1" -pid 200 -fo 2 -w 50 -c 1 -k 1000000000"
 
 precursor="cd ~/MDLin; nohup "
 postcursormdl=" -mdl true </dev/null >/dev/null 2>outerr.txt & echo \$!"
@@ -50,7 +50,7 @@ postcursorbasic=" </dev/null >/dev/null 2>outerr.txt & echo \$!"
 
 PIDS=()
 addrId=(477 419 427 440 474 439 429 479 432 473 480 420 423 475 430) #434 422 438)
-cmds=("$coordcmd" "$m1cmd" "$m2cmd" "$m3cmd" "$s1r1cmd" "$s1r2cmd" "$s1r3cmd" "$s2r1cmd" "$s2r2cmd" "$s2r3cmd" "$s3r1cmd" "$s3r2cmd" "$s3r3cmd" "$c1cmd" "$c2cmd")
+cmds=("$coordcmd" "$m1cmd" "$m2cmd" "$m3cmd" "$s1r1cmd" "$s1r2cmd" "$s1r3cmd" "$s2r1cmd" "$s2r2cmd" "$s2r3cmd" "$s3r1cmd" "$s3r2cmd" "$s3r3cmd" "$c1cmd")
 names=(coord m1 m2 m3 s1r1 s1r2 s1r3 s2r1 s2r2 s2r3 s3r1 s3r2 s3r3 c1 c2)
 for ((i = 0; i < ${#cmds[@]}; i++)); do
   echo $i
@@ -63,7 +63,7 @@ for ((i = 0; i < ${#cmds[@]}; i++)); do
     echo "Setup BASIC ${names[i]}..."
   fi
   PIDS[i]=$somevar
-  sleep 2
+  sleep 3
 done
 
 echo "Done!"

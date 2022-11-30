@@ -172,10 +172,10 @@ func main() {
         arg := reqs[i]
         argsdl := reqs_sdl[i]
         if arg.PID == int64(j+*pid_base) && int(arg.CommandId - int32(*pid_base*10000)) == k+j*(*fanout){
-          log.Printf("    CommandId %d: %s", arg.CommandId, commandToStr(arg.Command))
+          log.Printf("    CommandId %d-->%d: %s", arg.CommandId, larray[i], commandToStr(arg.Command))
         } else if (*mdlin == false) {
           if (int(argsdl.CommandId - int32(*pid_base*10000)) == k+j*(*fanout)) {
-            log.Printf("    CommandId %d: %s", argsdl.CommandId, commandToStr(argsdl.Command))
+            log.Printf("    CommandId %d-->%d: %s", argsdl.CommandId, larray[i], commandToStr(argsdl.Command))
           }
         }
       }
@@ -225,9 +225,9 @@ func main() {
     }
     for i:=0;i<*clients;i++ {
       p := <-complete
-      log.Printf("Client %d completed", p.int64)
+      //log.Printf("Client %d completed", p.int64)
       tot := (p.Time).Sub(before_total)
-      log.Printf("Test took %v\n", tot)
+      //log.Printf("Test took %v\n", tot)
       file.WriteString(fmt.Sprintf("SDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
     }
   }
