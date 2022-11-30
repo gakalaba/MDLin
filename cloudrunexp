@@ -3,45 +3,14 @@
 # this function is called when Ctrl-C is sent
 function trap_ctrlc ()
 {
+
     # perform cleanup here
     echo "Ctrl-C caught...performing clean up"
- 
-    echo "Doing cleanup"
-    ssh -AX akalaba@pc$coordinator.emulab.net "sudo kill $COORD"
-    echo "Killed coordinator"
 
-    ssh -AX akalaba@pc$s1master.emulab.net "sudo kill $M1"
-    echo "Killed master1"
-    ssh -AX akalaba@pc$s2master.emulab.net "sudo kill $M2"
-    echo "Killed master2"
-    ssh -AX akalaba@pc$s3master.emulab.net "sudo kill $M3"
-    echo "Killed master3"
-
-    ssh -AX akalaba@pc$s1r1.emulab.net "sudo kill $S1R1"
-    echo "Killed shard1 rep1"
-    ssh -AX akalaba@pc$s1r2.emulab.net "sudo kill $S1R2"
-    echo "Killed shard1 rep2"
-    ssh -AX akalaba@pc$s1r3.emulab.net "sudo kill $S1R3"
-    echo "Killed shard1 rep3"
-
-    ssh -AX akalaba@pc$s2r1.emulab.net "sudo kill $S2R1"
-    echo "Killed shard2 rep1"
-    ssh -AX akalaba@pc$s2r2.emulab.net "sudo kill $S2R2"
-    echo "Killed shard2 rep2"
-    ssh -AX akalaba@pc$s2r3.emulab.net "sudo kill $S2R3"
-    echo "Killed shard2 rep3"
-
-    ssh -AX akalaba@pc$s3r1.emulab.net "sudo kill $S3R1"
-    echo "Killed shard3 rep1"
-    ssh -AX akalaba@pc$s3r2.emulab.net "sudo kill $S3R2"
-    echo "Killed shard3 rep2"
-    ssh -AX akalaba@pc$s3r3.emulab.net "sudo kill $S3R3"
-    echo "Killed shard3 rep3"
-    
-    ssh -AX akalaba@pc$client1.emulab.net "sudo kill $C1"
-    echo "Killed client1"
-    ssh -AX akalaba@pc$client2.emulab.net "sudo kill $C2"
-    echo "Killed client2"
+    for i in "${!cmds[@]}"; do
+      ssh -AX akalaba@pc${addrId[i]}.emulab.net "sudo kill ${PIDS[i]}"
+      echo "Killed ${names[i]}"
+    done
  
     # exit shell script with error code 2
     # if omitted, shell script will continue execution
@@ -53,67 +22,42 @@ function trap_ctrlc ()
 trap "trap_ctrlc" 2
 
 # your script goes here
-coordcmd="nohup bin/coordinator -N 3 -ips '10.10.1.6,10.10.1.2,10.10.1.10' </dev/null >out.txt 2>/dev/null & echo \$!"
+coordcmd="bin/coordinator -N 3 -ips '10.10.1.6,10.10.1.2,10.10.1.10'"
 
-m1cmd="nohup bin/master -port 7087 -addr '10.10.1.6'  -ips '10.10.1.7,10.10.1.8,10.10.1.9' -caddr '10.10.1.1' -nshrds 3 </dev/null >out.txt 2>/dev/null & echo \$!"
-m2cmd="nohup bin/master -port 7088 -addr '10.10.1.2'  -ips '10.10.1.3,10.10.1.3,10.10.1.5' -caddr '10.10.1.1' -nshrds 3 </dev/null >out.txt 2>/dev/null & echo \$!"
-m3cmd="nohup bin/master -port 7089 -addr '10.10.1.10'  -ips '10.10.1.11,10.10.1.12,10.10.1.13' -caddr '10.10.1.1' -nshrds 3 </dev/null >out.txt 2>/dev/null & echo \$!"
+m1cmd="bin/master -port 7087 -addr '10.10.1.6'  -ips '10.10.1.7,10.10.1.8,10.10.1.9' -caddr '10.10.1.1' -nshrds 3"
+m2cmd="bin/master -port 7088 -addr '10.10.1.2'  -ips '10.10.1.3,10.10.1.4,10.10.1.5' -caddr '10.10.1.1' -nshrds 3"
+m3cmd="bin/master -port 7089 -addr '10.10.1.10'  -ips '10.10.1.11,10.10.1.12,10.10.1.13' -caddr '10.10.1.1' -nshrds 3"
 
-s1r1cmd="nohup bin/server -port 7070 -maddr '10.10.1.6' -mport 7087 -addr '10.10.1.7' -mdl true </dev/null >out.txt 2>/dev/null & echo \$!"
-s1r2cmd="nohup bin/server -port 7071 -maddr '10.10.1.6' -mport 7087 -addr '10.10.1.8' -mdl true </dev/null >out.txt 2>/dev/null & echo \$!"
-s1r3cmd="nohup bin/server -port 7072 -maddr '10.10.1.6' -mport 7087 -addr '10.10.1.9' -mdl true </dev/null >out.txt 2>/dev/null & echo \$!"
+s1r1cmd="bin/server -port 7070 -maddr '10.10.1.6' -mport 7087 -addr '10.10.1.9' -mdl true"
+s1r2cmd="bin/server -port 7071 -maddr '10.10.1.6' -mport 7087 -addr '10.10.1.8' -mdl true"
+s1r3cmd="bin/server -port 7072 -maddr '10.10.1.6' -mport 7087 -addr '10.10.1.7' -mdl true"
 
-s2r1cmd="nohup bin/server -port 7073 -maddr '10.10.1.2' -mport 7088 -addr '10.10.1.3' -mdl true </dev/null >out.txt 2>/dev/null & echo \$!"
-s2r2cmd="nohup bin/server -port 7074 -maddr '10.10.1.2' -mport 7088 -addr '10.10.1.4' -mdl true </dev/null >out.txt 2>/dev/null & echo \$!"
-s2r3cmd="nohup bin/server -port 7075 -maddr '10.10.1.2' -mport 7088 -addr '10.10.1.5' -mdl true </dev/null >out.txt 2>/dev/null & echo \$!"
+s2r1cmd="bin/server -port 7073 -maddr '10.10.1.2' -mport 7088 -addr '10.10.1.5' -mdl true"
+s2r2cmd="bin/server -port 7074 -maddr '10.10.1.2' -mport 7088 -addr '10.10.1.4' -mdl true"
+s2r3cmd="bin/server -port 7075 -maddr '10.10.1.2' -mport 7088 -addr '10.10.1.3' -mdl true"
 
-s3r1cmd="nohup bin/server -port 7076 -maddr '10.10.1.10' -mport 7089 -addr '10.10.1.11' -mdl true </dev/null >out.txt 2>/dev/null & echo \$!"
-s3r2cmd="nohup bin/server -port 7077 -maddr '10.10.1.10' -mport 7089 -addr '10.10.1.12' -mdl true </dev/null >out.txt 2>/dev/null & echo \$!"
-s3r3cmd="nohup bin/server -port 7078 -maddr '10.10.1.10' -mport 7089 -addr '10.10.1.13' -mdl true </dev/null >out.txt 2>/dev/null & echo \$!"
+s3r1cmd="bin/server -port 7076 -maddr '10.10.1.10' -mport 7089 -addr '10.10.1.13' -mdl true"
+s3r2cmd="bin/server -port 7077 -maddr '10.10.1.10' -mport 7089 -addr '10.10.1.12' -mdl true"
+s3r3cmd="bin/server -port 7078 -maddr '10.10.1.10' -mport 7089 -addr '10.10.1.11' -mdl true"
 
 
-c1cmd="nohup bin/client-ms-test -caddr "10.10.1.1" -pid 100 -fo 2 -w 50 -c 2 -k 2 -mdl true </dev/null >out.txt 2>/dev/null & echo \$!"
-c2cmd="nohup bin/client-ms-test -caddr "10.10.1.1" -pid 200 -fo 2 -w 50 -c 2 -k 2 -mdl true </dev/null >out.txt 2>/dev/null & echo \$!"
+c1cmd="bin/client-ms-test -caddr "10.10.1.1" -pid 100 -fo 2 -w 50 -c 2 -k 2 -mdl true"
+c2cmd="bin/client-ms-test -caddr "10.10.1.1" -pid 200 -fo 2 -w 50 -c 2 -k 2 -mdl true"
 
-StringVal="460 548 529 444 499 448 545 535 441 558 510 445 555 492 498 559 534 491"
-client1=460
-client2=548
-client3=529
-client4=444
-client5=499
-s1r1=448
-s1r2=545
-s1r3=535
-s1master=441
-s2r1=558
-s2r2=510
-s2r3=445
-s2master=555
-s3r1=492
-s3r2=498
-s3r3=559
-s3master=534
-coordinator=491
+#precursor="cd ~/MDLin; nohup "
+precursor="nohup "
+postcursor=" </dev/null >out.txt 2>outerr.txt & echo \$!"
 
-read -r COORD < <(ssh -AX akalaba@pc$coordinator.emulab.net $coordcmd)
+PIDS=()
+addrId=(477 419 427 440 474 439 429 479 432 473 480 420 423 475 430 434 422 438)
+cmds=(coordcmd m1cmd m2cmd m3cmd s1r1cmd s1r2cmd s1r3cmd s2r1cmd s2r2cmd s2r3cmd s3r1cmd s3r2cmd s3r3cmd c1cmd c2cmd)
+names=(coord m1 m2 m3 s1r1 s1r2 s1r3 s2r1 s2r2 s2r3 s3r1 s3r2 s3r3 c1 c2)
 
-read -r M1 < <(ssh -AX akalaba@pc$s1master.emulab.net $m1cmd)
-read -r M2 < <(ssh -AX akalaba@pc$s2master.emulab.net $m2cmd)
-read -r M3 < <(ssh -AX akalaba@pc$s3master.emulab.net $m3cmd)
+for i in "${!cmds[@]}"; do
+  read -r somevar < <(ssh -AX akalaba@pc${addrId[i]}.emulab.net $precursor${cmds[i]}$postcursor)
+  PIDS[i]=$somevar
+  sleep 2
+done
 
-read -r S1R1 < <(ssh -AX akalaba@pc$s1r1.emulab.net $s1r1cmd)
-read -r S1R2 < <(ssh -AX akalaba@pc$s1r2.emulab.net $s1r2cmd)
-read -r S1R3 < <(ssh -AX akalaba@pc$s1r3.emulab.net $s1r3cmd)
-
-read -r S2R1 < <(ssh -AX akalaba@pc$s2r1.emulab.net $s2r1cmd)
-read -r S2R2 < <(ssh -AX akalaba@pc$s2r2.emulab.net $s2r2cmd)
-read -r S2R3 < <(ssh -AX akalaba@pc$s2r3.emulab.net $s2r3cmd)
-
-read -r S3R1 < <(ssh -AX akalaba@pc$s3r1.emulab.net $s3r1cmd)
-read -r S3R2 < <(ssh -AX akalaba@pc$s3r2.emulab.net $s3r2cmd)
-read -r S3R3 < <(ssh -AX akalaba@pc$s3r3.emulab.net $s3r3cmd)
-
-read -r C1 < <(ssh -AX akalaba@pc$client1.emulab.net $c1cmd)
-read -r C2 < <(ssh -AX akalaba@pc$client2.emulab.net $c2cmd)
-
-sleep 100000000000
+echo "Done!"
+sleep 1000000000

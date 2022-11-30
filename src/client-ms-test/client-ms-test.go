@@ -128,7 +128,7 @@ func main() {
     }
   }
   start := 0
-  file, ferr := os.OpenFile("/home/anja/Desktop/MDLin/ms-test.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0777)
+  file, ferr := os.OpenFile("/users/akalaba/MDLin/ms-test.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0777)
 	if ferr != nil {
 		log.Println("file error oh no", ferr)
 		return
