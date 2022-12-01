@@ -1,11 +1,12 @@
-package epaxos
+package gryff
 
 import (
-	"dlog"
+	//    "state"
 	"epaxosproto"
-	"genericsmrproto"
 	"sort"
 	"time"
+  "dlog"
+  "gryffproto"
 )
 
 const (
@@ -15,7 +16,7 @@ const (
 )
 
 type Exec struct {
-	r *Replica
+	r *EPaxosRMWHandler
 }
 
 type SCComponent struct {
@@ -35,7 +36,7 @@ func (e *Exec) executeCommand(replica int32, instance int32) bool {
 		return false
 	}
 
-	dlog.Printf("[%d.%d] Finding scc and then executing.\n", replica, instance)
+  dlog.Printf("[%d.%d] Finding scc and then executing.\n", replica, instance)
 	if !e.findSCC(inst) {
 		return false
 	}
@@ -53,7 +54,7 @@ func (e *Exec) findSCC(root *Instance) bool {
 }
 
 func (e *Exec) strongconnect(v *Instance, index *int) bool {
-	dlog.Printf("[%d] SCC %d %d.\n", e.r.Id, v.Slot, v.Seq)
+  dlog.Printf("[%d] SCC %d %d.\n", e.r.R.Id, v.Slot, v.Seq)
 	v.Index = *index
 	v.Lowlink = *index
 	*index = *index + 1
@@ -67,28 +68,28 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 	stack = stack[0 : l+1]
 	stack[l] = v
 
-	for q := int32(0); q < int32(e.r.N); q++ {
+	for q := int32(0); q < int32(e.r.R.N); q++ {
 		inst := v.Deps[q]
 		for i := e.r.ExecedUpTo[q] + 1; i <= inst; i++ {
 			for e.r.InstanceSpace[q][i] == nil || e.r.InstanceSpace[q][i].Cmds == nil || v.Cmds == nil {
-				if v.lb != nil && v.lb.blockStartTime.IsZero() {
-					v.lb.blockStartTime = time.Now()
-				}
-				dlog.Printf("Waiting for dep %d.%d predecessor %d.%d to exist.\n", q, inst, q, i)
+        if v.lb != nil && v.lb.blockStartTime.IsZero() {
+          v.lb.blockStartTime = time.Now()
+        }
+        dlog.Printf("Waiting for dep %d.%d predecessor %d.%d to exist.\n", q, inst, q, i)
 				time.Sleep(1000 * 1000)
 			}
-			/*	  if !state.Conflict(v.Command, e.r.InstanceSpace[q][i].Command) {
-				  continue
-				  }
+			/*        if !state.Conflict(v.Command, e.r.InstanceSpace[q][i].Command) {
+			          continue
+			          }
 			*/
 			if e.r.InstanceSpace[q][i].Status == epaxosproto.EXECUTED {
 				continue
 			}
 			for e.r.InstanceSpace[q][i].Status != epaxosproto.COMMITTED {
-				if v.lb != nil && v.lb.blockStartTime.IsZero() {
-					v.lb.blockStartTime = time.Now()
-				}
-				dlog.Printf("Waiting for dep %d.%d predecessor %d.%d to be committed.\n", q, inst, q, i)
+        if v.lb != nil && v.lb.blockStartTime.IsZero() {
+          v.lb.blockStartTime = time.Now()
+        }
+        dlog.Printf("Waiting for dep %d.%d predecessor %d.%d to be committed.\n", q, inst, q, i)
 				time.Sleep(1000 * 1000)
 			}
 			w := e.r.InstanceSpace[q][i]
@@ -117,7 +118,7 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 		//found SCC
 		list := stack[l:len(stack)]
 
-		dlog.Printf("SCC size: %d.\n", len(list))
+    dlog.Printf("SCC size: %d.\n", len(list))
 
 		//execute commands in the increasing order of the Seq field
 		sort.Sort(nodeArray(list))
@@ -125,21 +126,40 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 			for w.Cmds == nil {
 				time.Sleep(1000 * 1000)
 			}
-			if w.lb != nil {
-				w.lb.executedTime = time.Now()
-				blocked := int64(0)
-				if !w.lb.blockStartTime.IsZero() {
-					blocked = int64(w.lb.executedTime.Sub(w.lb.blockStartTime))
-				}
-				dlog.Printf("[%d.%d] Execute delay: %d (blocked %d).\n", e.r.Id, w.Slot, w.lb.executedTime.Sub(w.lb.committedTime), blocked)
-			}
-			for idx := 0; idx < len(w.Cmds); idx++ {
-				if w.lb != nil {
-					dlog.Printf("[%d.%d] Executing command %d.\n", e.r.Id, w.Slot, idx)
-				}
-				val := w.Cmds[idx].Execute(e.r.State)
-				if e.r.NeedsWaitForExecute(&w.Cmds[idx]) && w.lb != nil && w.lb.clientProposals != nil {
-					e.r.ReplyProposeTS(
+      if w.lb != nil {
+        w.lb.executedTime = time.Now()
+        blocked := int64(0)
+        if !w.lb.blockStartTime.IsZero() {
+          blocked = int64(w.lb.executedTime.Sub(w.lb.blockStartTime))
+        }
+        dlog.Printf("[%d.%d] Execute delay: %d (blocked %d).\n", e.r.R.Id, w.Slot, w.lb.executedTime.Sub(w.lb.committedTime), blocked)
+      }
+
+      var vt gryffproto.ValTag
+      pvt, ok := e.r.PrevValTag[w.Cmds[0].K]
+      if !ok || w.Base.T.GreaterThan(pvt.T) {
+        vt.V = w.Base.V
+        vt.T = w.Base.T
+      } else {
+        vt.V = pvt.V
+        vt.T = pvt.T
+      }
+      // do cas
+      if w.Cmds[0].OldValue == vt.V {
+        vt.V = w.Cmds[0].V
+      }
+      // avoid concurrency bugs by performing overwrite in "main" goroutine
+      e.r.executeOverwriteChan <- &ExecuteOverwrite{w.Cmds[0].K, vt.V, &vt.T, w.Leader, w.Slot}
+      // never do the below:
+      //  e.r.R.HandleOverwrite(w.Cmds[0].K, vt.V, &vt.T)
+
+			/*for idx := 0; idx < len(w.Cmds); idx++ {
+        if w.lb != nil {
+          dlog.Printf("[%d.%d] Executing command %d.\n", e.r.R.Id, w.Slot, idx)
+        }
+				val := w.Cmds[idx].Execute(e.r.R.State)
+				if e.r.R.NeedsWaitForExecute(&w.Cmds[idx]) && w.lb != nil && w.lb.clientProposals != nil {
+					e.r.R.ReplyProposeTS(
 						&genericsmrproto.ProposeReplyTS{
 							TRUE,
 							w.lb.clientProposals[idx].CommandId,
@@ -147,7 +167,8 @@ func (e *Exec) strongconnect(v *Instance, index *int) bool {
 							w.lb.clientProposals[idx].Timestamp},
 						w.lb.clientProposals[idx].Reply)
 				}
-			}
+			}*/
+      dlog.Printf("[%d.%d] Executed in scc.\n", w.Leader, w.Slot)
 			w.Status = epaxosproto.EXECUTED
 		}
 		stack = stack[0:l]

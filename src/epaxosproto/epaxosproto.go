@@ -24,15 +24,13 @@ type PrepareReply struct {
 }
 
 type PreAccept struct {
-	LeaderId  int32
-	Replica   int32
-	Instance  int32
-	Ballot    int32
-	Command   []state.Command
-	Seq       int32
-	Deps      [5]int32
-	SentAt    int64 // UTC unix nano
-	OpenAfter int64 // UTC unix nano
+	LeaderId int32
+	Replica  int32
+	Instance int32
+	Ballot   int32
+	Command  []state.Command
+	Seq      int32
+	Deps     [5]int32
 }
 
 type PreAcceptReply struct {
@@ -57,7 +55,6 @@ type Accept struct {
 	Count    int32
 	Seq      int32
 	Deps     [5]int32
-	SentAt   int64
 }
 
 type AcceptReply struct {
@@ -74,7 +71,6 @@ type Commit struct {
 	Command  []state.Command
 	Seq      int32
 	Deps     [5]int32
-	SentAt   int64
 }
 
 type CommitShort struct {
@@ -84,7 +80,6 @@ type CommitShort struct {
 	Count    int32
 	Seq      int32
 	Deps     [5]int32
-	SentAt   int64
 }
 
 type TryPreAccept struct {

@@ -1,0 +1,178 @@
+{
+  "experiment_independent_vars": [
+    ["client_write_percentage", "client_read_percentage", "client_rmw_percentage", "client_conflict_percentage"],
+    ["server_names", "server_ping_latencies"],
+    ["replication_protocol", "replication_protocol_settings", "plot_cdf_series_title", "plot_tput_lat_series_title"]
+  ],
+  "replication_protocol": [
+    "gryff",
+    "epaxos",
+    "multi_paxos"
+  ],
+  "replication_protocol_settings": [
+    {
+      "client_regular_consistency": false,
+      "client_sequential_consistency": false,
+      "proxy_operations": true,
+      "server_execute_commands": true,
+      "server_delay_reply": true,
+      "server_thrifty": true,
+      "server_shortcircuit_timeout": -1,
+      "server_fast_overwrite_timeout": -1,
+      "server_force_write_period": -1
+    },
+    {
+      "server_delay_reply": true,
+      "server_execute_commands": true,
+      "server_thrifty": true
+    },
+    {
+      "server_delay_reply": true,
+      "server_execute_commands": true,
+      "server_thrifty": true
+    }
+  ],
+  "server_names": [
+    [
+      "california",
+      "virginia",
+      "ireland"
+    ],
+    [
+      "california",
+      "virginia",
+      "ireland",
+      "oregon",
+      "japan"
+    ]
+  ],
+  "server_ping_latencies": [
+    {
+      "california": {
+        "california": 0,
+        "ireland": 151,
+        "virginia": 72
+      },
+      "ireland": {
+        "california": 151,
+        "ireland": 0,
+        "virginia": 88
+      },
+      "virginia": {
+        "california": 72,
+        "ireland": 88,
+        "virginia": 0
+      }
+    },
+    {
+      "california": {
+        "california": 0,
+        "ireland": 151,
+        "japan": 113,
+        "oregon": 59,
+        "virginia": 72
+      },
+      "ireland": {
+        "california": 151,
+        "ireland": 0,
+        "japan": 220,
+        "oregon": 145,
+        "virginia": 88
+      },
+      "japan": {
+        "california": 113,
+        "ireland": 220,
+        "japan": 0,
+        "oregon": 121,
+        "virginia": 162
+      },
+      "oregon": {
+        "california": 59,
+        "ireland": 145,
+        "japan": 121,
+        "oregon": 0,
+        "virginia": 93
+      },
+      "virginia": {
+        "california": 72,
+        "ireland": 88,
+        "japan": 162,
+        "oregon": 93,
+        "virginia": 0
+      }
+    }
+  ],
+  "client_conflict_percentage": [25, 2, 10, 25],
+  "client_write_percentage": [495, 45, 45, 45],
+  "client_read_percentage": [495, 945, 945, 945],
+  "client_rmw_percentage": [10, 10, 10, 10],
+  "client_nodes_per_server": 2,
+  "client_processes_per_client_node": 8,
+  "cdf_plots": {
+    "font": "DejaVu Sans,12",
+    "height": 600,
+    "width": 800,
+    "x_label": "Latency (ms)",
+    "y_label": "Cumulative ratio of operations"
+  },
+  "plots": [],
+  "plot_cdf_png_font": "DejaVu Sans,12",
+  "plot_cdf_png_height": 600,
+  "plot_cdf_png_width": 800,
+  "plot_cdf_series_title": ["Gryff", "EPaxos", "Multi-Paxos"],
+  "plot_cdf_x_label": "Latency (ms)",
+  "plot_cdf_y_label": "Cumulative ratio of operations",
+  "plot_directory_name": "plots",
+  "plot_tput_lat_png_font": "DejaVu Sans,12",
+  "plot_tput_lat_png_height": 600,
+  "plot_tput_lat_png_width": 800,
+  "plot_tput_lat_series_title": ["Gryff", "EPaxos-thrifty", "Multi-Paxos"],
+  "plot_tput_lat_x_label": "Throughput (ops/sec)",
+  "plot_tput_lat_y_label": "Latency (ms)",
+  "base_local_exp_directory": "/media/matthelb/DATA/projects/epaxos/experiments/nsdi20/results/lat",
+  "base_mounted_fs_path": "/mnt/extra",
+  "base_remote_bin_directory_nfs": "/users/matthelb/gryff",
+  "base_remote_exp_directory": "/mnt/extra/experiments",
+  "bin_directory_name": "bin",
+  "client_bin_name": "clientnew",
+  "client_debug_output": false,
+  "client_experiment_length": 180,
+  "client_host_format_str": "client-%d-%d.%s.%s.emulab.net",
+  "client_max_processors": 2,
+  "client_name_format_str": "client-%d-%d",
+  "client_num_keys": 10000,
+  "client_ramp_down": 15,
+  "client_ramp_up": 15,
+  "client_random_coordinator": false,
+  "client_zipfian_s": 2,
+  "client_zipfian_v": 1,
+  "emulab_user": "matthelb",
+  "experiment_name": "gryff",
+  "master_bin_name": "master",
+  "master_port": 7077,
+  "master_server_name": "california",
+  "max_bandwidth": "1gibps",
+  "max_file_descriptors": 65535,
+  "max_retries": 0,
+  "num_experiment_runs": 1,
+  "out_directory_name": "out",
+  "project_name": "cops",
+  "stats_file_name": "stats.json",
+  "server_bin_name": "server",
+  "server_cpuprofile": false,
+  "server_blockprofile": false,
+  "server_debug_output": false,
+  "server_durable": false,
+  "server_host_format_str": "%s.%s.%s.emulab.net",
+  "server_port": 7087,
+  "server_rpc_port": 8087,
+  "src_commit_hash": "master",
+  "src_directory": "/media/matthelb/DATA/projects/epaxos",
+  "codebase_name": "gryff",
+  "remote_bin_directory_nfs_enabled": false,
+  "server_emulate_wan": true,
+  "run_locally": false,
+  "default_remote_shell": "tcsh",
+  "client_disable_gc": true,
+  "server_disable_gc": true
+}
