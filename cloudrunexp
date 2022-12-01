@@ -24,7 +24,7 @@ while getopts 'm:f:c:d:' flag; do
   esac
 done
 
-if [[ $((clients * fanout % TOTALCLIENTMACHINES)) != 0 ]]
+if [ $((clients * fanout % TOTALCLIENTMACHINES)) != 0 ] && [ $((clients * fanout)) != 1 ]
 then
   echo "fanout multiplied by clients should be multiple of 5!"
   exit 1
@@ -44,7 +44,7 @@ function trap_ctrlc ()
     
     for i in "${!clientSERVERS[@]}"; do
       ssh -AX akalaba@pc${clientSERVERS[i]}.emulab.net "sudo kill ${clientPIDS[i]}"
-      echo "Killed ${clientPIDS[i]} on ${clientSERVERS[i]}"
+      echo "Killed CLIENT ${clientPIDS[i]} on ${clientSERVERS[i]}"
     done
  
 
@@ -119,18 +119,15 @@ echo "fanout = "$fanout
 echo "num_machines used = "$clients
 echo "num processes per machine = "$ans
 
-c1cmd="bin/client-ms-test -caddr "10.10.1.1" -pid 100 -fo 10 -w 50 -c 1 -k 1000000000"
 for ((i = 0; i < $clients; i++)); do
   for ((j = 0; j < $ans; j++)); do
-    echo "i = "$i
-    echo "j = "$j
     if [[ $mdl == true ]]
     then
-      read -r somevar < <(ssh -AX akalaba@pc${clientMachines[i]}.emulab.net "bin/client-ms-test -caddr '10.10.1.1' -pid $j -fo $fanout -w 50 -c 1 -k 1000000000"$postcursormdl)
-      #echo "bin/client-ms-test -caddr '10.10.1.1' -pid $((ans*i + j)) -fo $fanout -w 50 -c 1 -k 1000000000"$postcursormdl
+      read -r somevar < <(ssh -AX akalaba@pc${clientMachines[i]}.emulab.net $precursor"bin/client-ms-test -caddr '10.10.1.1' -pid $j -fo $fanout -w 50 -c 1 -k 1000000000"$postcursormdl)
+      #echo $precursor"bin/client-ms-test -caddr '10.10.1.1' -pid $((ans*i + j)) -fo $fanout -w 50 -c 1 -k 1000000000"$postcursormdl
     else
-      read -r somevar < <(ssh -AX akalaba@pc${clientMachines[i]}.emulab.net "bin/client-ms-test -caddr '10.10.1.1' -pid $j -fo $fanout -w 50 -c 1 -k 1000000000"$postcursorbasic)
-      #echo "bin/client-ms-test -caddr '10.10.1.1' -pid $((ans*i + j)) -fo $fanout -w 50 -c 1 -k 1000000000"$postcursorbasic
+      read -r somevar < <(ssh -AX akalaba@pc${clientMachines[i]}.emulab.net $precursor"bin/client-ms-test -caddr '10.10.1.1' -pid $j -fo $fanout -w 50 -c 1 -k 1000000000"$postcursorbasic)
+      #echo $precursor"bin/client-ms-test -caddr '10.10.1.1' -pid $((ans*i + j)) -fo $fanout -w 50 -c 1 -k 1000000000"$postcursorbasic
     fi
     echo "started pid"$((ans*i + j))
     clientPIDS[$((ans*i + j))]=$somevar

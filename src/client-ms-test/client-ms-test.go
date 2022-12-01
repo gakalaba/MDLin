@@ -93,6 +93,7 @@ func main() {
 	readers := make([]*bufio.Reader, N)
 	writers := make([]*bufio.Writer, N)
 
+  listenforshards = true
 	for i := 0; i < N; i++ {
 		var err error
 		shard_leaders[i], err = net.Dial("tcp", llReply.LeaderList[i]) //place the tcp connection object inside shard_leaders[i]
