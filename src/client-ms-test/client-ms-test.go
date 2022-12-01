@@ -129,6 +129,7 @@ func main() {
     return
   }
   defer file.Close()
+  total_trials = make([]int64, *trials)
   for trial:=0; trial<(*trials); trial++ {
     listenforshards = true
     ////////////////////////////////////////////////
