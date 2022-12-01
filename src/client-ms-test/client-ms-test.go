@@ -224,8 +224,8 @@ func main() {
         //log.Printf("Client %d completed", p.int64)
         tot := (p.Time).Sub(before_total)
         //log.Printf("Test took %v\n", tot)
-        file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
-
+        //file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
+        total_trials[trial] = tot.Milliseconds()
       }
       for i:=0; i<int(numshards); i++ {
         log.Printf("The total number of conflicts found on shard %d was %d", i, total_conflicts[i])
@@ -250,8 +250,14 @@ func main() {
     }
     listenforshards = false
   }
-  file.WriteString(fmt.Sprintf("SDL Fanout %d on client %d took %v\n", *fanout, *pid_base, getaverage(total_trials)))
-  log.Printf("Fanout %d, PID %d took %v", *fanout, *pid_base, total_trials)
+
+  if (*mdlin) {
+    file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", *fanout, *pid_base, getaverage(total_trials)))
+    log.Printf("Fanout %d, PID %d took %v", *fanout, *pid_base, total_trials)
+  } else {
+    file.WriteString(fmt.Sprintf("SDL Fanout %d on client %d took %v\n", *fanout, *pid_base, getaverage(total_trials)))
+    log.Printf("Fanout %d, PID %d took %v", *fanout, *pid_base, total_trials)
+  }
   ////////////////////////////////////////////////
   // Close Connections
   ////////////////////////////////////////////////

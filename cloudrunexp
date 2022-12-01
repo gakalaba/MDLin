@@ -43,9 +43,13 @@ function trap_ctrlc ()
     done
     
     for i in "${!clientPIDS[@]}"; do
-      sudo kill -9 ${clientPIDS[i]} 2>/dev/null
+      sudo kill -2 ${clientPIDS[i]} 2>/dev/null
     done
- 
+
+    sleep 3
+    for i in "${!clientPIDS[@]}"; do
+      sudo kill ${clientPIDS[i]}
+    done
     echo "ALL KILLED"
 
     # exit shell script with error code 2
