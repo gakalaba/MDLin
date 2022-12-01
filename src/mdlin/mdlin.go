@@ -65,7 +65,7 @@ type Replica struct {
   interShardChan chan *genericsmr.RPCMessage
   interShardReplyChan chan *genericsmr.RPCMessage
   shListener net.Listener
-  propagatedbd       []mdlinproto.Tag
+  propagatedbd       [][]mdlinproto.Tag
   buflock *sync.Mutex
   num_conflicts int64
 }
@@ -151,7 +151,7 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int,
     make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
     make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
     nil,
-    make([]mdlinproto.Tag, 0),
+    make([][]mdlinproto.Tag, 0),
     new(sync.Mutex),
     0}
 
@@ -761,10 +761,12 @@ func (r *Replica) addEntryToLog(cmds []state.Command, proposals []*genericsmr.MD
   if len(r.propagatedbd) == 0 {
     initial_logdeps = nil
   } else {
-    initial_logdeps = r.propagatedbd //FIXME do we need a lock around this????
+		for _, pbd := range r.propagatedbd {
+			initial_logdeps = append(initial_logdeps, pbd...) //FIXME do we need a lock around this????
+		}
   }
   new_logdeps := make([][]mdlinproto.Tag, 0)
-  r.propagatedbd = append(r.propagatedbd, batchdeps...) // propagate more bds
+  r.propagatedbd = append(r.propagatedbd, batchdeps) // propagate more bds
   if r.defaultBallot == -1 {
     r.instanceSpace[r.crtInstance] = &Instance{
       cmds,
