@@ -1,0 +1,66 @@
+#!/bin/bash
+
+fanout=''
+clients=''
+mdl=''
+addr=''
+base=''
+
+print_usage() {
+  printf "Usage: was wrong!..."
+}
+
+while getopts 'm:f:c:s:p:' flag; do
+  case "${flag}" in
+    m) mdl="${OPTARG}" ;;
+    f) fanout="${OPTARG}" ;;
+    c) clients="${OPTARG}" ;;
+    s) addr="${OPTARG}" ;;
+    p) base="${OPTARG}" ;;
+    *) print_usage
+       exit 1 ;;
+  esac
+done
+
+# this function is called when Ctrl-C is sent
+function trap_ctrlc ()
+{
+
+    # perform cleanup here
+    echo "Ctrl-C caught...performing clean up"
+
+    # for i in "${!clientPIDS[@]}"; do
+    #   ssh -AX akalaba@pc$addr.emulab.net "sudo kill ${clientPIDS[i]}"
+    #   #echo "Killed CLIENT ${clientPIDS[i]} on $addr"
+    # done
+ 
+    pkill -9 -f "bin/client-ms-test"
+    echo "ALL KILLED"
+
+    # exit shell script with error code 2
+    # if omitted, shell script will continue execution
+    exit 2
+}
+ 
+# initialise trap to call trap_ctrlc function
+# when signal 2 (SIGINT) is received
+trap "trap_ctrlc" 2
+
+precursor="cd ~/MDLin; nohup "
+postcursormdl=" -mdl true </dev/null >/dev/null 2>outerr.txt & echo \$! & "
+postcursorbasic=" </dev/null >/dev/null 2>outerr.txt & echo \$! & "
+
+allprocesses=''
+
+for ((j = 0; j < $clients; j++)); do
+  if [[ $mdl == true ]]
+  then
+    allprocesses=$allprocesses$precursor"bin/client-ms-test -caddr '10.10.1.1' -pid $((clients*base + j)) -fo $fanout -w 50 -c 1 -k 1000000000"$postcursormdl
+  else
+    allprocesses=$allprocesses$precursor"bin/client-ms-test -caddr '10.10.1.1' -pid $((clients*base + j)) -fo $fanout -w 50 -c 1 -k 1000000000"$postcursorbasic
+  fi
+done
+
+ssh -AX akalaba@pc$addr.emulab.net $allprocesses
+echo "All clients submitted!"
+sleep 1000000000

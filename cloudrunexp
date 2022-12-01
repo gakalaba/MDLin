@@ -10,7 +10,7 @@ mdl=''
 doscale=''
 
 print_usage() {
-  printf "Usage: was wrong!..."
+  printf "Usage: was wrong!... need -m <bool> -d <bool> -f <int> -c <int>"
 }
 
 while getopts 'm:f:c:d:' flag; do
@@ -42,11 +42,11 @@ function trap_ctrlc ()
       echo "Killed ${names[i]}"
     done
     
-    for i in "${!clientSERVERS[@]}"; do
-      ssh -AX akalaba@pc${clientSERVERS[i]}.emulab.net "sudo kill ${clientPIDS[i]}"
-      echo "Killed CLIENT ${clientPIDS[i]} on ${clientSERVERS[i]}"
+    for i in "${!clientPIDS[@]}"; do
+      sudo kill -9 ${clientPIDS[i]} 2>/dev/null
     done
  
+    echo "ALL KILLED"
 
     # exit shell script with error code 2
     # if omitted, shell script will continue execution
@@ -100,8 +100,6 @@ done
 echo "Cluster setup!"
 
 clientPIDS=()
-clientSERVERS=()
-
 if [ $mdl == false ] && [ $doscale == true ]
 then
   clients=$((clients * fanout))
@@ -119,20 +117,9 @@ echo "fanout = "$fanout
 echo "num_machines used = "$clients
 echo "num processes per machine = "$ans
 
-for ((i = 0; i < $clients; i++)); do
-  for ((j = 0; j < $ans; j++)); do
-    if [[ $mdl == true ]]
-    then
-      read -r somevar < <(ssh -AX akalaba@pc${clientMachines[i]}.emulab.net $precursor"bin/client-ms-test -caddr '10.10.1.1' -pid $((ans*i + j)) -fo $fanout -w 50 -c 1 -k 1000000000"$postcursormdl)
-      #echo $precursor"bin/client-ms-test -caddr '10.10.1.1' -pid $((ans*i + j)) -fo $fanout -w 50 -c 1 -k 1000000000"$postcursormdl
-    else
-      read -r somevar < <(ssh -AX akalaba@pc${clientMachines[i]}.emulab.net $precursor"bin/client-ms-test -caddr '10.10.1.1' -pid $((ans*i + j)) -fo $fanout -w 50 -c 1 -k 1000000000"$postcursorbasic)
-      #echo $precursor"bin/client-ms-test -caddr '10.10.1.1' -pid $((ans*i + j)) -fo $fanout -w 50 -c 1 -k 1000000000"$postcursorbasic
-    fi
-    echo "started pid"$((ans*i + j))
-    clientPIDS[$((ans*i + j))]=$somevar
-    clientSERVERS[$((ans*i + j))]=${clientMachines[i]}
-  done
+for ((i = 0; i<$clients; i++)); do
+  ./clientoncloud -m $mdl -s ${clientMachines[i]} -f $fanout -c $ans -p $i &
+  clientPIDS[i]=$!
 done
-
+echo "All clients submitted!"
 sleep 1000000000

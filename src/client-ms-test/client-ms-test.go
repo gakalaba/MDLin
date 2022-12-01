@@ -45,6 +45,8 @@ var reqarray []state.Operation
 var numshards int64
 var total_conflicts []int64
 
+var total_trials []int64
+
 var listenforshards bool
 var seqno map[int64](map[int64]int64)
 func newResponseArray(f int) []int {
@@ -53,6 +55,14 @@ func newResponseArray(f int) []int {
 		rsp[i] = -1
 	}
 	return rsp
+}
+
+func getaverage(f []int64) float64 {
+  var total int64 = 0
+  for _, e := range f {
+    total += e
+  }
+  return float64(total)/float64(len(f))
 }
 
 func main() {
@@ -113,6 +123,12 @@ func main() {
   //log.Printf("Fanout = %d, writes = %d, clients = %d, keys = %d", *fanout, *writes, *clients, *keys)
 
   seqno = make(map[int64](map[int64]int64), 0)
+  file, ferr := os.OpenFile("/users/akalaba/MDLin/ms-test.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0777)
+  if ferr != nil {
+    log.Println("file error oh no", ferr)
+    return
+  }
+  defer file.Close()
   for trial:=0; trial<(*trials); trial++ {
     listenforshards = true
     ////////////////////////////////////////////////
@@ -133,12 +149,6 @@ func main() {
       }
     }
     start := 0
-    file, ferr := os.OpenFile("/users/akalaba/MDLin/ms-test.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0777)
-    if ferr != nil {
-      log.Println("file error oh no", ferr)
-      return
-    }
-    defer file.Close()
     reqs := make([]mdlinproto.Propose, num_requests)
     reqs_sdl := make([]genericsmrproto.Propose, num_requests)
     larray := make([]int64, num_requests)
@@ -233,11 +243,14 @@ func main() {
         //log.Printf("Client %d completed", p.int64)
         tot := (p.Time).Sub(before_total)
         //log.Printf("Test took %v\n", tot)
-        file.WriteString(fmt.Sprintf("SDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
+        //file.WriteString(fmt.Sprintf("SDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
+        total_trials[trial] = tot.Milliseconds()
       }
     }
     listenforshards = false
   }
+  file.WriteString(fmt.Sprintf("SDL Fanout %d on client %d took %v\n", *fanout, *pid_base, getaverage(total_trials)))
+  log.Printf("Fanout %d, PID %d took %v", *fanout, *pid_base, total_trials)
   ////////////////////////////////////////////////
   // Close Connections
   ////////////////////////////////////////////////
@@ -247,7 +260,6 @@ func main() {
 		}
 	}
 	coordinator.Close()
-
 }
 
 //////////////////////////////
