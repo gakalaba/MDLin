@@ -1,5 +1,33 @@
 #!/bin/bash
- 
+
+clientMachines=(475 430 434 422 438)
+addrId=(477 419 427 440 474 439 429 479 432 473 480 420 423)
+TOTALCLIENTMACHINES="${#clientMachines[@]}"
+
+fanout=''
+clients=''
+mdl=''
+
+print_usage() {
+  printf "Usage: was wrong!..."
+}
+
+while getopts 'm:f:c:' flag; do
+  case "${flag}" in
+    m) mdl="${OPTARG}" ;;
+    f) fanout="${OPTARG}" ;;
+    c) clients="${OPTARG}" ;;
+    *) print_usage
+       exit 1 ;;
+  esac
+done
+
+if [[ $((clients * fanout % TOTALCLIENTMACHINES)) != 0 ]]
+then
+  echo "fanout multiplied by clients should be multiple of 5!"
+  exit 1
+fi
+
 # this function is called when Ctrl-C is sent
 function trap_ctrlc ()
 {
@@ -11,7 +39,13 @@ function trap_ctrlc ()
       ssh -AX akalaba@pc${addrId[i]}.emulab.net "sudo kill ${PIDS[i]}"
       echo "Killed ${names[i]}"
     done
+    
+    for i in "${!clientSERVERS[@]}"; do
+      ssh -AX akalaba@pc${clientSERVERS[i]}.emulab.net "sudo kill ${clientPIDS[i]}"
+      echo "Killed ${clientPIDS[i]} on ${clientSERVERS[i]}"
+    done
  
+
     # exit shell script with error code 2
     # if omitted, shell script will continue execution
     exit 2
@@ -40,21 +74,17 @@ s3r1cmd="bin/server -port 7076 -maddr '10.10.1.10' -mport 7089 -addr '10.10.1.13
 s3r2cmd="bin/server -port 7077 -maddr '10.10.1.10' -mport 7089 -addr '10.10.1.12'"
 s3r3cmd="bin/server -port 7078 -maddr '10.10.1.10' -mport 7089 -addr '10.10.1.11'"
 
-
-c1cmd="bin/client-ms-test -caddr "10.10.1.1" -pid 100 -fo 10 -w 50 -c 1 -k 1000000000"
-#c2cmd="bin/client-ms-test -caddr "10.10.1.1" -pid 200 -fo 2 -w 50 -c 1 -k 1000000000"
-
 precursor="cd ~/MDLin; nohup "
 postcursormdl=" -mdl true </dev/null >/dev/null 2>outerr.txt & echo \$!"
 postcursorbasic=" </dev/null >/dev/null 2>outerr.txt & echo \$!"
 
 PIDS=()
-addrId=(477 419 427 440 474 439 429 479 432 473 480 420 423 475 430) #434 422 438)
-cmds=("$coordcmd" "$m1cmd" "$m2cmd" "$m3cmd" "$s1r1cmd" "$s1r2cmd" "$s1r3cmd" "$s2r1cmd" "$s2r2cmd" "$s2r3cmd" "$s3r1cmd" "$s3r2cmd" "$s3r3cmd" "$c1cmd")
-names=(coord m1 m2 m3 s1r1 s1r2 s1r3 s2r1 s2r2 s2r3 s3r1 s3r2 s3r3 c1 c2)
+cmds=("$coordcmd" "$m1cmd" "$m2cmd" "$m3cmd" "$s1r1cmd" "$s1r2cmd" "$s1r3cmd" "$s2r1cmd" "$s2r2cmd" "$s2r3cmd" "$s3r1cmd" "$s3r2cmd" "$s3r3cmd")
+names=(coord m1 m2 m3 s1r1 s1r2 s1r3 s2r1 s2r2 s2r3 s3r1 s3r2 s3r3)
+
 for ((i = 0; i < ${#cmds[@]}; i++)); do
   echo $i
-  if [ "$1" == "mdl" ] && [ $i -gt 3 ]
+  if [ $mdl == true ] && [ $i -gt 3 ]
   then
     read -r somevar < <(ssh -AX akalaba@pc${addrId[i]}.emulab.net $precursor${cmds[i]}$postcursormdl)
     echo "Setup MDL ${names[i]}..."
@@ -65,6 +95,45 @@ for ((i = 0; i < ${#cmds[@]}; i++)); do
   PIDS[i]=$somevar
   sleep 3
 done
+echo "Cluster setup!"
 
-echo "Done!"
+clientPIDS=()
+clientSERVERS=()
+
+if [[ $mdl == false ]]
+then
+  clients=$((clients * fanout))
+fi
+ans=$((clients / TOTALCLIENTMACHINES))
+
+if [[ $clients -gt $TOTALCLIENTMACHINES ]]
+then
+  clients=5
+else
+  ans=1
+fi
+echo "mdl = "$mdl
+echo "fanout = "$fanout
+echo "num_machines used = "$clients
+echo "num processes per machine = "$ans
+
+c1cmd="bin/client-ms-test -caddr "10.10.1.1" -pid 100 -fo 10 -w 50 -c 1 -k 1000000000"
+for ((i = 0; i < $clients; i++)); do
+  for ((j = 0; j < $ans; j++)); do
+    echo "i = "$i
+    echo "j = "$j
+    if [[ $mdl == true ]]
+    then
+      read -r somevar < <(ssh -AX akalaba@pc${clientMachines[i]}.emulab.net "bin/client-ms-test -caddr '10.10.1.1' -pid $j -fo $fanout -w 50 -c 1 -k 1000000000"$postcursormdl)
+      #echo "bin/client-ms-test -caddr '10.10.1.1' -pid $((ans*i + j)) -fo $fanout -w 50 -c 1 -k 1000000000"$postcursormdl
+    else
+      read -r somevar < <(ssh -AX akalaba@pc${clientMachines[i]}.emulab.net "bin/client-ms-test -caddr '10.10.1.1' -pid $j -fo $fanout -w 50 -c 1 -k 1000000000"$postcursorbasic)
+      #echo "bin/client-ms-test -caddr '10.10.1.1' -pid $((ans*i + j)) -fo $fanout -w 50 -c 1 -k 1000000000"$postcursorbasic
+    fi
+    echo "started pid"$((ans*i + j))
+    clientPIDS[$((ans*i + j))]=$somevar
+    clientSERVERS[$((ans*i + j))]=${clientMachines[i]}
+  done
+done
+
 sleep 1000000000

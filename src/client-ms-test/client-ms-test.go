@@ -32,7 +32,7 @@ var keys *int = flag.Int("k", 10, "Number of keys. Defaults to 10.")
 var check = flag.Bool("check", false, "Check correctness. Defaults to false.")
 var s = flag.Float64("s", 2, "Zipfian s parameter")
 var v = flag.Float64("v", 1, "Zipfian v parameter")
-
+var trials *int = flag.Int("t", 10, "Trials. Defaults to 10")
 var N int
 
 var successful []int
@@ -44,6 +44,9 @@ var reqarray []state.Operation
 
 var numshards int64
 var total_conflicts []int64
+
+var listenforshards bool
+var seqno map[int64](map[int64]int64)
 func newResponseArray(f int) []int {
 	rsp := make([]int, f)
 	for i := 0; i < f; i++ {
@@ -107,129 +110,132 @@ func main() {
   numshards = int64(len(shard_leaders))
   total_conflicts = make([]int64, numshards)
   //log.Printf("Fanout = %d, writes = %d, clients = %d, keys = %d", *fanout, *writes, *clients, *keys)
-  ////////////////////////////////////////////////
-	// Prepare the requests! 
-	////////////////////////////////////////////////
-  if (*mdlin == false) {
-    *clients = (*fanout)*(*clients)
-  }
-  num_requests := (*fanout)*(*clients)
-  karray = make([]int64, num_requests)
-  rarray = make([]int64, num_requests)
-  reqarray = make([]state.Operation, num_requests)
-  for i:=0; i<num_requests; i++ {
-    rand.Seed(time.Now().UnixNano())
-    karray[i] = int64(rand.Intn(*keys)) //TODO change me when not uniform
-    n := rand.Intn(100)
-    if n < *writes {
-      reqarray[i] = state.PUT
-    } else {
-      reqarray[i] = state.GET
+
+  seqno = make(map[int64](map[int64]int64), 0)
+  for trial:=0; trial<(*trials); trial++ {
+    listenforshards = true
+    ////////////////////////////////////////////////
+    // Prepare the requests! 
+    ////////////////////////////////////////////////
+    num_requests := (*fanout)*(*clients)
+    karray = make([]int64, num_requests)
+    rarray = make([]int64, num_requests)
+    reqarray = make([]state.Operation, num_requests)
+    for i:=0; i<num_requests; i++ {
+      rand.Seed(time.Now().UnixNano())
+      karray[i] = int64(rand.Intn(*keys)) //TODO change me when not uniform
+      n := rand.Intn(100)
+      if n < *writes {
+        reqarray[i] = state.PUT
+      } else {
+        reqarray[i] = state.GET
+      }
     }
-  }
-  start := 0
-  file, ferr := os.OpenFile("/users/akalaba/MDLin/ms-test.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0777)
-	if ferr != nil {
-		log.Println("file error oh no", ferr)
-		return
-	}
-	defer file.Close()
-  reqs := make([]mdlinproto.Propose, num_requests)
-  reqs_sdl := make([]genericsmrproto.Propose, num_requests)
-  larray := make([]int64, num_requests)
-  complete := make(chan struct {time.Time; int64}, *clients)
-  submitted := make(chan int64, *clients)
-  buflock := new(sync.Mutex)
-  for t:=0;t < *clients;t++ {
-    if (*mdlin) {
-      go runTestMDL(int64(*pid_base+t), *fanout, start, start + *fanout, file, complete, submitted, &reqs, &larray)
-    } else {
-      go runTestSDL(int64(*pid_base+t), start, start + *fanout, complete, submitted, &reqs_sdl, &larray, writers, buflock)
+    start := 0
+    file, ferr := os.OpenFile("/users/akalaba/MDLin/ms-test.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0777)
+    if ferr != nil {
+      log.Println("file error oh no", ferr)
+      return
     }
-    start += *fanout
-  }
-
-  for i:=0;i<*clients;i++ {
-    <-submitted
-  }
-
-
-  // shuffle requests
-  if (*mdlin && *clients > 1) {
-    rand.Seed(time.Now().UnixNano())
-    for i := range reqs {
-      j := rand.Intn(i + 1)
-      reqs[i], reqs[j] = reqs[j], reqs[i]
-      larray[i], larray[j] = larray[j], larray[i]
+    defer file.Close()
+    reqs := make([]mdlinproto.Propose, num_requests)
+    reqs_sdl := make([]genericsmrproto.Propose, num_requests)
+    larray := make([]int64, num_requests)
+    complete := make(chan struct {time.Time; int64}, *clients)
+    submitted := make(chan int64, *clients)
+    buflock := new(sync.Mutex)
+    for t:=0;t < *clients;t++ {
+      if (*mdlin) {
+        go runTestMDL(int64(*pid_base+t), *fanout, start, start + *fanout, file, complete, submitted, &reqs, &larray)
+      } else {
+        go runTestSDL(int64(*pid_base+t), start, start + *fanout, complete, submitted, &reqs_sdl, &larray, writers, buflock)
+      }
+      start += *fanout
     }
-  }
 
-  // Nicely print the batches and the shard arrival logs
-  for j:=0; j<*clients;j++ {
-    log.Printf("Client %d:", j+*pid_base)
-    for k:=0; k<*fanout; k++ {
-      for i:=0; i<num_requests; i++ {
-        arg := reqs[i]
-        argsdl := reqs_sdl[i]
-        if arg.PID == int64(j+*pid_base) && int(arg.CommandId - int32(*pid_base*10000)) == k+j*(*fanout){
-          log.Printf("    CommandId %d-->%d: %s", arg.CommandId, larray[i], commandToStr(arg.Command))
-        } else if (*mdlin == false) {
-          if (int(argsdl.CommandId - int32(*pid_base*10000)) == k+j*(*fanout)) {
-            log.Printf("    CommandId %d-->%d: %s", argsdl.CommandId, larray[i], commandToStr(argsdl.Command))
+    for i:=0;i<*clients;i++ {
+      <-submitted
+    }
+
+
+    // shuffle requests
+    if (*mdlin && *clients > 1) {
+      rand.Seed(time.Now().UnixNano())
+      for i := range reqs {
+        j := rand.Intn(i + 1)
+        reqs[i], reqs[j] = reqs[j], reqs[i]
+        larray[i], larray[j] = larray[j], larray[i]
+      }
+    }
+
+    // Nicely print the batches and the shard arrival logs
+    for j:=0; j<*clients;j++ {
+      log.Printf("Client %d:", j+*pid_base)
+      for k:=0; k<*fanout; k++ {
+        for i:=0; i<num_requests; i++ {
+          arg := reqs[i]
+          argsdl := reqs_sdl[i]
+          if arg.PID == int64(j+*pid_base) && int(arg.CommandId - int32(*pid_base*10000)) == k+j*(*fanout){
+            log.Printf("    CommandId %d-->%d: %s", arg.CommandId, larray[i], commandToStr(arg.Command))
+          } else if (*mdlin == false) {
+            if (int(argsdl.CommandId - int32(*pid_base*10000)) == k+j*(*fanout)) {
+              log.Printf("    CommandId %d-->%d: %s", argsdl.CommandId, larray[i], commandToStr(argsdl.Command))
+            }
           }
         }
       }
     }
-  }
-  if (*mdlin && *clients > 1) {
-    for j:=0; int64(j)<numshards;j++ {
-      log.Printf("Shard %d Log:", j)
-      for i:=0; i<num_requests; i++ {
-        arg := reqs[i]
-        leader := larray[i]
-        if leader == int64(j) {
-          log.Printf("     Client %d, CommandId %d: %s", arg.PID, arg.CommandId, commandToStr(arg.Command))
+    if (*mdlin && *clients > 1) {
+      for j:=0; int64(j)<numshards;j++ {
+        log.Printf("Shard %d Log:", j)
+        for i:=0; i<num_requests; i++ {
+          arg := reqs[i]
+          leader := larray[i]
+          if leader == int64(j) {
+            log.Printf("     Client %d, CommandId %d: %s", arg.PID, arg.CommandId, commandToStr(arg.Command))
+          }
         }
       }
     }
-  }
 
-  if (*mdlin) {
-    before_total := time.Now()
-    for i:=0; i<num_requests; i++ {
-      leader := larray[i]
-      arg := reqs[i]
-      writers[leader].WriteByte(mdlinproto.PROPOSE)
-      arg.Marshal(writers[leader])
-      writers[leader].Flush()
-    }
-    for i:=0;i<*clients;i++ {
-      p := <-complete
-      //log.Printf("Client %d completed", p.int64)
-      tot := (p.Time).Sub(before_total)
-      //log.Printf("Test took %v\n", tot)
-      file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
+    if (*mdlin) {
+      before_total := time.Now()
+      for i:=0; i<num_requests; i++ {
+        leader := larray[i]
+        arg := reqs[i]
+        writers[leader].WriteByte(mdlinproto.PROPOSE)
+        arg.Marshal(writers[leader])
+        writers[leader].Flush()
+      }
+      for i:=0;i<*clients;i++ {
+        p := <-complete
+        //log.Printf("Client %d completed", p.int64)
+        tot := (p.Time).Sub(before_total)
+        //log.Printf("Test took %v\n", tot)
+        file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
 
+      }
+      for i:=0; i<int(numshards); i++ {
+        log.Printf("The total number of conflicts found on shard %d was %d", i, total_conflicts[i])
+      }
+    } else {
+      before_total := time.Now()
+      for i:=0; i<*clients; i++ {
+        leader := larray[i*(*fanout)]
+        arg := reqs_sdl[i*(*fanout)]
+        writers[leader].WriteByte(genericsmrproto.PROPOSE)
+        arg.Marshal(writers[leader])
+        writers[leader].Flush()
+      }
+      for i:=0;i<*clients;i++ {
+        p := <-complete
+        //log.Printf("Client %d completed", p.int64)
+        tot := (p.Time).Sub(before_total)
+        //log.Printf("Test took %v\n", tot)
+        file.WriteString(fmt.Sprintf("SDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
+      }
     }
-    for i:=0; i<int(numshards); i++ {
-      log.Printf("The total number of conflicts found on shard %d was %d", i, total_conflicts[i])
-    }
-  } else {
-    before_total := time.Now()
-    for i:=0; i<*clients; i++ {
-      leader := larray[i*(*fanout)]
-      arg := reqs_sdl[i*(*fanout)]
-      writers[leader].WriteByte(genericsmrproto.PROPOSE)
-      arg.Marshal(writers[leader])
-      writers[leader].Flush()
-    }
-    for i:=0;i<*clients;i++ {
-      p := <-complete
-      //log.Printf("Client %d completed", p.int64)
-      tot := (p.Time).Sub(before_total)
-      //log.Printf("Test took %v\n", tot)
-      file.WriteString(fmt.Sprintf("SDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
-    }
+    listenforshards = false
   }
   ////////////////////////////////////////////////
   // Close Connections
@@ -250,15 +256,17 @@ func runTestMDL(pid int64, f int, start_index int, end_index int, file *os.File,
   go waitRepliesMDL(start_index, end_index, completed, pid)
   var arg mdlinproto.Propose
   deps := make([]mdlinproto.Tag, 0)
-  seqno := make(map[int64]int64, 0)
+  if _, ok := seqno[pid]; !ok {
+    seqno[pid] = make(map[int64]int64, 0)
+  }
   for i:= start_index; i<end_index; i++ {
     leader := karray[i]%numshards
-    if _, ok := seqno[leader]; !ok {
-      seqno[leader] = 0
+    if _, ok := seqno[pid][leader]; !ok {
+      seqno[pid][leader] = 0
     } else {
-      seqno[leader]++
+      seqno[pid][leader]++
     }
-    arg = mdlinproto.Propose{int32(i+(*pid_base*10000)), state.Command{reqarray[i], state.Key(karray[i]), state.Value(i)}, 0, seqno[leader], pid, deps}
+    arg = mdlinproto.Propose{int32(i+(*pid_base*10000)), state.Command{reqarray[i], state.Key(karray[i]), state.Value(i)}, 0, seqno[pid][leader], pid, deps}
     (*reqs)[i] = arg
     (*larray)[i] = leader
     deps = append(deps, mdlinproto.Tag{state.Key(karray[i]), -1, pid, int32(i+(*pid_base*10000))})
@@ -336,7 +344,7 @@ func shardListener(readers []*bufio.Reader, shard int) {
   replysdl := new(genericsmrproto.ProposeReply)
 	var err error
 	var msgType byte
-	for true {
+	for listenforshards {
 		if (*mdlin) {
       if msgType, err = readers[shard].ReadByte(); err != nil ||
 			  msgType != mdlinproto.PROPOSE_REPLY {
