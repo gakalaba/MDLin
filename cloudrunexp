@@ -7,16 +7,18 @@ TOTALCLIENTMACHINES="${#clientMachines[@]}"
 fanout=''
 clients=''
 mdl=''
+doscale=''
 
 print_usage() {
   printf "Usage: was wrong!..."
 }
 
-while getopts 'm:f:c:' flag; do
+while getopts 'm:f:c:d:' flag; do
   case "${flag}" in
     m) mdl="${OPTARG}" ;;
     f) fanout="${OPTARG}" ;;
     c) clients="${OPTARG}" ;;
+    d) doscale="${OPTARG}" ;;
     *) print_usage
        exit 1 ;;
   esac
@@ -100,7 +102,7 @@ echo "Cluster setup!"
 clientPIDS=()
 clientSERVERS=()
 
-if [[ $mdl == false ]]
+if [ $mdl == false ] && [ $doscale == true ]
 then
   clients=$((clients * fanout))
 fi
