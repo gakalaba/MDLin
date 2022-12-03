@@ -36,6 +36,9 @@ const (
 	Gryff_READ_REPLY
 	Gryff_WRITE
 	Gryff_WRITE_REPLY
+
+	MDL_PROPOSE
+	MDL_PROPOSE_REPLY
 )
 
 type Ping struct {

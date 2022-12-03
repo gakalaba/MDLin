@@ -10,6 +10,7 @@ import (
 	"genericsmrproto"
 	"io"
 	"log"
+	"mdlinproto"
 	"net"
 	"os"
 	"state"
@@ -29,6 +30,11 @@ type RPCPair struct {
 
 type Propose struct {
 	*genericsmrproto.Propose
+	Reply *bufio.Writer
+}
+
+type MDLPropose struct {
+	*mdlinproto.Propose
 	Reply *bufio.Writer
 }
 
@@ -61,6 +67,8 @@ type Replica struct {
 
 	ProposeChan chan *Propose // channel for client proposals
 	BeaconChan  chan *Beacon  // channel for beacons from peer replicas
+
+	MDLProposeChan chan *MDLPropose
 
 	Shutdown bool
 
@@ -107,6 +115,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
 		state.NewState(),
 		make(chan *Propose, CHAN_BUFFER_SIZE),
 		make(chan *Beacon, CHAN_BUFFER_SIZE),
+		make(chan *MDLPropose, CHAN_BUFFER_SIZE),
 		false,
 		thrifty,
 		exec,
@@ -482,6 +491,15 @@ func (r *Replica) clientListener(conn net.Conn) {
 			r.ProposeChan <- &Propose{prop, writer}
 			break
 
+		case clientproto.MDL_PROPOSE:
+			prop := new(mdlinproto.Propose)
+			if err = prop.Unmarshal(reader); err != nil {
+				errS = "reading MDL_PROPOSE"
+				break
+			}
+			r.MDLProposeChan <- &MDLPropose{prop, writer}
+			break
+
 		case clientproto.GEN_READ:
 			read := new(genericsmrproto.Read)
 			if err = read.Unmarshal(reader); err != nil {
@@ -499,6 +517,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 			}
 			//r.ProposeAndReadChan <- pr
 			break
+
 		default:
 			if rpair, present := r.clientRpcTable[msgType]; present {
 				obj := rpair.Obj.New()
@@ -561,6 +580,12 @@ func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio
 	//r.clientMutex.Lock()
 	//defer r.clientMutex.Unlock()
 	w.WriteByte(clientproto.GEN_PROPOSE_REPLY)
+	reply.Marshal(w)
+	w.Flush()
+}
+
+func (r *Replica) MDReplyPropose(reply *mdlinproto.ProposeReply, w *bufio.Writer) {
+	w.WriteByte(clientproto.MDL_PROPOSE_REPLY)
 	reply.Marshal(w)
 	w.Flush()
 }

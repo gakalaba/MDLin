@@ -2,6 +2,7 @@ package state
 
 import (
 	"log"
+	"sync"
 )
 
 type Operation uint8
@@ -21,6 +22,7 @@ type Value int64
 const NIL Value = 0
 
 type Key int64
+
 type Version int64
 
 type Command struct {
@@ -28,6 +30,34 @@ type Command struct {
 	K        Key
 	V        Value
 	OldValue Value
+}
+
+var versions map[Key]Version
+var vlock *sync.Mutex
+
+func GetVersion(command *Command) Version {
+	vlock.Lock()
+	defer vlock.Unlock()
+
+	if _, ok := versions[command.K]; !ok {
+		versions[command.K] = 0
+	}
+	return versions[command.K]
+}
+
+func KeyModulo(k Key, n int) int64 {
+	return int64(k) % int64(n)
+}
+
+func IncrVersion(command *Command) Version {
+	vlock.Lock()
+	defer vlock.Unlock()
+
+	if _, ok := versions[command.K]; !ok {
+		versions[command.K] = 0
+	}
+	versions[command.K]++
+	return versions[command.K]
 }
 
 type State struct {
@@ -46,6 +76,8 @@ func NewState() *State {
 		 return &State{d}
 	*/
 
+	versions = make(map[Key]Version)
+	vlock = new(sync.Mutex)
 	return &State{make(map[Key]Value)}
 }
 
@@ -132,4 +164,22 @@ func (c *Command) Execute(st *State) Value {
 	}
 
 	return NIL
+}
+
+func AllReads(cmds []Command) bool {
+	for i := range cmds {
+		if cmds[i].Op != GET {
+			return false
+		}
+	}
+	return true
+}
+
+func AllWrites(cmds []Command) bool {
+	for i := range cmds {
+		if cmds[i].Op != PUT {
+			return false
+		}
+	}
+	return true
 }

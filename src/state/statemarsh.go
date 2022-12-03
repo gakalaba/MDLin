@@ -1,9 +1,9 @@
 package state
 
 import (
+	"encoding/binary"
 	"io"
 	"sync"
-	"encoding/binary"
 )
 
 func (t *Command) BinarySize() (nbytes int, sizeKnown bool) {
@@ -11,8 +11,8 @@ func (t *Command) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type CommandCache struct {
-	mu	sync.Mutex
-	cache	[]*Command
+	mu    sync.Mutex
+	cache []*Command
 }
 
 func NewCommandCache() *CommandCache {
@@ -102,6 +102,13 @@ func (t *Value) Marshal(w io.Writer) {
 	w.Write(bs)
 }
 
+func (t *Version) Marshal(w io.Writer) {
+	var b [8]byte
+	bs := b[:8]
+	binary.LittleEndian.PutUint64(bs, uint64(*t))
+	w.Write(bs)
+}
+
 func (t *Key) Unmarshal(r io.Reader) error {
 	var b [8]byte
 	bs := b[:8]
@@ -119,5 +126,15 @@ func (t *Value) Unmarshal(r io.Reader) error {
 		return err
 	}
 	*t = Value(binary.LittleEndian.Uint64(bs))
+	return nil
+}
+
+func (t *Version) Unmarshal(r io.Reader) error {
+	var b [8]byte
+	bs := b[:8]
+	if _, err := io.ReadFull(r, bs); err != nil {
+		return err
+	}
+	*t = Version(binary.LittleEndian.Uint64(bs))
 	return nil
 }

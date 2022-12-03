@@ -1,9 +1,10 @@
 package mysort
+
 /* From cmu mergesort, originally in python */
 import (
-  "genericsmr"
-  "mdlinproto"
-  "math"
+	"genericsmr"
+	"math"
+	"mdlinproto"
 )
 
 /*
@@ -28,23 +29,23 @@ func merge(a []*genericsmr.MDLPropose, start1 int, start2 int, end int) {
 	index1 := start1
 	index2 := start2
 	length := end - start1
-  aux := make([]*genericsmr.MDLPropose, length)
-  var elem *genericsmr.MDLPropose
+	aux := make([]*genericsmr.MDLPropose, length)
+	var elem *genericsmr.MDLPropose
 	for i := 0; i < length; i++ {
 		if (index1 == start2) || ((index2 != end) && (a[index1].SeqNo < a[index2].SeqNo)) {
 			elem = a[index2]
 			index2 += 1
 		} else {
-      elem = a[index1]
+			elem = a[index1]
 			index1 += 1
 		}
-    mdlp := new(mdlinproto.Propose)
-    mdlp.CommandId = elem.CommandId
-    mdlp.Command = elem.Command
-    mdlp.Timestamp = elem.Timestamp
-    mdlp.SeqNo = elem.SeqNo
-    mdlp.PID = elem.PID
-    aux[i] = &genericsmr.MDLPropose{mdlp, elem.Reply} // This is copying the bufio object :D
+		mdlp := new(mdlinproto.Propose)
+		mdlp.CommandId = elem.CommandId
+		mdlp.Command = elem.Command
+		mdlp.Timestamp = elem.Timestamp
+		mdlp.SeqNo = elem.SeqNo
+		mdlp.PID = elem.PID
+		aux[i] = &genericsmr.MDLPropose{mdlp, elem.Reply} // This is copying the bufio object :D
 	}
 	for i := start1; i < end; i++ {
 		a[i] = aux[i-start1]
@@ -65,7 +66,7 @@ def mergeSort(a):
 
 func MergeSort(a []*genericsmr.MDLPropose) {
 	step := 1
-  n := len(a)
+	n := len(a)
 	var start2 int
 	var end int
 	for step < n {

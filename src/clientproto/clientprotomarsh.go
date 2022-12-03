@@ -10,8 +10,8 @@ func (t *Ping) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type PingCache struct {
-	mu    sync.Mutex
-	cache []*Ping
+	mu	sync.Mutex
+	cache	[]*Ping
 }
 
 func NewPingCache() *PingCache {
@@ -76,8 +76,8 @@ func (t *PingReply) BinarySize() (nbytes int, sizeKnown bool) {
 }
 
 type PingReplyCache struct {
-	mu    sync.Mutex
-	cache []*PingReply
+	mu	sync.Mutex
+	cache	[]*PingReply
 }
 
 func NewPingReplyCache() *PingReplyCache {

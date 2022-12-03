@@ -2,20 +2,7 @@ package genericsmrproto
 
 import (
 	"state"
-)
-
-const (
-	PROPOSE uint8 = iota
-	PROPOSE_REPLY
-	GENERIC_SMR_BEACON
-	GENERIC_SMR_BEACON_REPLY
-	METRICS_REQUEST
-	METRICS_REPLY
-)
-
-const (
-	METRICSOP_CONFLICT_RATE uint8 = iota
-	METRICSOP_DUMP_OWD
+	"fastrpc"
 )
 
 type Propose struct {
@@ -27,8 +14,35 @@ type Propose struct {
 type ProposeReply struct {
 	OK        uint8
 	CommandId int32
+}
+
+type ProposeReplyTS struct {
+	OK        uint8
+	CommandId int32
 	Value     state.Value
 	Timestamp int64
+}
+
+type Read struct {
+	CommandId int32
+	Key       state.Key
+}
+
+type ReadReply struct {
+	CommandId int32
+	Value     state.Value
+}
+
+type ProposeAndRead struct {
+	CommandId int32
+	Command   state.Command
+	Key       state.Key
+}
+
+type ProposeAndReadReply struct {
+	OK        uint8
+	CommandId int32
+	Value     state.Value
 }
 
 // handling stalls and failures
@@ -54,13 +68,6 @@ type BeTheLeaderArgs struct {
 type BeTheLeaderReply struct {
 }
 
-// handling experiment requests for metrics
-
-type MetricsRequest struct {
-	OpCode uint8
-}
-
-type MetricsReply struct {
-	KFast int64 // The number of instances that have committed on the fast path
-	KSlow int64 // The number of instances that have committed on the slow path
+func (t *ProposeReplyTS) New() fastrpc.Serializable {
+  return new(ProposeReplyTS)
 }

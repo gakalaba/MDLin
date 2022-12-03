@@ -1,11 +1,12 @@
 package epaxos
 
 import (
-	"dlog"
+	//	"state"
 	"epaxosproto"
 	"genericsmrproto"
 	"sort"
 	"time"
+	"dlog"
 )
 
 const (

@@ -2,8 +2,8 @@ package gryff
 
 import (
 	"epaxosproto"
+	"fmt"
 	"genericsmr"
-	"log"
 	"state"
 	"testing"
 )

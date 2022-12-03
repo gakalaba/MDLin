@@ -30,8 +30,6 @@ var forceLeader = flag.Int("l", -1, "Force client to talk to a certain replica."
 var startRange = flag.Int("sr", 0, "Key range start")
 var sleep = flag.Int("sleep", 0, "Sleep")
 var T = flag.Int("T", 1, "Number of threads (simulated clients).")
-var fast *bool = flag.Bool("f", false, "Fast Paxos: send message directly to all replicas. Defaults to false.")
-var idStart = flag.Int("ids", 0, "Command ID range start.")
 
 var rarray []int
 var rsp []bool
@@ -117,8 +115,6 @@ func simulatedClient(rlReply *masterproto.GetReplicaListReply, leader int, readi
 		}
 	}
 
-	repliesChan := make(chan int32, *reqsNb*N)
-
 	for i := 0; i < N; i++ {
 		var err error
 		servers[i], err = net.Dial("tcp", rlReply.ReplicaList[i])
@@ -126,46 +122,30 @@ func simulatedClient(rlReply *masterproto.GetReplicaListReply, leader int, readi
 			log.Printf("Error connecting to replica %d\n", i)
 		}
 		readers[i] = bufio.NewReader(servers[i])
-		if *fast {
-			//wait for replies from every replica
-			go waitForReplies(readers[i], repliesChan)
-		}
 		writers[i] = bufio.NewWriter(servers[i])
 	}
 
-	id := int32(*idStart)
+	var id int32 = 0
 	args := genericsmrproto.Propose{id, state.Command{state.PUT, 0, 0}}
+	var reply genericsmrproto.ProposeReply
 
 	n := *reqsNb
 
 	for i := 0; i < n; i++ {
+		if *noLeader {
+			leader = rarray[i]
+		}
+		args.ClientId = id
+		args.Command.K = state.Key(karray[i])
+		writers[leader].WriteByte(genericsmrproto.PROPOSE)
 
 		before := time.Now()
 
-		args.ClientId = id
-		args.Command.K = state.Key(karray[i])
-
-		if !*fast {
-			if *noLeader {
-				leader = rarray[i]
-			}
-			writers[leader].WriteByte(genericsmrproto.PROPOSE)
-			args.Marshal(writers[leader])
-			writers[leader].Flush()
-		} else {
-			//send to everyone
-			for rep := 0; rep < N; rep++ {
-				writers[rep].WriteByte(genericsmrproto.PROPOSE)
-				args.Marshal(writers[rep])
-				writers[rep].Flush()
-			}
-		}
-
-		for true {
-			rid := <-repliesChan
-			if rid == id {
-				break
-			}
+		args.Marshal(writers[leader])
+		writers[leader].Flush()
+		if err := reply.Unmarshal(readers[leader]); err != nil || reply.OK == 0 {
+			log.Println("Error when reading:", err)
+			continue
 		}
 
 		after := time.Now()
@@ -185,18 +165,6 @@ func simulatedClient(rlReply *masterproto.GetReplicaListReply, leader int, readi
 		}
 	}
 	done <- true
-}
-
-func waitForReplies(reader *bufio.Reader, repliesChan chan int32) {
-	var reply genericsmrproto.ProposeReply
-	for true {
-		if err := reply.Unmarshal(reader); err != nil || reply.OK == 0 {
-			return
-			//log.Println("Error when reading from replica:", err)
-			//continue
-		}
-		repliesChan <- reply.Instance
-	}
 }
 
 func printer(readings chan float64, done chan bool) {
