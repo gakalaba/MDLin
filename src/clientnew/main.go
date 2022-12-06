@@ -291,7 +291,7 @@ func main() {
 			log.Printf("Failed %s(%d).\n", opString, count)
 		}
 		count++
-		dlog.Printf("Requests attempted: %d\n", count)
+		dlog.Printf("AppRequests attempted: %d\n", count)
 
 		if *rampUp < int(currRuntime.Seconds()) && int(currRuntime.Seconds()) < *expLength-*rampDown {
 			lat := int64(after.Sub(before).Nanoseconds())
@@ -301,7 +301,7 @@ func main() {
 		now = time.Now()
 		currRuntime = now.Sub(start)
 	}
-	log.Printf("Total requests attempted: %d\n", count)
+	log.Printf("Total AppRequests attempted: %d, total system level requests: %d\n", count, count*int32(*fanout))
 	log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
 	client.Finish()
 }

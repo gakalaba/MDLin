@@ -69,30 +69,33 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 	return true, 0
 }
 
-func (c *MDLClient) Read(key int64) {
+func (c *MDLClient) Read(key int64) (bool, int64) {
 	commandId := c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, 0)
 	c.propose.Command.Op = state.GET
 	c.sendPropose()
+	return true, 0
 }
 
-func (c *MDLClient) Write(key int64, value int64) {
+func (c *MDLClient) Write(key int64, value int64) bool {
 	commandId := c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, value)
 	c.propose.Command.Op = state.PUT
 	c.sendPropose()
+	return true
 }
 
 func (c *MDLClient) CompareAndSwap(key int64, oldValue int64,
-	newValue int64) {
+	newValue int64) (bool, int64) {
 	commandId := c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, newValue)
 	c.propose.Command.OldValue = state.Value(newValue)
 	c.propose.Command.Op = state.CAS
 	c.sendPropose()
+	return true, 0
 }
 
 func (c *MDLClient) preparePropose(commandId int32, key int64, value int64) {

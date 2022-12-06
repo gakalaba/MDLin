@@ -37,14 +37,14 @@ func NewPrintf(level int, str...interface{}) {
 
 type Replica struct {
 	*genericsmr.Replica // extends a generic Paxos replica
-	prepareChan         chan *genericsmr.RPCMessage
-	acceptChan          chan *genericsmr.RPCMessage
-	commitChan          chan *genericsmr.RPCMessage
-	commitShortChan     chan *genericsmr.RPCMessage
-	prepareReplyChan    chan *genericsmr.RPCMessage
-	acceptReplyChan     chan *genericsmr.RPCMessage
-	reorderChan         chan *genericsmr.RPCMessage
-  reorderReplyChan    chan *genericsmr.RPCMessage
+	prepareChan         chan fastrpc.Serializable
+	acceptChan          chan fastrpc.Serializable
+	commitChan          chan fastrpc.Serializable
+	commitShortChan     chan fastrpc.Serializable
+	prepareReplyChan    chan fastrpc.Serializable
+	acceptReplyChan     chan fastrpc.Serializable
+	reorderChan         chan fastrpc.Serializable
+  reorderReplyChan    chan fastrpc.Serializable
   detectConfChan      chan int32
   prepareRPC          uint8
 	acceptRPC           uint8
@@ -73,8 +73,8 @@ type Replica struct {
   shards        []net.Conn // cache of connections to all other replicas
   shardReaders  []*bufio.Reader
   shardWriters  []*bufio.Writer
-  interShardChan chan *genericsmr.RPCMessage
-  interShardReplyChan chan *genericsmr.RPCMessage
+  interShardChan chan fastrpc.Serializable
+  interShardReplyChan chan fastrpc.Serializable
   shListener net.Listener
   propagatedbd       map[mdlinproto.Tag]int
   buflock *sync.Mutex
@@ -130,17 +130,17 @@ func printDeps(deps []mdlinproto.Tag, s string, level int) {
 }
 
 func NewReplica(id int, peerAddrList []string, shardsList []string, shId int,
-	thrifty bool, durable bool, batch bool) *Replica {
+	thrifty bool, exec bool, dreply bool, durable bool, batch bool, statsFile string) *Replica {
 	r := &Replica{
-		genericsmr.NewReplica(id, peerAddrList, thrifty),
-		make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
-		make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
-		make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
-		make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
-		make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
-		make(chan *genericsmr.RPCMessage, 3*genericsmr.CHAN_BUFFER_SIZE),
-    make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
-    make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
+		genericsmr.NewReplica(id, peerAddrList, thrifty, exec, dreply, false, statsFile),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+		make(chan fastrpc.Serializable, 3*genericsmr.CHAN_BUFFER_SIZE),
+    make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+    make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
     make(chan int32, genericsmr.CHAN_BUFFER_SIZE),
 		0, 0, 0, 0, 0, 0, 0, 0,
 		false,
@@ -160,8 +160,8 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int,
     make([]net.Conn, len(shardsList)),
     make([]*bufio.Reader, len(shardsList)),
     make([]*bufio.Writer, len(shardsList)),
-    make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
-    make(chan *genericsmr.RPCMessage, genericsmr.CHAN_BUFFER_SIZE),
+    make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+    make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
     nil,
     make(map[mdlinproto.Tag]int, 0),
     new(sync.Mutex),
@@ -264,7 +264,8 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 			if err = intershard.Unmarshal(reader); err != nil {
 				break
 			}
-      r.interShardChan <- &genericsmr.RPCMessage{intershard, 0, int64(rid)}
+      // r.interShardChan <- &genericsmr.RPCMessage{intershard, 0, int64(rid)}
+			r.interShardChan <- fastrpc.Serializable(intershard)
 			break
 
     case mdlinproto.INTERSHARD_REPLY:
@@ -272,7 +273,8 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
       if err = intershardreply.Unmarshal(reader); err != nil {
         break
       }
-      r.interShardReplyChan <- &genericsmr.RPCMessage{intershardreply, 0, int64(rid)}
+      // r.interShardReplyChan <- &genericsmr.RPCMessage{intershardreply, 0, int64(rid)}
+			r.interShardReplyChan <- fastrpc.Serializable(intershardreply)
       break
 
 		default:
@@ -283,11 +285,11 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 
 // leaderId is the ID of the leader this message is being sent TO. it's an index
 // msg is the actual message being sent of mdlinproto.InterShard* type
-func (r *Replica) sendInterShardMsg(leaderId int64, msg fastrpc.Serializable, code int) {
+func (r *Replica) sendInterShardMsg(leaderId int32, msg fastrpc.Serializable, code int) {
   r.buflock.Lock()
   defer r.buflock.Unlock()
 
-  if (leaderId != int64(r.shardId)) {
+  if (leaderId != int32(r.shardId)) {
     w := r.shardWriters[leaderId]
     if (code == 0) {
       w.WriteByte(mdlinproto.INTERSHARD) // to tell what kind of message this is
@@ -299,9 +301,11 @@ func (r *Replica) sendInterShardMsg(leaderId int64, msg fastrpc.Serializable, co
   } else {
     NewPrintf(LEVELALL, "SENDING MESSAGE TO SELF!!!!")
     if (code == 0) {
-      r.interShardChan <- &genericsmr.RPCMessage{msg, 0, int64(leaderId)}
+      // r.interShardChan <- &genericsmr.RPCMessage{msg, 0, int64(leaderId)}
+			r.interShardChan <- msg
     } else {
-      r.interShardReplyChan <- &genericsmr.RPCMessage{msg, 0, int64(leaderId)}
+      // r.interShardReplyChan <- &genericsmr.RPCMessage{msg, 0, int64(leaderId)}
+			r.interShardReplyChan <- msg
     }
   }
 
@@ -418,14 +422,14 @@ func (r *Replica) run() {
 
     case ismsg := <-r.interShardChan:
       NewPrintf(LEVELALL, "----------InterShardChan--------")
-      ismessage := ismsg.Message.(*mdlinproto.InterShard)
-      r.handleInterShard(ismessage, ismsg.From)
+      ismessage := ismsg.(*mdlinproto.InterShard)
+      r.handleInterShard(ismessage)
       break
 
     case ismsgrep := <-r.interShardReplyChan:
       NewPrintf(LEVELALL, "-----InterShardReplyChan-----")
-      isrmessage := ismsgrep.Message.(*mdlinproto.InterShardReply)
-      r.handleInterShardReply(isrmessage, ismsgrep.From)
+      isrmessage := ismsgrep.(*mdlinproto.InterShardReply)
+      r.handleInterShardReply(isrmessage)
 
     case ind := <-r.detectConfChan:
       NewPrintf(LEVEL0, "-----Detect_Conf_Chan-------")
@@ -433,61 +437,61 @@ func (r *Replica) run() {
       break
 
 		case prepareS := <-r.prepareChan:
-			prepare := prepareS.Message.(*mdlinproto.Prepare)
+			prepare := prepareS.(*mdlinproto.Prepare)
 			//got a Prepare message
 			r.handlePrepare(prepare)
 			break
 
 		case acceptS := <-r.acceptChan:
-			accept := acceptS.Message.(*mdlinproto.Accept)
+			accept := acceptS.(*mdlinproto.Accept)
 			//got an Accept message
 			r.handleAccept(accept)
 			break
 
 		case commitS := <-r.commitChan:
-			commit := commitS.Message.(*mdlinproto.Commit)
+			commit := commitS.(*mdlinproto.Commit)
 			//got a Commit message
 			r.handleCommit(commit)
 			break
 
 		case commitS := <-r.commitShortChan:
-			commit := commitS.Message.(*mdlinproto.CommitShort)
+			commit := commitS.(*mdlinproto.CommitShort)
 			//got a Commit message
 			r.handleCommitShort(commit)
 			break
 
 		case prepareReplyS := <-r.prepareReplyChan:
-			prepareReply := prepareReplyS.Message.(*mdlinproto.PrepareReply)
+			prepareReply := prepareReplyS.(*mdlinproto.PrepareReply)
 			//got a Prepare reply
 			r.handlePrepareReply(prepareReply)
 			break
 
 		case acceptReplyS := <-r.acceptReplyChan:
-			acceptReply := acceptReplyS.Message.(*mdlinproto.AcceptReply)
+			acceptReply := acceptReplyS.(*mdlinproto.AcceptReply)
 			//got an Accept reply
 			r.handleAcceptReply(acceptReply)
 			break
 
     case reorderS := <-r.reorderChan:
       NewPrintf(LEVELALL, "--------ReorderChan-------")
-      reorder := reorderS.Message.(*mdlinproto.Reorder)
+      reorder := reorderS.(*mdlinproto.Reorder)
       //got a reorder message
       r.handleReorder(reorder)
       break
 
     case reorderReplyS := <-r.reorderReplyChan:
       NewPrintf(LEVELALL, "------ReorderReplyChan-----")
-      reorderReply := reorderReplyS.Message.(*mdlinproto.ReorderReply)
+      reorderReply := reorderReplyS.(*mdlinproto.ReorderReply)
       //got a reorder reply
       r.handleReorderReply(reorderReply)
       break
 
-		case metricsRequest := <-r.MetricsChan:
-			// Empty reply because there are no relevant metrics
-			reply := &genericsmrproto.MetricsReply{}
-			reply.Marshal(metricsRequest.Reply)
-			metricsRequest.Reply.Flush()
-			break
+		// case metricsRequest := <-r.MetricsChan:
+		// 	// Empty reply because there are no relevant metrics
+		// 	reply := &genericsmrproto.MetricsReply{}
+		// 	reply.Marshal(metricsRequest.Reply)
+		// 	metricsRequest.Reply.Flush()
+		// 	break
 		}
 	}
 }
@@ -846,7 +850,7 @@ func handleVersion(c state.Command) state.Version {
 
 func (r *Replica) askShardsForDeps(deps []mdlinproto.Tag, myInstance int32) {
   NewPrintf(LEVELALL, "Step 3. Send out req. to shard leaders for log dependencies")
-  var shardTo int64
+  var shardTo int32
   for _, d:= range deps {
     //TODO 1. can optimize this if you cache deps previously asked for!
     //TODO 2. can also optimize if you combine messages to per shard... rn we'll be 
@@ -856,7 +860,7 @@ func (r *Replica) askShardsForDeps(deps []mdlinproto.Tag, myInstance int32) {
       panic("We couldn't find the shard responsible for this key??")
     }
     // Need to send inter shard RPC to ask for log dependencies with versions
-    msg := &mdlinproto.InterShard{myInstance, d}
+    msg := &mdlinproto.InterShard{myInstance, d, int32(r.shardId)}
     e := r.instanceSpace[myInstance]
     NewPrintf(LEVELALL, "The len of this entry's proposals is %d", len(e.lb.clientProposals))
     NewPrintf(LEVELALL, "      Step3. Shard %d commanId %d asking Shard %d for Tag %v, AskerInstance %d", r.shardId, e.lb.clientProposals[0].CommandId, shardTo, d, myInstance)
@@ -864,9 +868,9 @@ func (r *Replica) askShardsForDeps(deps []mdlinproto.Tag, myInstance int32) {
   }
 }
 
-func (r *Replica) resolveShardFromKey(k state.Key) int64 {
+func (r *Replica) resolveShardFromKey(k state.Key) int32 {
   // Return the shardId of the shard that is responsible for this key
-  return state.KeyModulo(k, len(r.shards))
+  return int32(state.KeyModulo(k, len(r.shards)))
 }
 
 func (r *Replica) findEntry(tag mdlinproto.Tag) (*Instance, int, int32) {
@@ -888,27 +892,27 @@ func (r *Replica) findEntry(tag mdlinproto.Tag) (*Instance, int, int32) {
 }
 
 var pis mdlinproto.InterShard
-func (r *Replica) handleInterShard(ismessage *mdlinproto.InterShard, from int64) {
-  NewPrintf(LEVELALL, "*Shard %d recv messge from Shard %d for ld of Tag %v, AskerInstance %d*", r.shardId, from, ismessage.AskeeTag, ismessage.AskerInstance)
+func (r *Replica) handleInterShard(ismessage *mdlinproto.InterShard) {
+  NewPrintf(LEVELALL, "*Shard %d recv messge from Shard %d for ld of Tag %v, AskerInstance %d*", r.shardId, ismessage.From, ismessage.AskeeTag, ismessage.AskerInstance)
   // First, find the dependency, this is based on the ismessage.AskeeCommandId
   e, _, _ := r.findEntry(ismessage.AskeeTag)
   // If it exists, then reply to the shard
   if e != nil {
     //TODO it's not always safe to do this for uncommitted entries... but does that slow shit down?
     printDeps(e.initial_ld, "*initial ld", LEVELALL)
-    msg := &mdlinproto.InterShardReply{ismessage.AskerInstance, ismessage.AskeeTag, e.initial_ld}
-    r.sendInterShardMsg(from, msg, 1)
+    msg := &mdlinproto.InterShardReply{ismessage.AskerInstance, ismessage.AskeeTag, ismessage.From, e.initial_ld}
+    r.sendInterShardMsg(ismessage.From, msg, 1)
   } else {
     // If it doesn't exist, then put this message back in the channel to process later
     NewPrintf(LEVELALL, "     *batch dependency didn't arrive yet, adding back to proposal channel")
-    r.interShardChan <- &genericsmr.RPCMessage{ismessage, 0, from}
+    r.interShardChan <- fastrpc.Serializable(ismessage)
     //TODO consider having a clock for these so that we can make progress on 
     //assigning versions without needlessly asking for them before they're ready
   }
 }
 
-func (r *Replica) handleInterShardReply(ismessage *mdlinproto.InterShardReply, from int64) {
-  NewPrintf(LEVELALL, "Step 4. Receiving deps from shard %d. AskerInstance: %d, AskeeTag: %v, ", from, ismessage.AskerInstance, ismessage.AskeeTag)
+func (r *Replica) handleInterShardReply(ismessage *mdlinproto.InterShardReply) {
+  NewPrintf(LEVELALL, "Step 4. Receiving deps from shard %d. AskerInstance: %d, AskeeTag: %v, ", ismessage.From, ismessage.AskerInstance, ismessage.AskeeTag)
   // We have to identify the entry that wanted this information
   e := r.instanceSpace[ismessage.AskerInstance]
   if (e.bd == nil) {
@@ -947,7 +951,7 @@ func (r *Replica) detectConflicts(my_index int32) {
   var iindex int32
   for _, deps := range e.new_ld {
     for _, d := range deps {
-      if (r.resolveShardFromKey(d.K) != int64(r.shardId) || d.K != my_k || d.PID <= my_pid) {
+      if (r.resolveShardFromKey(d.K) != int32(r.shardId) || d.K != my_k || d.PID <= my_pid) {
 				NewPrintf(LEVELALL, "     DC: Shard %d SKIPPING the linear search for Tag %v", r.shardId, d)
         continue
       }
@@ -988,19 +992,6 @@ func (r *Replica) detectConflicts(my_index int32) {
 func (r *Replica) readyToCommit(instance int32) {
   inst := r.instanceSpace[instance]
   inst.status = COMMITTED
-	if inst.lb.clientProposals != nil && state.AllBlindWrites(inst.cmds) {
-		// give client the all clear
-		for i := 0; i < len(inst.cmds); i++ {
-			propreply := &mdlinproto.ProposeReply{
-				TRUE,
-				inst.lb.clientProposals[i].CommandId,
-				state.NIL,
-				inst.lb.clientProposals[i].Timestamp,
-        r.num_conflicts}
-			NewPrintf(LEVELALL, "Responding to client with OK = true (1) in handleAcceptReply")
-			r.MDReplyPropose(propreply, inst.lb.clientProposals[i].Reply)
-		}
-	}
 
 	r.recordInstanceMetadata(inst)
 	r.sync() //is this necessary?
@@ -1370,7 +1361,7 @@ func (r *Replica) executeCommands() {
 					  // they will get executed in consecutive order.
 					  // This is good because we assume this to provide MD-lin
 					  val := inst.cmds[j].Execute(r.State)
-					  if inst.lb != nil && !state.AllBlindWrites(inst.cmds) {
+					  if inst.lb != nil {
 						  propreply := &mdlinproto.ProposeReply{
 							  TRUE,
 							  inst.lb.clientProposals[j].CommandId,
