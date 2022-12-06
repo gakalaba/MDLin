@@ -1,4 +1,6 @@
-from lib.experiment_codebase import *
+import os
+
+from scripts.lib.experiment_codebase import ExperimentCodebase
 
 
 class MDLCodebase(ExperimentCodebase):
