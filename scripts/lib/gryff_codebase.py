@@ -1,7 +1,7 @@
 import os
 
-from scripts.lib.experiment_codebase import ExperimentCodebase
-from scripts.utils.remote_util import tcsh_redirect_output_to_files
+from lib.experiment_codebase import ExperimentCodebase
+from utils.remote_util import tcsh_redirect_output_to_files
 
 
 class GryffCodebase(ExperimentCodebase):

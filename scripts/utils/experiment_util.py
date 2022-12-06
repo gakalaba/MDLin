@@ -4,10 +4,10 @@ import concurrent.futures
 import os
 import sys
 
-from scripts.utils.remote_util import *
-from scripts.utils.git_util import *
-from scripts.utils.eval_util import *
-from scripts.lib.wrappers import *
+from utils.remote_util import *
+from utils.git_util import *
+from utils.eval_util import *
+from lib.wrappers import *
 
 
 def is_using_master(config):

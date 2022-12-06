@@ -1,7 +1,7 @@
-from scripts.lib.gryff_codebase import GryffCodebase
-from scripts.lib.rdma_repl_codebase import RdmaReplCodebase
-from scripts.lib.morty_codebase import MortyCodebase
-from scripts.lib.mdl_codebase import MDLCodebase
+from lib.gryff_codebase import GryffCodebase
+from lib.rdma_repl_codebase import RdmaReplCodebase
+from lib.morty_codebase import MortyCodebase
+from lib.mdl_codebase import MDLCodebase
 
 
 __BUILDERS__ = {
