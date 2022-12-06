@@ -1,0 +1,11 @@
+#!/bin/bash
+
+#standard="cd MDLin; git stash; git checkout ms; git stash; git pull https://gakalaba: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@github.com/gakalaba/MDLin"
+#standard="cd MDLin; git stash; git checkout ms; git stash; git fetch origin ms; git reset --hard FETCH_HEAD"
+#StringVal="477 419 427 440 474 439 429 479 432 473 480 420 423 475 430 434 422 438"
+StringVal="475 430 434 422 438"
+standard="cd MDLin; rm ms-test*.txt; rm outerr*.txt"
+for val in $StringVal; do
+    ssh -p 22 akalaba@pc$val.emulab.net bash -l -c \'$standard\'
+done
+

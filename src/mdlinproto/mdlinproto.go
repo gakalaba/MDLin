@@ -5,15 +5,25 @@ import (
 )
 
 const (
-	INTERSHARD = iota
+	PREPARE uint8 = iota
+	PREPARE_REPLY
+	PROPOSE
+	PROPOSE_REPLY
+	ACCEPT
+	ACCEPT_REPLY
+	COMMIT
+	COMMIT_SHORT
+	INTERSHARD
 	INTERSHARD_REPLY
 )
 
 type Tag struct {
+  //TODO consider that! Version doesn't need to be in here AND that commandID (our current uniqueID) could just be the K+PID+SeqNo concatonated together
 	K         state.Key
-	Version   state.Version
+	//Version   state.Version //TODO delete me
 	PID       int64
-	CommandId int32
+	//CommandId int32 TODO delete me
+  SeqNo     int64
 	//Instance  int32 // TODO this is an optimization!! Index in the log, comes from crtInstance
 }
 
@@ -31,7 +41,7 @@ type ProposeReply struct {
 	CommandId int32
 	Value     state.Value
 	Timestamp int64
-	NumConf   int64
+  NumConf int64
 }
 
 type Prepare struct {
@@ -75,7 +85,7 @@ type Commit struct {
 	SeqNos    int64
 	Versions  state.Version
 	BatchDeps []Tag
-	Status    uint8
+	Status uint8
 }
 
 type CommitShort struct {
@@ -83,20 +93,18 @@ type CommitShort struct {
 	Instance int32
 	Count    int32
 	Ballot   int32
-	Status   int32
+	Status int32
 }
 
 // Message types for MultiShard MDL
 type InterShard struct {
 	AskerInstance  int32
-	AskeeCommandId int32
-	From           int32
+	AskeeTag Tag
 }
 
 type InterShardReply struct {
 	AskerInstance   int32
-	AskeeCommandId  int32
-	From            int32
+	AskeeTag  Tag
 	LogDependencies []Tag
 }
 
@@ -108,5 +116,5 @@ type Reorder struct {
 
 type ReorderReply struct {
 	OldInstance int32
-	OK          uint8
+	OK       uint8
 }

@@ -1,0 +1,44 @@
+#!/bin/bash
+
+fanout=''
+clients=''
+mdl=''
+addr=''
+base=''
+trials=100
+
+print_usage() {
+  printf "Usage: was wrong!..."
+}
+
+while getopts 'm:f:c:s:p:t:' flag; do
+  case "${flag}" in
+    m) mdl="${OPTARG}" ;;
+    f) fanout="${OPTARG}" ;;
+    c) clients="${OPTARG}" ;;
+    s) addr="${OPTARG}" ;;
+    p) base="${OPTARG}" ;;
+    t) trials="${OPTARG}" ;;
+    *) print_usage
+       exit 1 ;;
+  esac
+done
+
+precursor="cd ~/MDLin; nohup "
+postcursormdl=" -mdl true </dev/null >/dev/null 2>outerr.txt & "
+postcursorbasic=" </dev/null >/dev/null 2>outerr.txt & "
+
+allprocesses=''
+
+for ((j = 0; j < $clients; j++)); do
+  if [[ $mdl == true ]]
+  then
+    allprocesses=$allprocesses$precursor"bin/client-ms-test -caddr '10.10.1.1' -pid $((clients*base + j)) -fo $fanout -w 50 -c 1 -k 1000000000 -t $trials -mdl true </dev/null >/dev/null 2>outerr$((clients*base + j)).txt & "
+  else
+    # Consider making the files you write to outerr$pid.txt
+    allprocesses=$allprocesses$precursor"bin/client-ms-test -caddr '10.10.1.1' -pid $((clients*base + j)) -fo $fanout -w 50 -c 1 -k 1000000000 -t $trials </dev/null >/dev/null 2>outerr$((clients*base + j)).txt & "
+  fi
+done
+ssh -AX akalaba@pc$addr.emulab.net $allprocesses
+echo "All clients submitted!"
+sleep 1000000000

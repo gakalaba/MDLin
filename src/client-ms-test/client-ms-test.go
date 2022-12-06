@@ -32,7 +32,7 @@ var keys *int = flag.Int("k", 10, "Number of keys. Defaults to 10.")
 var check = flag.Bool("check", false, "Check correctness. Defaults to false.")
 var s = flag.Float64("s", 2, "Zipfian s parameter")
 var v = flag.Float64("v", 1, "Zipfian v parameter")
-var trials *int = flag.Int("t", 10, "Trials. Defaults to 10")
+var trials *int = flag.Int("t", 100, "Trials. Defaults to 100")
 var N int
 
 var successful []int
@@ -44,6 +44,8 @@ var reqarray []state.Operation
 
 var numshards int64
 var total_conflicts []int64
+
+var trialha int
 
 var total_trials []int64
 
@@ -59,6 +61,10 @@ func newResponseArray(f int) []int {
 
 func getaverage(f []int64) float64 {
   var total int64 = 0
+  total_len := len(f)
+  // let's take the middle 60%
+  toRemove := total_len/5
+  f = f[toRemove:(total_len-toRemove)]
   for _, e := range f {
     total += e
   }
@@ -131,6 +137,7 @@ func main() {
   defer file.Close()
   total_trials = make([]int64, *trials)
   for trial:=0; trial<(*trials); trial++ {
+    trialha = trial
     listenforshards = true
     ////////////////////////////////////////////////
     // Prepare the requests! 
@@ -158,9 +165,9 @@ func main() {
     buflock := new(sync.Mutex)
     for t:=0;t < *clients;t++ {
       if (*mdlin) {
-        go runTestMDL(int64(*pid_base+t), *fanout, start, start + *fanout, file, complete, submitted, &reqs, &larray)
+        go runTestMDL(trial, int64(*pid_base+t), *fanout, start, start + *fanout, file, complete, submitted, &reqs, &larray)
       } else {
-        go runTestSDL(int64(*pid_base+t), start, start + *fanout, complete, submitted, &reqs_sdl, &larray, writers, buflock)
+        go runTestSDL(trial, int64(*pid_base+t), start, start + *fanout, complete, submitted, &reqs_sdl, &larray, writers, buflock)
       }
       start += *fanout
     }
@@ -171,6 +178,7 @@ func main() {
 
 
     // shuffle requests
+    /*
     if (*mdlin && *clients > 1) {
       rand.Seed(time.Now().UnixNano())
       for i := range reqs {
@@ -178,19 +186,20 @@ func main() {
         reqs[i], reqs[j] = reqs[j], reqs[i]
         larray[i], larray[j] = larray[j], larray[i]
       }
-    }
+    }*/
 
     // Nicely print the batches and the shard arrival logs
+    /*
     for j:=0; j<*clients;j++ {
       log.Printf("Client %d:", j+*pid_base)
       for k:=0; k<*fanout; k++ {
         for i:=0; i<num_requests; i++ {
           arg := reqs[i]
           argsdl := reqs_sdl[i]
-          if arg.PID == int64(j+*pid_base) && int(arg.CommandId - int32(*pid_base*10000)) == k+j*(*fanout){
+          if arg.PID == int64(j+*pid_base) && int(arg.CommandId - int32(*pid_base*(*trials*(*fanout)))) == k+j*(*fanout){
             log.Printf("    CommandId %d-->%d: %s", arg.CommandId, larray[i], commandToStr(arg.Command))
           } else if (*mdlin == false) {
-            if (int(argsdl.CommandId - int32(*pid_base*10000)) == k+j*(*fanout)) {
+            if (int(argsdl.CommandId - int32(*pid_base*(*trials*(*fanout)))) == k+j*(*fanout)) {
               log.Printf("    CommandId %d-->%d: %s", argsdl.CommandId, larray[i], commandToStr(argsdl.Command))
             }
           }
@@ -208,7 +217,7 @@ func main() {
           }
         }
       }
-    }
+    }*/
 
     if (*mdlin) {
       before_total := time.Now()
@@ -226,9 +235,6 @@ func main() {
         //log.Printf("Test took %v\n", tot)
         //file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", *fanout, p.int64, tot.Milliseconds()))
         total_trials[trial] = tot.Milliseconds()
-      }
-      for i:=0; i<int(numshards); i++ {
-        log.Printf("The total number of conflicts found on shard %d was %d", i, total_conflicts[i])
       }
     } else {
       before_total := time.Now()
@@ -249,14 +255,16 @@ func main() {
       }
     }
     listenforshards = false
+    log.Printf("Finished trial %d out of %d", trial, *trials)
   }
 
   if (*mdlin) {
-    file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v\n", *fanout, *pid_base, getaverage(total_trials)))
-    log.Printf("Fanout %d, PID %d took %v", *fanout, *pid_base, total_trials)
+    file.WriteString(fmt.Sprintf("MDL Fanout %d on client %d took %v, tirals = %v\n", *fanout, *pid_base, getaverage(total_trials), total_trials))
+    for i:=0; i<int(numshards); i++ {
+      log.Printf("Across %d trials, the total number of conflicts found on shard %d was %d", *trials, i, total_conflicts[i])
+    }
   } else {
     file.WriteString(fmt.Sprintf("SDL Fanout %d on client %d took %v\n", *fanout, *pid_base, getaverage(total_trials)))
-    log.Printf("Fanout %d, PID %d took %v", *fanout, *pid_base, total_trials)
   }
   ////////////////////////////////////////////////
   // Close Connections
@@ -272,7 +280,19 @@ func main() {
 //////////////////////////////
 //////// MDL /////////////////
 //////////////////////////////
-func runTestMDL(pid int64, f int, start_index int, end_index int, file *os.File, completed chan struct {time.Time; int64}, submitted chan int64, reqs *[]mdlinproto.Propose, larray *[]int64) {
+func filterdeps(deps []mdlinproto.Tag, k state.Key) []mdlinproto.Tag {
+  result := make([]mdlinproto.Tag, 0)
+  for _, d := range deps {
+    myLeader := int64(k) % numshards
+    dLeader := int64(d.K) % numshards
+    if (myLeader != dLeader) {
+      result = append(result, d)
+    }
+  }
+  return result
+}
+
+func runTestMDL(trial int, pid int64, f int, start_index int, end_index int, file *os.File, completed chan struct {time.Time; int64}, submitted chan int64, reqs *[]mdlinproto.Propose, larray *[]int64) {
   go waitRepliesMDL(start_index, end_index, completed, pid)
   var arg mdlinproto.Propose
   deps := make([]mdlinproto.Tag, 0)
@@ -286,10 +306,10 @@ func runTestMDL(pid int64, f int, start_index int, end_index int, file *os.File,
     } else {
       seqno[pid][leader]++
     }
-    arg = mdlinproto.Propose{int32(i+(*pid_base*10000)), state.Command{reqarray[i], state.Key(karray[i]), state.Value(i)}, 0, seqno[pid][leader], pid, deps}
+    arg = mdlinproto.Propose{int32(i), state.Command{reqarray[i], state.Key(karray[i]), state.Value(i)}, 0, seqno[pid][leader], pid, filterdeps(deps, state.Key(karray[i]))}
     (*reqs)[i] = arg
     (*larray)[i] = leader
-    deps = append(deps, mdlinproto.Tag{state.Key(karray[i]), -1, pid, int32(i+(*pid_base*10000))})
+    deps = append(deps, mdlinproto.Tag{state.Key(karray[i]), pid, seqno[pid][leader]})
   }
   submitted<-pid
 }
@@ -321,13 +341,13 @@ func commandToStr(c state.Command) string {
 //////////////////////////////
 //////// SDL /////////////////
 //////////////////////////////
-func runTestSDL(pid int64, start_index int, end_index int, completed chan struct {time.Time; int64}, submitted chan int64, 
+func runTestSDL(trial int, pid int64, start_index int, end_index int, completed chan struct {time.Time; int64}, submitted chan int64,
           reqs_sdl *[]genericsmrproto.Propose, larray *[]int64, writers []*bufio.Writer, buflock *sync.Mutex) {
   go waitRepliesSDL(start_index, end_index, completed, pid, writers, larray, reqs_sdl, buflock)
   var arg genericsmrproto.Propose
   for i:= start_index; i<end_index; i++ {
     leader := karray[i]%numshards
-    arg = genericsmrproto.Propose{int32(i+(*pid_base*10000)), state.Command{reqarray[i], state.Key(karray[i]), state.Value(i)}, 0}
+    arg = genericsmrproto.Propose{int32(i+(trial*(*fanout))+(*pid_base*(*trials*(*fanout)))), state.Command{reqarray[i], state.Key(karray[i]), state.Value(i)}, 0}
     (*reqs_sdl)[i] = arg
     (*larray)[i] = leader
   }
@@ -378,7 +398,7 @@ func shardListener(readers []*bufio.Reader, shard int) {
 
 		  //log.Printf("Shard %d: Reply.OK = %d, CommandId = %d, VALUE = %d, Timestamp = %d", shard, reply.OK, reply.CommandId, reply.Value, reply.Timestamp)
 		  //log.Printf("CommandId = %d, VALUE = %d", reply.CommandId, reply.Value)
-      rarray[reply.CommandId-int32(*pid_base*10000)] = 1
+      rarray[reply.CommandId] = 1
       if reply.NumConf > total_conflicts[shard] {
         total_conflicts[shard] = reply.NumConf
       }
@@ -389,7 +409,7 @@ func shardListener(readers []*bufio.Reader, shard int) {
       }
 
       //log.Printf("CommandId = %d, VALUE = %d", replysdl.CommandId, replysdl.Value)
-      rarray[replysdl.CommandId-int32(*pid_base*10000)] = 1
+      rarray[replysdl.CommandId-int32(*pid_base*(*trials*(*fanout)))-int32(trialha*(*fanout))] = 1
     }
   }
 }
