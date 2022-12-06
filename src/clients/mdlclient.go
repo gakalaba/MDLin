@@ -133,7 +133,7 @@ func (c *MDLClient) readReplies(start int32, fanout int) (bool, int64) {
 		} else {
 			dlog.Printf("Received ProposeReply for %d\n", reply.CommandId)
 			rarray[reply.CommandId-start] = 1
-			
+
 			// Check if we have all replies
 			done = true
 			for i := 0; i < fanout; i++ {
@@ -163,13 +163,13 @@ func (c *MDLClient) readReplies(start int32, fanout int) (bool, int64) {
 // }
 
 func (c *MDLClient) filterdeps(deps []mdlinproto.Tag, k state.Key) []mdlinproto.Tag {
-  result := make([]mdlinproto.Tag, 0)
+	result := make([]mdlinproto.Tag, 0)
 	myLeader := c.GetShardFromKey(k)
-  for _, d := range deps {
-    dLeader := c.GetShardFromKey(d.K)
-    if (myLeader != dLeader) {
-      result = append(result, d)
-    }
-  }
-  return result
+	for _, d := range deps {
+		dLeader := c.GetShardFromKey(d.K)
+		if myLeader != dLeader {
+			result = append(result, d)
+		}
+	}
+	return result
 }
