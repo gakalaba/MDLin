@@ -1,0 +1,140 @@
+#!/bin/bash
+
+clientMachines=(475 430 434 422 438)
+addrId=(477 477 477 477 477 474 439 429 479 432 473 480 420 423 419 427 440)
+TOTALCLIENTMACHINES="${#clientMachines[@]}"
+
+fanout=''
+clients=''
+mdl=''
+doscale=''
+trials=''
+
+print_usage() {
+  printf "Usage: was wrong!... need -m <bool> -d <bool> -f <int> -c <int>"
+}
+
+while getopts 'm:f:c:d:t:' flag; do
+  case "${flag}" in
+    m) mdl="${OPTARG}" ;;
+    f) fanout="${OPTARG}" ;;
+    c) clients="${OPTARG}" ;;
+    d) doscale="${OPTARG}" ;;
+    t) trials="${OPTARG}" ;;
+    *) print_usage
+       exit 1 ;;
+  esac
+done
+
+if [ $((clients * fanout % TOTALCLIENTMACHINES)) != 0 ] && [ $((clients * fanout)) != 1 ]
+then
+  echo "fanout multiplied by clients should be multiple of 5!"
+  exit 1
+fi
+
+# this function is called when Ctrl-C is sent
+function trap_ctrlc ()
+{
+
+    # perform cleanup here
+    echo "Ctrl-C caught...performing clean up"
+
+    # Tear down the cluster
+    for i in "${!PIDS[@]}"; do
+      ssh -AX akalaba@pc${addrId[i]}.emulab.net "sudo kill ${PIDS[i]}"
+      echo "Killed ${names[i]}"
+    done
+    
+    # Kill any remaining clients
+    for i in "${!clientMachines[@]}"; do
+      ssh -AX akalaba@pc${clientMachines[i]}.emulab.net "pkill -9 -f 'bin/client-ms-test'"
+    done
+
+    # Kill any of the clientoncloud processes
+    for i in "${!clientPIDS[@]}"; do
+      sudo kill ${clientPIDS[i]}
+    done
+    pkill -9 -f "sleep 1000000000"
+    echo "ALL KILLED"
+
+    # exit shell script with error code 2
+    # if omitted, shell script will continue execution
+    exit 2
+}
+ 
+# initialise trap to call trap_ctrlc function
+# when signal 2 (SIGINT) is received
+trap "trap_ctrlc" 2
+
+# your script goes here
+coordcmd="bin/coordinator -N 4 -ips '10.10.1.1,10.10.1.1,10.10.1.1,10.10.1.1'"
+
+m1cmd="bin/master -port 7087 -addr '10.10.1.1' -ips '10.10.1.9,10.10.1.8,10.10.1.7' -caddr '10.10.1.1' -nshrds 4"
+m2cmd="bin/master -port 7088 -addr '10.10.1.1' -ips '10.10.1.5,10.10.1.4,10.10.1.3' -caddr '10.10.1.1' -nshrds 4"
+m3cmd="bin/master -port 7089 -addr '10.10.1.1' -ips '10.10.1.13,10.10.1.12,10.10.1.11' -caddr '10.10.1.1' -nshrds 4"
+m4cmd="bin/master -port 7090 -addr '10.10.1.1' -ips '10.10.1.6,10.10.1.2,10.10.1.10' -caddr '10.10.1.1' -nshrds 4"
+
+s1r1cmd="bin/server -port 7070 -maddr '10.10.1.1' -mport 7087 -addr '10.10.1.9'"
+s1r2cmd="bin/server -port 7071 -maddr '10.10.1.1' -mport 7087 -addr '10.10.1.8'"
+s1r3cmd="bin/server -port 7072 -maddr '10.10.1.1' -mport 7087 -addr '10.10.1.7'"
+
+s2r1cmd="bin/server -port 7073 -maddr '10.10.1.1' -mport 7088 -addr '10.10.1.5'"
+s2r2cmd="bin/server -port 7074 -maddr '10.10.1.1' -mport 7088 -addr '10.10.1.4'"
+s2r3cmd="bin/server -port 7075 -maddr '10.10.1.1' -mport 7088 -addr '10.10.1.3'"
+
+s3r1cmd="bin/server -port 7076 -maddr '10.10.1.1' -mport 7089 -addr '10.10.1.13'"
+s3r2cmd="bin/server -port 7077 -maddr '10.10.1.1' -mport 7089 -addr '10.10.1.12'"
+s3r3cmd="bin/server -port 7078 -maddr '10.10.1.1' -mport 7089 -addr '10.10.1.11'"
+
+s4r1cmd="bin/server -port 7079 -maddr '10.10.1.1' -mport 7090 -addr '10.10.1.6'"
+s4r2cmd="bin/server -port 7080 -maddr '10.10.1.1' -mport 7090 -addr '10.10.1.2'"
+s4r3cmd="bin/server -port 7081 -maddr '10.10.1.1' -mport 7090 -addr '10.10.1.10'"
+
+
+precursor="cd ~/MDLin; nohup "
+postcursormdl=" -mdl true </dev/null >/dev/null 2>outerr.txt & echo \$!"
+postcursorbasic=" </dev/null >/dev/null 2>outerr.txt & echo \$!"
+
+PIDS=()
+cmds=("$coordcmd" "$m1cmd" "$m2cmd" "$m3cmd" "$m4cmd" "$s1r1cmd" "$s1r2cmd" "$s1r3cmd" "$s2r1cmd" "$s2r2cmd" "$s2r3cmd" "$s3r1cmd" "$s3r2cmd" "$s3r3cmd" "$s4r1cmd" "$s4r2cmd" "$s4r3cmd")
+names=(coord m1 m2 m3 m4 s1r1 s1r2 s1r3 s2r1 s2r2 s2r3 s3r1 s3r2 s3r3 s4r1 s4r2 s4r3)
+
+for ((i = 0; i < ${#cmds[@]}; i++)); do
+  echo $i
+  if [ $mdl == true ] && [ $i -gt 4 ]
+  then
+    read -r somevar < <(ssh -AX akalaba@pc${addrId[i]}.emulab.net $precursor${cmds[i]}$postcursormdl)
+    echo "Setup MDL ${names[i]}..."
+  else
+    read -r somevar < <(ssh -AX akalaba@pc${addrId[i]}.emulab.net $precursor${cmds[i]}$postcursorbasic)
+    echo "Setup BASIC ${names[i]}..."
+  fi
+  PIDS[i]=$somevar
+  sleep 3
+done
+echo "Cluster setup!"
+sleep 1000000000000
+clientPIDS=()
+if [ $mdl == false ] && [ $doscale == true ]
+then
+  clients=$((clients * fanout))
+fi
+ans=$((clients / TOTALCLIENTMACHINES))
+
+if [[ $clients -gt $TOTALCLIENTMACHINES ]]
+then
+  clients=5
+else
+  ans=1
+fi
+echo "mdl = "$mdl
+echo "fanout = "$fanout
+echo "num_machines used = "$clients
+echo "num processes per machine = "$ans
+
+for ((i = 0; i<$clients; i++)); do
+  ./clientoncloud -m $mdl -s ${clientMachines[i]} -f $fanout -c $ans -p $i -t $trials &
+  clientPIDS[i]=$!
+done
+echo "All clients submitted!"
+sleep 1000000000

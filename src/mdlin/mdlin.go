@@ -205,7 +205,6 @@ func (r *Replica) connectToShards() {
 			NewPrintf(LEVEL0, "Write id error: %v", err)
 			continue
 		}
-		r.Alive[i] = true
 		r.shardReaders[i] = bufio.NewReader(r.shards[i])
 		r.shardWriters[i] = bufio.NewWriter(r.shards[i])
 
@@ -239,7 +238,6 @@ func (r *Replica) waitForShardConnections(done chan bool) {
 		r.shards[id] = conn
 		r.shardReaders[id] = bufio.NewReader(conn)
 		r.shardWriters[id] = bufio.NewWriter(conn)
-		r.Alive[id] = true
 
 		go r.shardListener(int(id), r.shardReaders[id])
 	}
