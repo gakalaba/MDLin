@@ -13,7 +13,7 @@ class MDLCodebase(ExperimentCodebase):
             'multi_paxos': '',
             'abd': ' -a',
             'gryff': ' -t',
-            'mdl': ' -d'
+            'mdl': ' -mdl'
         }[replication_protocol]
 
     def get_client_cmd(self, config, i, j, k, run, local_exp_directory,
