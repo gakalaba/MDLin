@@ -11,9 +11,9 @@ def get_server_host(config, i):
     return config['server_host_format_str'] % (config['server_names'][i],
         config['experiment_name'], config['project_name'])
 
-def get_client_host(config, i, j):
-    return config['client_host_format_str'] % (i, j, config['experiment_name'],
-        config['project_name'])
+def get_client_host(config, client):
+    return config['client_host_format_str'] % (client, config['experiment_name'],
+                                               config['project_name'])
 
 def get_ip_for_interface(interface, remote_user, remote_host):
     return run_remote_command_sync('ip address show %s | awk \'/inet / {print $2}\'' % interface, remote_user, remote_host).rstrip()
@@ -71,11 +71,12 @@ def set_file_descriptor_limit(limit, remote_user, remote_host):
     run_remote_command_sync(command, remote_user, remote_host)
 
 def kill_remote_process_by_name(remote_process_name, remote_user, remote_host, kill_args):
-    run_remote_command_sync('ps aux | grep -i \'%s\' | awk \'{print $2}\' | xargs kill%s' % (remote_process_name, kill_args),
-            remote_user, remote_host)
+    run_remote_command_sync('pkill%s %s' % (kill_args, remote_process_name),
+                            remote_user, remote_host)
 
 def kill_remote_process_by_port(port, remote_user, remote_host, kill_args):
-    run_remote_command_sync('lsof -ti:%d | xargs kill%s' % (port, kill_args), remote_user, remote_host)
+    run_remote_command_sync('lsof -ti:%d | xargs kill%s' % (port, kill_args),
+                            remote_user, remote_host)
 
 def kill_process_by_name(process_name, kill_args):
     subprocess.run('ps aux | grep -i \'%s\' | awk \'{print $2}\' | xargs kill%s' % (process_name, kill_args),
@@ -106,6 +107,16 @@ def get_exp_net_interface(remote_user, remote_host):
 def get_ip_for_server_name(server_name, remote_user, remote_host):
     return run_remote_command_sync('getent hosts %s | awk \'{ print $1 }\'' % server_name, remote_user, remote_host).rstrip()
 
+def remove_delays(remote_user, remote_host):
+    iface = get_exp_net_interface(remote_user, remote_host)
+    run_remote_command_sync('sudo tc qdisc del dev %s root' %
+                            iface, remote_user, remote_host)
+
+def get_iface_add_delays(ip_to_delay, max_bandwidth, remote_user, remote_host):
+    iface = get_exp_net_interface(remote_user, remote_host)
+    add_delays_for_ips(ip_to_delay, iface, max_bandwidth, remote_user,
+                       remote_host)
+
 def add_delays_for_ips(ip_to_delay, interface, max_bandwidth, remote_user, remote_host):
     command = 'sudo tc qdisc del dev %s root; ' % interface
     command += 'sudo tc qdisc add dev %s root handle 1: htb; ' % interface
@@ -122,12 +133,14 @@ def get_name_to_ip_map(config, remote_user, remote_host):
     name_to_ip = {}
     for i in range(len(config['server_names'])):
         ip = get_ip_for_server_name(config['server_names'][i], remote_user,
-            remote_host)
+                                    remote_host)
         name_to_ip[config['server_names'][i]] = ip
-        for j in range(config['client_nodes_per_server']):
-            client_name = config['client_name_format_str'] % (i, j)
-            ip = get_ip_for_server_name(client_name, remote_user, remote_host)
-            name_to_ip[client_name] = ip
+
+    for i in range(len(config['clients'])):
+        client_name = config['clients'][i]
+        ip = get_ip_for_server_name(client_name, remote_user, remote_host)
+        name_to_ip[client_name] = ip
+
     return name_to_ip
 
 def get_ip_to_delay(config, name_to_ip, server_name, delay_to_clients=False):
@@ -139,22 +152,18 @@ def get_ip_to_delay(config, name_to_ip, server_name, delay_to_clients=False):
             break
     if region == None:
         raise Exception
+
     for reg, delay in config['region_rtt_latencies'][region].items():
-        if reg != region:
+        if reg != region and reg in config['server_regions']:
             for name in config['server_regions'][reg]:
-                ip_to_delay[name_to_ip[name]] = delay
+                if name in config['server_names']:
+                    ip_to_delay[name_to_ip[name]] = delay
+
     if delay_to_clients:
-        for i in range(len(config['server_names'])):
-            for j in range(config['client_nodes_per_server']):
-                client_name = config['client_name_format_str'] % (i, j)
-                other_region = None
-                for reg, servers in config['server_regions'].items():
-                    if config['server_names'][i] in servers:
-                        other_region = reg
-                        break
-                if other_region == None:
-                    raise Exception
-                if region != other_region:
-                    ip_to_delay[name_to_ip[client_name]] = config['region_rtt_latencies'][region][other_region]
+        for reg, delay in config['region_rtt_latencies'][region].items():
+            if reg != region and reg in config['server_regions']:
+                for name in config['server_regions'][reg]:
+                    if name in config['clients']:
+                        ip_to_delay[name_to_ip[name]] = delay
     return ip_to_delay
 

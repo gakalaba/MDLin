@@ -1,7 +1,7 @@
 {
   "experiment_independent_vars": [
     ["replication_protocol", "replication_protocol_settings", "plot_cdf_series_title", "plot_tput_lat_series_title"],
-    ["client_processes_per_client_node", "client_nodes_per_server"]
+    ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol": [
     "mdl"
@@ -14,31 +14,57 @@
     }
   ],
   "server_names": [
-      "s1replica1"
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
   ],
-  "server_ping_latencies": {
-      "california": {
-        "california": 0,
-        "ireland": 151,
-        "virginia": 72
+  "clients": [
+    "client-0-0",
+    "client-1-0"
+  ],
+  "server_regions": {
+    "us-east-1": [
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2",
+      "client-0-0",
+      "client-1-0"
+    ],
+    "eu-west-1": [
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+    "us-west-1": [
+      "us-west-1-0",
+      "us-west-1-1",
+      "us-west-1-2"
+    ]
+  },
+  "region_rtt_latencies": {
+      "us-west-1": {
+        "us-west-1": 0,
+        "eu-west-1": 151,
+        "us-east-1": 72
       },
-      "ireland": {
-        "california": 151,
-        "ireland": 0,
-        "virginia": 88
+      "eu-west-1": {
+        "us-west-1": 151,
+        "eu-west-1": 0,
+        "us-east-1": 88
       },
-      "virginia": {
-        "california": 72,
-        "ireland": 88,
-        "virginia": 0
+      "us-east-1": {
+        "us-west-1": 72,
+        "eu-west-1": 88,
+        "us-east-1": 0
       }
   },
+  "client_total": [1],
+  "client_processes_per_client_node": [1],
+  "client_threads_per_process": 1,
   "client_conflict_percentage": 25,
   "client_write_percentage": 500,
   "client_read_percentage": 500,
   "client_rmw_percentage": 0,
-  "client_nodes_per_server": [1],
-  "client_processes_per_client_node": [1],
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,
@@ -89,17 +115,17 @@
   "plot_tput_lat_series_title": ["MDL"],
   "plot_tput_lat_x_label": "Throughput (ops/sec)",
   "plot_tput_lat_y_label": "Latency (ms)",
-  "base_local_exp_directory": "/users/jhelt/MDLin/experiments/nsdi20/results/tput-3",
+  "base_local_exp_directory": "/users/jhelt/MDLin/experiments/sosp2023/results/tput-3",
   "base_mounted_fs_path": "/mnt/extra",
-  "base_remote_bin_directory_nfs": "/users/jhelt/mdl",
-  "base_remote_exp_directory": "/users/jhelt/experiments",
+  "base_remote_bin_directory_nfs": "/users/jhelt/MDLin",
+  "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
   "client_debug_output": false,
   "client_experiment_length": 10,
-  "client_host_format_str": "client-%d-%d.%s.%s.emulab.net",
+  "client_host_format_str": "%s.%s.%s.wisc.cloudlab.us",
+  "client_name_format_str": "%s",
   "client_max_processors": 2,
-  "client_name_format_str": "client-%d-%d",
   "client_num_keys": 10000,
   "client_ramp_down": 0,
   "client_ramp_up": 0,
@@ -107,23 +133,23 @@
   "client_zipfian_s": 2,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "MDLd710",
+  "experiment_name": "MDL",
   "master_bin_name": "master",
   "master_port": 7077,
-  "master_server_name": "california",
+  "master_server_name": "us-east-1-0",
   "max_bandwidth": "1gibps",
   "max_file_descriptors": 65535,
   "max_retries": 0,
   "num_experiment_runs": 1,
   "out_directory_name": "out",
-  "project_name": "praxis",
+  "project_name": "praxis-PG0",
   "stats_file_name": "stats.json",
   "server_bin_name": "server",
   "server_cpuprofile": false,
   "server_blockprofile": false,
   "server_debug_output": false,
   "server_durable": false,
-  "server_host_format_str": "%s.%s.%s.emulab.net",
+  "server_host_format_str": "%s.%s.%s.wisc.cloudlab.us",
   "server_port": 7087,
   "server_rpc_port": 8087,
   "src_commit_hash": "master",
@@ -132,7 +158,7 @@
   "remote_bin_directory_nfs_enabled": false,
   "server_emulate_wan": false,
   "run_locally": false,
-  "default_remote_shell": "tcsh",
+  "default_remote_shell": "bash",
   "client_disable_gc": true,
   "server_disable_gc": true
 }
