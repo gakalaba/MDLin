@@ -3,6 +3,19 @@ import time
 import os
 import shutil
 
+
+def is_using_tcsh(config):
+    return 'default_remote_shell' in config and config['default_remote_shell'] == 'tcsh'
+
+
+def is_exp_local(config):
+    return 'run_locally' in config and config['run_locally']
+
+
+def is_exp_remote(config):
+    return not is_exp_local(config)
+
+
 def get_master_host(config, shard_num):
     n_shards = config["num_shards"]
     shards = config["shards"]

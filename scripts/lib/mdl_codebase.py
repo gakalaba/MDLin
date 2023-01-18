@@ -2,6 +2,11 @@ import os
 
 from lib.experiment_codebase import ExperimentCodebase
 
+from utils.remote_util import get_master_host
+from utils.remote_util import is_exp_local
+from utils.remote_util import is_using_tcsh
+from utils.remote_util import tcsh_redirect_output_to_files
+
 
 class MDLCodebase(ExperimentCodebase):
 
@@ -134,31 +139,38 @@ class MDLCodebase(ExperimentCodebase):
         client_command = '(cd %s; %s) & ' % (exp_directory, client_command)
         return client_command
 
-    def get_replica_cmd(self, config, i, run, local_exp_directory,
+    def get_replica_cmd(self, config, shard_idx, replica_idx, run, local_exp_directory,
                         remote_exp_directory):
+        n_shards = config["num_shards"]
+        shards = config["shards"]
+
         if 'run_locally' in config and config['run_locally']:
             path_to_server_bin = os.path.join(config['src_directory'],
-                                              config['bin_directory_name'], config['server_bin_name'])
+                                              config['bin_directory_name'],
+                                              config['server_bin_name'])
+
             exp_directory = local_exp_directory
             replica_addr = 'localhost'
-            replica_port = config['server_port'] + i
-            replica_rpc_port = config['server_rpc_port'] + i
+            port_offset = (shard_idx * n_shards) + replica_idx
+            replica_port = config['server_port'] + port_offset 
+            replica_rpc_port = config['server_rpc_port'] + port_offset
             master_addr = 'localhost'
             stats_file = os.path.join(exp_directory,
-                                      config['out_directory_name'], 'server-%d' % i,
-                                      'server-%d-stats-%d.json' % (i, run))
+                                      config['out_directory_name'],
+                                      'server-%d' % shard_idx,
+                                      'server-%d-%d-stats-%d.json' % (shard_idx, replica_idx, run))
         else:
-            path_to_server_bin = os.path.join(
-                config['base_remote_bin_directory_nfs'],
-                config['bin_directory_name'], config['server_bin_name'])
+            path_to_server_bin = os.path.join(config['base_remote_bin_directory_nfs'],
+                                              config['bin_directory_name'],
+                                              config['server_bin_name'])
             exp_directory = remote_exp_directory
-            replica_addr = config['server_names'][i]
+            replica_addr = shards[shard_idx][replica_idx]
             replica_port = config['server_port']
             replica_rpc_port = config['server_rpc_port']
-            master_addr = config['master_server_name']
+            master_addr = get_master_host(config, shard_idx)
             stats_file = os.path.join(exp_directory,
                                       config['out_directory_name'],
-                                      'server-%d-stats-%d.json' % (i, run))
+                                      'server-%d-%d-stats-%d.json' % (shard_idx, replica_idx, run))
 
         replica_command = ' '.join([str(x) for x in [
             path_to_server_bin,
@@ -166,23 +178,23 @@ class MDLCodebase(ExperimentCodebase):
             '-port', replica_port,
             '-rpcport', replica_rpc_port,
             '-maddr', master_addr,
-            '-statsFile', stats_file,
-            '-mport', config['master_port']]])
-        replica_command += self.get_replication_protocol_arg_from_name(
-            config['replication_protocol'])
+            '-mport', config['master_port'],
+            '-statsFile', stats_file
+            ]])
+        replica_command += self.get_replication_protocol_arg_from_name(config['replication_protocol'])
         if 'proxy_operations' in config['replication_protocol_settings'] and config['replication_protocol_settings']['proxy_operations']:
             replica_command += ' -proxy'
         if config['server_durable']:
             replica_command += ' -durable'
         if config['server_cpuprofile']:
             replica_command += ' -cpuprofile %s' % os.path.join(
-                exp_directory, config['out_directory_name'], 'server-%d-cpuprof-%d.prof' % (i, run))
+                exp_directory, config['out_directory_name'], 'server-%d-%d-cpuprof-%d.prof' % (shard_idx, replica_idx, run))
         if 'server_blockprofile' in config and config['server_blockprofile']:
             replica_command += ' -blockprofile %s' % os.path.join(
-                exp_directory, config['out_directory_name'], 'server-%d-blockprof-%d.prof' % (i, run))
+                exp_directory, config['out_directory_name'], 'server-%d-%d-blockprof-%d.prof' % (shard_idx, replica_idx, run))
         if 'server_memprofile' in config and config['server_memprofile']:
             replica_command += ' -memProfile %s' % os.path.join(
-                exp_directory, config['out_directory_name'], 'server-%d-memprof-%d.prof' % (i, run))
+                exp_directory, config['out_directory_name'], 'server-%d-%d-memprof-%d.prof' % (shard_idx, replica_idx, run))
         if config['server_debug_output']:
             replica_command += ' -debug'
         if 'server_emulate_wan' in config and config['server_emulate_wan']:
@@ -207,38 +219,43 @@ class MDLCodebase(ExperimentCodebase):
             replica_command += ' -forceWritePeriod %d' % config['replication_protocol_settings']['server_force_write_period']
 
         if 'server_gc_debug_trace' in config and config['server_gc_debug_trace']:
-            if 'run_locally' in config and config['run_locally']:
+            if is_exp_local(config) or not is_using_tcsh(config):
                 replica_command = 'GOGC=off; %s' % replica_command
             else:
                 replica_command = 'setenv GODEBUG gctrace=1; %s' % replica_command
         if 'server_disable_gc' in config and config['server_disable_gc']:
-            if 'run_locally' in config and config['run_locally']:
+            if is_exp_local(config) or not is_using_tcsh(config):
                 replica_command = 'GOGC=off; %s' % replica_command
             else:
                 replica_command = 'setenv GOGC off; %s' % replica_command
 
-        if 'run_locally' in config and config['run_locally']:
+        if is_exp_local(config):
             stdout_file = os.path.join(exp_directory,
-                                       config['out_directory_name'], 'server-%d' % i,
-                                       'server-%d-stdout-%d.log' % (i, run))
+                                       config['out_directory_name'],
+                                       'server-%d' % shard_idx,
+                                       'server-%d-%d-stdout-%d.log' % (shard_idx, replica_idx, run))
             stderr_file = os.path.join(exp_directory,
-                                       config['out_directory_name'], 'server-%d' % i,
-                                       'server-%d-stderr-%d.log' % (i, run))
+                                       config['out_directory_name'],
+                                       'server-%d' % shard_idx,
+                                       'server-%d-%d-stderr-%d.log' % (shard_idx, replica_idx, run))
             replica_command = '%s 1> %s 2> %s' % (replica_command, stdout_file,
                                                   stderr_file)
         else:
             stdout_file = os.path.join(exp_directory,
-                                       config['out_directory_name'], 'server-%d-stdout-%d.log' % (
-                                           i, run))
+                                       config['out_directory_name'],
+                                       'server-%d-%d-stdout-%d.log' % (shard_idx, replica_idx, run))
             stderr_file = os.path.join(exp_directory,
-                                       config['out_directory_name'], 'server-%d-stderr-%d.log' % (
-                                           i, run))
-            if 'default_remote_shell' in config and config['default_remote_shell'] == 'bash':
-                replica_command = '%s 1> %s 2> %s' % (replica_command, stdout_file,
-                                                      stderr_file)
-            else:
+                                       config['out_directory_name'],
+                                       'server-%d-%d-stderr-%d.log' % (shard_idx, replica_idx, run))
+            if is_using_tcsh(config):
                 replica_command = tcsh_redirect_output_to_files(replica_command,
-                                                                stdout_file, stderr_file)
+                                                                stdout_file,
+                                                                stderr_file)
+            else:
+                replica_command = '%s 1> %s 2> %s' % (replica_command,
+                                                      stdout_file,
+                                                      stderr_file)
+
         replica_command = 'cd %s; %s' % (exp_directory, replica_command)
         return replica_command
 

@@ -230,10 +230,13 @@ def start_masters(config, local_exp_directory, remote_exp_directory, run):
         else:
             master_host = 'localhost'
 
+        shard = shards[i]
+
         master_command = ' '.join([str(x) for x in [path_to_master_bin,
                                                     '-addr', master_host,
                                                     '-port', config['master_port'],
-                                                    '-N', len(shards[i]),
+                                                    '-N', len(shard),
+                                                    '-ips', ','.join(shard),
                                                     '-nshrds', n_shards]])
 
         stdout_file = os.path.join(exp_directory,
@@ -402,14 +405,6 @@ def copy_binaries_to_nfs(config, executor):
                                                config['base_remote_bin_directory_nfs']))
 
     concurrent.futures.wait(futures)
-
-
-def is_exp_local(config):
-    return 'run_locally' in config and config['run_locally']
-
-
-def is_exp_remote(config):
-    return not is_exp_local(config)
 
 
 def run_experiment(config_file, client_config_idx, executor):

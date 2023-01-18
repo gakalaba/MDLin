@@ -12,7 +12,7 @@ class ExperimentCodebase(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_replica_cmd(self, config, replica_id, local_exp_directory,
+    def get_replica_cmd(self, config, shard_idx, replica_idx, local_exp_directory,
                         remote_exp_directory):
         pass
 

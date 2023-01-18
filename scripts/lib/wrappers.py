@@ -5,9 +5,6 @@ from lib.mdl_codebase import MDLCodebase
 
 
 __BUILDERS__ = {
-    "gryff": GryffCodebase(),
-    "rdma-repl": RdmaReplCodebase(),
-    "morty": MortyCodebase(),
     "mdl": MDLCodebase()
 }
 
@@ -18,10 +15,12 @@ def get_client_cmd(config, i, j, k, run, local_exp_directory,
                                                                 k, run, local_exp_directory, remote_exp_directory)
 
 
-def get_replica_cmd(config, replica_id, run, local_exp_directory,
+def get_replica_cmd(config, shard_idx, replica_idx, run, local_exp_directory,
                     remote_exp_directory):
-    return __BUILDERS__[config['codebase_name']].get_replica_cmd(config,
-                                                                 replica_id, run, local_exp_directory, remote_exp_directory)
+    return __BUILDERS__[config['codebase_name']].get_replica_cmd(config, shard_idx,
+                                                                 replica_idx, run,
+                                                                 local_exp_directory,
+                                                                 remote_exp_directory)
 
 
 def prepare_local_exp_directory(config, config_file):
