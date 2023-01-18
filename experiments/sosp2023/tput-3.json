@@ -18,6 +18,14 @@
       "us-east-1-1",
       "us-east-1-2"
   ],
+  "num_shards": 1,
+  "shards": [
+    [
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
+    ]
+  ],
   "clients": [
     "client-0-0",
     "client-1-0"
@@ -123,7 +131,7 @@
   "client_bin_name": "clientnew",
   "client_debug_output": false,
   "client_experiment_length": 10,
-  "client_host_format_str": "%s.%s.%s.wisc.cloudlab.us",
+  "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 2,
   "client_num_keys": 10000,
@@ -134,10 +142,13 @@
   "client_zipfian_v": 1,
   "emulab_user": "root",
   "experiment_name": "MDL",
+  "use_coordinator": true,
+  "coordinator_bin_name": "coordinator",
+  "coordinator_port": 7067,
+  "use_masters": true,
   "master_bin_name": "master",
   "master_port": 7077,
-  "master_server_name": "us-east-1-0",
-  "max_bandwidth": "1gibps",
+  "max_bandwidth": "10gibps",
   "max_file_descriptors": 65535,
   "max_retries": 0,
   "num_experiment_runs": 1,
@@ -149,10 +160,10 @@
   "server_blockprofile": false,
   "server_debug_output": false,
   "server_durable": false,
-  "server_host_format_str": "%s.%s.%s.wisc.cloudlab.us",
+  "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
   "server_rpc_port": 8087,
-  "src_commit_hash": "master",
+  "src_commit_hash": "scripts",
   "src_directory": "/users/jhelt/MDLin",
   "codebase_name": "mdl",
   "remote_bin_directory_nfs_enabled": false,

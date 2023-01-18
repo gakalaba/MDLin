@@ -3,8 +3,15 @@ import time
 import os
 import shutil
 
-def get_master_host(config):
-    return config['server_host_format_str'] % (config['master_server_name'],
+def get_master_host(config, shard_num):
+    n_shards = config["num_shards"]
+    shards = config["shards"]
+
+    assert(len(shards) == n_shards)
+
+    master_host = shards[shard_num][0]
+
+    return config['server_host_format_str'] % (master_host,
         config['experiment_name'], config['project_name'])
 
 def get_server_host(config, i):
@@ -26,12 +33,12 @@ def ssh_args(command, remote_user, remote_host):
         '%s@%s' % (remote_user, remote_host), command]
 
 def run_remote_command_sync(command, remote_user, remote_host):
-    print(command)
+    print("{}@{}: {}".format(remote_user, remote_host, command))
     return subprocess.run(ssh_args(command, remote_user, remote_host),
         stdout=subprocess.PIPE, universal_newlines=True).stdout
 
 def run_remote_command_async(command, remote_user, remote_host, detach=True):
-    print(command)
+    print("{}@{}: {}".format(remote_user, remote_host, command))
     if detach:
         command = '(%s) >& /dev/null & exit' % command
     return subprocess.Popen(ssh_args(command, remote_user, remote_host))
