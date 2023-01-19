@@ -88,8 +88,9 @@ func main() {
 	log.Printf("]\n")
 
 	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt)
+	signal.Notify(interrupt, os.Interrupt, os.Kill)
 
+	var rep Finishable
 	if *doMDLin {
 		log.Println("Starting MD Linearizability replica...")
 		// Get the shards for multi-sharded MD-Lin
@@ -103,9 +104,7 @@ func main() {
 				log.Printf("-->Shard %d leader at %s", i, e)
 			}
 		}
-		rep := mdlin.NewReplica(replicaId, nodeList, shards, shardId, *thrifty, *exec, *dreply, *durable, *batch, *statsFile)
-		rpc.Register(rep)
-		go catchKill(rep, interrupt)
+		rep = mdlin.NewReplica(replicaId, nodeList, shards, shardId, *thrifty, *exec, *dreply, *durable, *batch, *statsFile)
 	} else if *doGryff {
 		log.Println("Starting Gryff replica...")
 		var rmwHandlerType gryff.RMWHandlerType
@@ -120,43 +119,34 @@ func main() {
 			log.Fatal("Unknown consensus protocol: ", *rmwHandler)
 			break
 		}
-		rep := gryff.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
+		rep = gryff.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
 			*beacon, *durable, *statsFile, *regular, *proxy, *noConflicts,
 			*epaxosMode, rmwHandlerType, *shortcircuitTime, *fastOverwriteTime,
 			*forceWritePeriod, *broadcastOptimizationEnabled)
-		rpc.Register(rep)
-		go catchKill(rep, interrupt)
 	} else if *doAbd {
 		log.Println("Starting ABD replica...")
-		rep := abd.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
+		rep = abd.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
 			*durable, *statsFile)
-		rpc.Register(rep)
-		go catchKill(rep, interrupt)
 	} else if *doEpaxos {
 		log.Println("Starting Egalitarian Paxos replica...")
-		rep := epaxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
+		rep = epaxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
 			*beacon, *durable, *statsFile, *noConflicts)
-		rpc.Register(rep)
-		go catchKill(rep, interrupt)
 	} else if *doMencius {
 		log.Println("Starting Mencius replica...")
-		rep := mencius.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
+		rep = mencius.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
 			*durable, *statsFile)
-		rpc.Register(rep)
-		go catchKill(rep, interrupt)
 	} else if *doGpaxos {
 		log.Println("Starting Generalized Paxos replica...")
-		rep := gpaxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
+		rep = gpaxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
 			*statsFile)
-		rpc.Register(rep)
-		go catchKill(rep, interrupt)
 	} else {
 		log.Println("Starting classic Paxos replica...")
-		rep := paxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
+		rep = paxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
 			*beacon, *durable, *statsFile)
-		rpc.Register(rep)
-		go catchKill(rep, interrupt)
 	}
+
+	rpc.Register(rep)
+	go catchKill(rep, interrupt)
 
 	serverlib.Serve(*rpcPort)
 }

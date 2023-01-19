@@ -21,36 +21,37 @@ class MDLCodebase(ExperimentCodebase):
             'mdl': ' -mdl'
         }[replication_protocol]
 
-    def get_client_cmd(self, config, i, j, k, run, local_exp_directory,
-                       remote_exp_directory):
-        if 'run_locally' in config and config['run_locally']:
+    def get_client_cmd(self, config, i, k, run, local_exp_directory, remote_exp_directory):
+        client = config["clients"][i]
+
+        if is_exp_local(config):
             exp_directory = local_exp_directory
             path_to_client_bin = os.path.join(config['src_directory'],
-                                              config['bin_directory_name'], config['client_bin_name'])
-            master_addr = 'localhost'
+                                              config['bin_directory_name'],
+                                              config['client_bin_name'])
+            coord_addr = 'localhost'
             stats_file = os.path.join(exp_directory,
-                                      config['out_directory_name'], 'client-%d-%d' % (
-                                          i, j),
-                                      'client-%d-%d-%d-stats-%d.json' % (i, j, k, run))
+                                      config['out_directory_name'], client,
+                                      '%s-%d-stats-%d.json' % (client, k, run))
         else:
             exp_directory = remote_exp_directory
-            path_to_client_bin = os.path.join(
-                config['base_remote_bin_directory_nfs'],
-                config['bin_directory_name'], config['client_bin_name'])
-            master_addr = config['master_server_name']
+            path_to_client_bin = os.path.join(config['base_remote_bin_directory_nfs'],
+                                              config['bin_directory_name'],
+                                              config['client_bin_name'])
+            # TODO: Fix this for multiple shards
+            coord_addr = get_master_host(config, 0)
             stats_file = os.path.join(exp_directory,
                                       config['out_directory_name'],
-                                      'client-%d-%d-%d-stats-%d.json' % (i, j, k, run))
+                                      '%s-%d-stats-%d.json' % (client, k, run))
 
-        client_id = i * config['client_nodes_per_server'] * \
-            config['client_processes_per_client_node'] + j * \
-            config['client_processes_per_client_node'] + k
+        client_id = i * config['client_processes_per_client_node'] + k
+
         client_command = ' '.join([str(x) for x in [
             path_to_client_bin,
             '-clientId', client_id,
             '-expLength', config['client_experiment_length'],
-            '-masterAddr', master_addr,
-            '-masterPort', config['master_port'],
+            '-caddr', coord_addr,
+            '-cport', config['coordinator_port'],
             '-maxProcessors', config['client_max_processors'],
             '-numKeys', config['client_num_keys'],
             '-rampDown', config['client_ramp_down'],
@@ -64,7 +65,7 @@ class MDLCodebase(ExperimentCodebase):
         if 'client_cpuprofile' in config and config['client_cpuprofile']:
             client_command += ' -cpuProfile %s' % os.path.join(exp_directory,
                                                                config['out_directory_name'],
-                                                               'client-%d-%d-%d-cpuprof-%d.log' % (i, j, k, run))
+                                                               '%s-%d-cpuprof-%d.log' % (client, k, run))
         if 'client_rand_sleep' in config:
             client_command += ' -randSleep %d' % config['client_rand_sleep']
         if config['client_conflict_percentage'] < 0:
@@ -101,43 +102,44 @@ class MDLCodebase(ExperimentCodebase):
         if 'client_tail_at_scale' in config and config['client_tail_at_scale'] > 0:
             client_command += ' -tailAtScale %d' % config['client_tail_at_scale']
         if 'client_gc_debug_trace' in config and config['client_gc_debug_trace']:
-            if 'run_locally' in config and config['run_locally']:
+            if is_exp_local(config) or not is_using_tcsh(config):
                 client_command = 'GODEBUG=\'gctrace=1\'; %s' % client_command
             else:
                 client_command = 'setenv GODEBUG gctrace=1; %s' % client_command
         if 'client_disable_gc' in config and config['client_disable_gc']:
-            if 'run_locally' in config and config['run_locally']:
+            if is_exp_local(config) or not is_using_tcsh(config):
                 client_command = 'GOGC=off; %s' % client_command
             else:
                 client_command = 'setenv GOGC off; %s' % client_command
 
-        if 'run_locally' in config and config['run_locally']:
+        if is_exp_local(config):
             stdout_file = os.path.join(exp_directory,
                                        config['out_directory_name'],
-                                       'client-%d-%d' % (i, j),
-                                       'client-%d-%d-%d-stdout-%d.log' % (i, j, k, run))
+                                       client,
+                                       '-%d-stdout-%d.log' % (client, k, run))
             stderr_file = os.path.join(exp_directory,
                                        config['out_directory_name'],
-                                       'client-%d-%d' % (i, j),
-                                       'client-%d-%d-%d-stderr-%d.log' % (i, j, k, run))
+                                       client,
+                                       '%s-%d-stderr-%d.log' % (client, k, run))
             client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
                                                  stderr_file)
         else:
             stdout_file = os.path.join(exp_directory,
                                        config['out_directory_name'],
-                                       'client-%d-%d-%d-stdout-%d.log' % (i, j, k, run))
+                                       '%s-%d-stdout-%d.log' % (client, k, run))
             stderr_file = os.path.join(exp_directory,
                                        config['out_directory_name'],
-                                       'client-%d-%d-%d-stderr-%d.log' % (i, j, k, run))
-            if 'default_remote_shell' in config and config['default_remote_shell'] == 'bash':
-                client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
-                                                     stderr_file)
-            else:
+                                       '%s-%d-stderr-%d.log' % (client, k, run))
+            if is_using_tcsh(config):
                 client_command = tcsh_redirect_output_to_files(client_command,
                                                                stdout_file, stderr_file)
+            else:
+                client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
+                                                     stderr_file)
 
         client_command = '(cd %s; %s) & ' % (exp_directory, client_command)
         return client_command
+
 
     def get_replica_cmd(self, config, shard_idx, replica_idx, run, local_exp_directory,
                         remote_exp_directory):

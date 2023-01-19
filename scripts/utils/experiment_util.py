@@ -114,45 +114,48 @@ def wait_for_clients_to_terminate(config, client_ssh_threads):
 
 
 def start_clients(config, local_exp_directory, remote_exp_directory, run):
+    assert(config["client_total"] == (len(config["clients"])
+                                      * config["client_processes_per_client_node"]))
     client_processes = []
-    total = 0
-    for i in range(len(config['server_names'])):
-        for j in range(config['client_nodes_per_server']):
-            if is_exp_local(config):
-                os.makedirs(os.path.join(local_exp_directory,
-                                         config['out_directory_name'],
-                                         'client-%d-%d' % (i, j)))
-            client_host = get_client_host(config, i, j)
-            appended_client_commands = ''
-            for k in range(config['client_processes_per_client_node']):
-                # TODO hack for now to start many clients simultaneously
-                appended_client_commands += get_client_cmd(config, i, j, k,
-                                                           run, local_exp_directory, remote_exp_directory)
-                if k != 0 and k % 128 == 0:
-                    if is_exp_remote(config):
-                        client_processes.append(run_remote_command_async(
-                            appended_client_commands, config['emulab_user'],
-                            client_host))
-                    else:
-                        client_processes.append(subprocess.Popen(
-                            appended_client_commands, shell=True))
-                    appended_client_commands = ''
-                total += 1
-                if 'client_total' in config and total >= config['client_total']:
-                    break
-            if len(appended_client_commands) > 0:
-                print(appended_client_commands)
+    for i in range(len(config["clients"])):
+        client = config["clients"][i]
+        if is_exp_local(config):
+            os.makedirs(os.path.join(local_exp_directory,
+                                     config["out_directory_name"], client))
+
+        client_host = get_client_host(config, client)
+
+        appended_client_commands = ""
+        for k in range(config["client_processes_per_client_node"]):
+            appended_client_commands += get_client_cmd(
+                config, i, k, run, local_exp_directory, remote_exp_directory)
+
+            if k != 0 and k % 128 == 0:
+                if appended_client_commands[-2:] == '& ':
+                    appended_client_commands = appended_client_commands[:-2]
                 if is_exp_remote(config):
                     client_processes.append(run_remote_command_async(
-                        appended_client_commands, config['emulab_user'],
-                        client_host))
+                        appended_client_commands +
+                        ' & wait', config['emulab_user'],
+                        client_host, False))
                 else:
                     client_processes.append(subprocess.Popen(
-                        appended_client_commands, shell=True))
-            if 'client_total' in config and total >= config['client_total']:
-                break
-        if 'client_total' in config and total >= config['client_total']:
-            break
+                        appended_client_commands + ' & wait', shell=True))
+                    print(appended_client_commands)
+                appended_client_commands = ''
+
+        if len(appended_client_commands) > 0:
+            if appended_client_commands[-2:] == '& ':
+                appended_client_commands = appended_client_commands[:-2]
+            if is_exp_remote(config):
+                client_processes.append(run_remote_command_async(
+                    appended_client_commands +
+                    ' & wait', config['emulab_user'],
+                    client_host, False))
+            else:
+                client_processes.append(subprocess.Popen(
+                    appended_client_commands + ' & wait', shell=True))
+                print(appended_client_commands)
 
     return client_processes
 
@@ -247,7 +250,7 @@ def start_masters(config, local_exp_directory, remote_exp_directory, run):
                                    config['out_directory_name'],
                                    'master-%d-stderr-%d.log' % (i, run))
 
-        if is_exp_remote(config):
+        if is_exp_remote(config) and is_using_tcsh(config):
             master_command = tcsh_redirect_output_to_files(master_command,
                                                            stdout_file, stderr_file)
         else:
@@ -482,7 +485,7 @@ def run_experiment(config_file, client_config_idx, executor):
             if is_using_masters(config):
                 for master_thread in master_threads:
                     master_thread.terminate()
-                kill_masters(config, executors)
+                kill_masters(config, executor)
         return executor.submit(collect_and_calculate, config,
                                client_config_idx, remote_exp_directory, local_out_directory,
                                executor)
