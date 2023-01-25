@@ -16,9 +16,15 @@ def is_using_masters(config):
 
 def collect_exp_data(config, remote_exp_directory, local_directory_base, executor):
     futures = []
-    remote_directory = os.path.join(
-        remote_exp_directory, config["out_directory_name"])
+    remote_directory = os.path.join(remote_exp_directory, config["out_directory_name"])
+
     if is_using_masters(config):
+        coordinator_host = get_coordinator_host(config)
+        futures.append(executor.submit(copy_remote_directory_to_local,
+                                       os.path.join(local_directory_base, "coordinator"),
+                                       config["emulab_user"], coordinator_host, remote_directory,
+                                       file_filter="coordinator-*.*"))
+
         for i in range(config["num_shards"]):
             master_host = get_master_host(config, i)
             futures.append(executor.submit(copy_remote_directory_to_local,
@@ -291,11 +297,13 @@ def start_masters(config, local_exp_directory, remote_exp_directory, run):
         path_to_master_bin = os.path.join(
             config['base_remote_bin_directory_nfs'],
             config['bin_directory_name'], config['master_bin_name'])
+        coordinator_host = get_coordinator_host(config)
     else:
         exp_directory = local_exp_directory
         path_to_master_bin = os.path.join(
             config['src_directory'],
             config['bin_directory_name'], config['master_bin_name'])
+        coordinator_host = "localhost"
 
     n_shards = config["num_shards"]
     shards = config["shards"]
@@ -311,7 +319,9 @@ def start_masters(config, local_exp_directory, remote_exp_directory, run):
 
         master_command = ' '.join([str(x) for x in [path_to_master_bin,
                                                     '-addr', master_host,
-                                                    '-port', config['master_port'],
+                                                    '-port', config["master_port"],
+                                                    '-caddr', coordinator_host,
+                                                    '-cport', config["coordinator_port"],
                                                     '-N', len(shard),
                                                     '-ips', ','.join(shard),
                                                     '-nshrds', n_shards]])

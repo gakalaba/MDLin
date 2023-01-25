@@ -233,6 +233,7 @@ func registerWithCoordinator(coordAddr string) []string {
 	var reply coordinatorproto.RegisterReply
 
 	for done := false; !done; {
+		log.Println("Trying coordinator: ", coordAddr)
 		ccli, err := rpc.DialHTTP("tcp", coordAddr)
 		if err == nil {
 			err = ccli.Call("Coordinator.Register", args, &reply)
@@ -241,7 +242,7 @@ func registerWithCoordinator(coordAddr string) []string {
 				break
 			}
 		}
-		time.Sleep(1e9)
+		time.Sleep(1 * time.Second)
 	}
 
 	return reply.MasterList
