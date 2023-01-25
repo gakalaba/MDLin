@@ -76,17 +76,19 @@ def copy_path_to_remote_host(local_path, remote_user, remote_host, remote_path, 
     subprocess.call(args)
 
 
-def copy_remote_directory_to_local(local_directory, remote_user, remote_host, remote_directory):
+def copy_remote_directory_to_local(local_directory, remote_user, remote_host, remote_directory, file_filter="."):
     os.makedirs(local_directory, exist_ok=True)
     print("{}@{}:{} -> {}".format(remote_user, remote_host, remote_directory, local_directory))
-    tar_file = 'logs-{}.tar'.format(uuid.uuid1())
+    tar_file = "logs-{}.tar".format(uuid.uuid1())
     tar_file_path = os.path.join(remote_directory, tar_file)
 
-    run_remote_command_sync('tar -C %s -cf %s .' % (remote_directory, tar_file_path), remote_user, remote_host)
+    run_remote_command_sync("cd {} && tar -czf {} {}".format(remote_directory, tar_file_path, file_filter),
+                            remote_user, remote_host)
 
     subprocess.call(["scp", "-r", "-p", '%s@%s:%s' % (remote_user, remote_host, tar_file_path), local_directory])
-    subprocess.call(['tar', '-xf', os.path.join(local_directory, tar_file), '-C', local_directory])
+    subprocess.call(['tar', '-xzf', os.path.join(local_directory, tar_file), '-C', local_directory])
     subprocess.call(['rm', '-rf', os.path.join(local_directory, tar_file)])
+
 
 def tcsh_redirect_output_to_files(command, stdout_file, stderr_file):
     return '(%s > %s) >& %s' % (command, stdout_file, stderr_file)

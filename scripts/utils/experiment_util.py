@@ -23,7 +23,8 @@ def collect_exp_data(config, remote_exp_directory, local_directory_base, executo
             master_host = get_master_host(config, i)
             futures.append(executor.submit(copy_remote_directory_to_local,
                                            os.path.join(local_directory_base, "master-{}".format(i)),
-                                           config["emulab_user"], master_host, remote_directory))
+                                           config["emulab_user"], master_host, remote_directory,
+                                           file_filter="master-{}-*.*".format(i)))
 
     for shard_idx in range(len(config["shards"])):
         shard = config["shards"][shard_idx]
@@ -33,7 +34,8 @@ def collect_exp_data(config, remote_exp_directory, local_directory_base, executo
 
             futures.append(executor.submit(copy_remote_directory_to_local,
                                            os.path.join(local_directory_base, "server-{}".format(shard_idx)),
-                                           config["emulab_user"], server_host, remote_directory))
+                                           config["emulab_user"], server_host, remote_directory,
+                                           file_filter="server-{}-{}-*.*".format(shard_idx, replica_idx)))
 
     for client in config["clients"]:
         client_host = get_client_host(config, client)
