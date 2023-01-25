@@ -11,26 +11,37 @@ from lib.wrappers import *
 
 
 def is_using_masters(config):
-    return 'use_masters' in config and config['use_masters']
+    return "use_masters" in config and config["use_masters"]
 
 
 def collect_exp_data(config, remote_exp_directory, local_directory_base, executor):
-    download_futures = []
+    futures = []
     remote_directory = os.path.join(
-        remote_exp_directory, config['out_directory_name'])
+        remote_exp_directory, config["out_directory_name"])
     if is_using_masters(config):
-        master_host = get_master_host(config)
-        copy_remote_directory_to_local(os.path.join(
-            local_directory_base, 'master'), config['emulab_user'], master_host, remote_directory)
-    for i in range(len(config['server_names'])):
-        server_host = get_server_host(config, i)
-        download_futures.append(executor.submit(copy_remote_directory_to_local, os.path.join(
-            local_directory_base, 'server-%d' % i), config['emulab_user'], server_host, remote_directory))
-        for j in range(config['client_nodes_per_server']):
-            client_host = get_client_host(config, i, j)
-            download_futures.append(executor.submit(copy_remote_directory_to_local, os.path.join(
-                local_directory_base, 'client-%d-%d' % (i, j)), config['emulab_user'], client_host, remote_directory))
-    return download_futures
+        for i in range(config["num_shards"]):
+            master_host = get_master_host(config, i)
+            futures.append(executor.submit(copy_remote_directory_to_local,
+                                           os.path.join(local_directory_base, "master-{}".format(i)),
+                                           config["emulab_user"], master_host, remote_directory))
+
+    for shard_idx in range(len(config["shards"])):
+        shard = config["shards"][shard_idx]
+        for replica_idx in range(len(shard)):
+            replica = shard[replica_idx]
+            server_host = get_server_host(config, replica)
+
+            futures.append(executor.submit(copy_remote_directory_to_local,
+                                           os.path.join(local_directory_base, "server-{}".format(shard_idx)),
+                                           config["emulab_user"], server_host, remote_directory))
+
+    for client in config["clients"]:
+        client_host = get_client_host(config, client)
+        futures.append(executor.submit(copy_remote_directory_to_local,
+                                       os.path.join(local_directory_base, client),
+                                       config["emulab_user"], client_host, remote_directory))
+
+    concurrent.futures.wait(futures)
 
 
 def kill_servers(config, executor, kill_args=' -9'):
@@ -330,9 +341,8 @@ def prepare_remote_exp_directories(config, local_exp_directory, executor):
 
 def collect_and_calculate(config, client_config_idx, remote_exp_directory, local_out_directory, executor):
     if is_exp_remote(config):
-        download_futures = collect_exp_data(config, remote_exp_directory,
-                                            local_out_directory, executor)
-        concurrent.futures.wait(download_futures)
+        collect_exp_data(config, remote_exp_directory, local_out_directory, executor)
+
     stats, op_latencies = calculate_statistics(config, local_out_directory)
     generate_cdf_plots(config, local_out_directory, stats, executor)
     #generate_lot_plots(config, local_out_directory, stats, op_latencies, executor)

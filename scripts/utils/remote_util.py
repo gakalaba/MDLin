@@ -1,7 +1,8 @@
-import subprocess
-import time
 import os
 import shutil
+import subprocess
+import time
+import uuid
 
 
 def is_using_tcsh(config):
@@ -28,8 +29,13 @@ def get_master_host(config, shard_num):
         config['experiment_name'], config['project_name'])
 
 def get_server_host(config, i):
-    return config['server_host_format_str'] % (config['server_names'][i],
-        config['experiment_name'], config['project_name'])
+    if isinstance(i, int):
+        return config['server_host_format_str'] % (config['server_names'][i], config['experiment_name'], config['project_name'])
+    elif isinstance(i, str):
+        return config['server_host_format_str'] % (i, config['experiment_name'], config['project_name'])
+    else:
+        raise ValueError("Unexpected value for i: {}".format(i))
+
 
 def get_client_host(config, client):
     return config['client_host_format_str'] % (client, config['experiment_name'],
@@ -59,8 +65,7 @@ def run_remote_command_async(command, remote_user, remote_host, detach=True):
 def change_mounted_fs_permissions(remote_group, remote_user, remote_host, remote_path):
     run_remote_command_sync('sudo chown %s:%s %s; sudo chmod 775 %s' % (remote_user, remote_group, remote_path, remote_path), remote_user, remote_host)
 
-def copy_path_to_remote_host(local_path, remote_user,
-        remote_host, remote_path, exclude_paths=[]):
+def copy_path_to_remote_host(local_path, remote_user, remote_host, remote_path, exclude_paths=[]):
     print('%s:%s' % (remote_host, remote_path))
     args = ["rsync", "-r", "-e", "ssh", local_path,
         '%s@%s:%s' % (remote_user, remote_host, remote_path)]
@@ -70,16 +75,17 @@ def copy_path_to_remote_host(local_path, remote_user,
             args.append(exclude_paths[i])
     subprocess.call(args)
 
+
 def copy_remote_directory_to_local(local_directory, remote_user, remote_host, remote_directory):
     os.makedirs(local_directory, exist_ok=True)
-    print(local_directory)
-    tar_file = 'logs.tar'
+    print("{}@{}:{} -> {}".format(remote_user, remote_host, remote_directory, local_directory))
+    tar_file = 'logs-{}.tar'.format(uuid.uuid1())
     tar_file_path = os.path.join(remote_directory, tar_file)
-    run_remote_command_sync('tar -C %s -cf %s .' % (remote_directory,
-        tar_file_path), remote_user, remote_host)
+
+    run_remote_command_sync('tar -C %s -cf %s .' % (remote_directory, tar_file_path), remote_user, remote_host)
+
     subprocess.call(["scp", "-r", "-p", '%s@%s:%s' % (remote_user, remote_host, tar_file_path), local_directory])
-    subprocess.call(['tar', '-xf', os.path.join(local_directory, tar_file),
-        '-C', local_directory])
+    subprocess.call(['tar', '-xf', os.path.join(local_directory, tar_file), '-C', local_directory])
     subprocess.call(['rm', '-rf', os.path.join(local_directory, tar_file)])
 
 def tcsh_redirect_output_to_files(command, stdout_file, stderr_file):
