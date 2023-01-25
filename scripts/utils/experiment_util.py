@@ -86,12 +86,18 @@ def kill_masters(config, executor):
         master_host = get_master_host(config, i)
         if is_exp_remote(config):
             futures.append(executor.submit(kill_remote_process_by_name,
-                                           config['master_bin_name'],
-                                           config['emulab_user'],
-                                           master_host, ' -9'))
+                                           config["master_bin_name"],
+                                           config["emulab_user"],
+                                           master_host, " -9"))
         else:
             futures.append(executor.submit(kill_process_by_name,
-                                           config['master_bin_name'], ' -9'))
+                                           config["master_bin_name"], " -9"))
+
+    coordinator_host = get_coordinator_host(config)
+    futures.append(executor.submit(kill_remote_process_by_name,
+                                   config["coordinator_bin_name"],
+                                   config["emulab_user"],
+                                   coordinator_host, " -9"))
 
     concurrent.futures.wait(futures)
 
@@ -220,6 +226,61 @@ def start_servers(config, local_exp_directory, remote_exp_directory, run):
 
     time.sleep(1)
     return server_threads
+
+
+def start_coordinator(config, local_exp_directory, remote_exp_directory, run):
+    if is_exp_remote(config):
+        exp_directory = remote_exp_directory
+        path_to_coordinator_bin = os.path.join(config["base_remote_bin_directory_nfs"],
+                                               config["bin_directory_name"],
+                                               config["coordinator_bin_name"])
+    else:
+        exp_directory = local_exp_directory
+        path_to_coordinator_bin = os.path.join(config["src_directory"],
+                                               config["bin_directory_name"],
+                                               config["coordinator_bin_name"])
+
+    n_shards = config["num_shards"]
+    masters_hosts = []
+    for i in range(n_shards):
+        if is_exp_remote(config):
+            master_host = get_master_host(config, i)
+        else:
+            master_host = "localhost"
+
+        masters_hosts.append(master_host)
+
+    coordinator_command = ' '.join([str(x) for x in [path_to_coordinator_bin,
+                                                     "-port", config["coordinator_port"],
+                                                     "-N", n_shards,
+                                                     "-ips", ','.join(masters_hosts)]])
+
+    stdout_file = os.path.join(exp_directory,
+                               config["out_directory_name"],
+                               "coordinator-stdout-{}.log".format(run))
+
+    stderr_file = os.path.join(exp_directory,
+                               config["out_directory_name"],
+                               "coordinator-stderr-{}.log".format(run))
+
+    if is_exp_remote(config) and is_using_tcsh(config):
+        coordinator_command = tcsh_redirect_output_to_files(coordinator_command,
+                                                            stdout_file, stderr_file)
+    else:
+        coordinator_command = '%s 1> %s 2> %s' % (coordinator_command,
+                                                  stdout_file, stderr_file)
+
+    coordinator_command = 'cd %s; %s' % (exp_directory, coordinator_command)
+
+    if is_exp_remote(config):
+        coordinator_host = get_coordinator_host(config)
+        coordinator_thread = run_remote_command_async(coordinator_command,
+                                                      config["emulab_user"],
+                                                      coordinator_host, detach=False)
+    else:
+        coordinator_thread = subprocess.Popen(coordinator_command, shell=True)
+
+    return coordinator_thread
     
 
 def start_masters(config, local_exp_directory, remote_exp_directory, run):
@@ -278,6 +339,8 @@ def start_masters(config, local_exp_directory, remote_exp_directory, run):
                                                            master_host, detach=False))
         else:
             master_threads.append(subprocess.Popen(master_command, shell=True))
+
+    master_threads.append(start_coordinator(config, local_exp_directory, remote_exp_directory, run))
 
     return master_threads
 

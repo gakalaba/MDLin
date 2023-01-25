@@ -2,6 +2,7 @@ import os
 
 from lib.experiment_codebase import ExperimentCodebase
 
+from utils.remote_util import get_coordinator_host
 from utils.remote_util import get_master_host
 from utils.remote_util import is_exp_local
 from utils.remote_util import is_using_tcsh
@@ -38,8 +39,8 @@ class MDLCodebase(ExperimentCodebase):
             path_to_client_bin = os.path.join(config['base_remote_bin_directory_nfs'],
                                               config['bin_directory_name'],
                                               config['client_bin_name'])
-            # TODO: Fix this for multiple shards
-            coord_addr = get_master_host(config, 0)
+
+            coord_addr = get_coordinator_host(config)
             stats_file = os.path.join(exp_directory,
                                       config['out_directory_name'],
                                       '%s-%d-stats-%d.json' % (client, k, run))

@@ -17,6 +17,10 @@ def is_exp_remote(config):
     return not is_exp_local(config)
 
 
+def get_coordinator_host(config):
+    return get_master_host(config, 0)
+
+
 def get_master_host(config, shard_num):
     n_shards = config["num_shards"]
     shards = config["shards"]
@@ -25,8 +29,8 @@ def get_master_host(config, shard_num):
 
     master_host = shards[shard_num][0]
 
-    return config['server_host_format_str'] % (master_host,
-        config['experiment_name'], config['project_name'])
+    return config["server_host_format_str"] % (master_host, config["experiment_name"], config["project_name"])
+
 
 def get_server_host(config, i):
     if isinstance(i, int):
