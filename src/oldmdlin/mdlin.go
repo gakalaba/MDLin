@@ -57,7 +57,7 @@ type Replica struct {
 	IsLeader            bool        // does this replica think it is the leader
 	instanceSpace       []*Instance // the space of all instances (used and not yet used) //TODO change the name to orderedLog!!
   crtInstance         int32       // highest active instance number that this replica knows about NOT inclusive!
-
+  
   bufferedLog         *Instance  // the unordered requests LINKED LIST
 
   defaultBallot       int32       // default ballot for new instances (0 until a Prepare(ballot, instance->infinity) from a leader)
@@ -260,13 +260,22 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 
 		switch uint8(msgType) {
 
-		case mdlinproto.COORDREQ_REPLY:
-			CRR := new(mdlinproto.CoordinationResponse)
-			if err = CRR.Unmarshal(reader); err != nil {
+		case mdlinproto.INTERSHARD:
+			intershard := new(mdlinproto.InterShard)
+			if err = intershard.Unmarshal(reader); err != nil {
 				break
 			}
 			// r.interShardChan <- &genericsmr.RPCMessage{intershard, 0, int64(rid)}
-			r.coordReqReplyChan <- fastrpc.Serializable(CRR)
+			r.interShardChan <- fastrpc.Serializable(intershard)
+			break
+
+		case mdlinproto.INTERSHARD_REPLY:
+			intershardreply := new(mdlinproto.InterShardReply)
+			if err = intershardreply.Unmarshal(reader); err != nil {
+				break
+			}
+			// r.interShardReplyChan <- &genericsmr.RPCMessage{intershardreply, 0, int64(rid)}
+			r.interShardReplyChan <- fastrpc.Serializable(intershardreply)
 			break
 
 		default:
@@ -277,20 +286,30 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 
 // leaderId is the ID of the leader this message is being sent TO. it's an index
 // msg is the actual message being sent of mdlinproto.InterShard* type
-func (r *Replica) sendCoordResp(leaderId int32, msg fastrpc.Serializable) {
+func (r *Replica) sendInterShardMsg(leaderId int32, msg fastrpc.Serializable, code int) {
 	r.buflock.Lock()
 	defer r.buflock.Unlock()
 
 	if leaderId != int32(r.shardId) {
 		w := r.shardWriters[leaderId]
-		w.WriteByte(mdlinproto.COORDREQ_REPLY) // to tell what kind of message this is
+		if code == 0 {
+			w.WriteByte(mdlinproto.INTERSHARD) // to tell what kind of message this is
+		} else {
+			w.WriteByte(mdlinproto.INTERSHARD_REPLY)
+		}
 		msg.Marshal(w) // marshall the message and send it into the w bufio object
 		w.Flush()
 	} else {
 		NewPrintf(LEVELALL, "SENDING MESSAGE TO SELF!!!!")
-		// r.interShardChan <- &genericsmr.RPCMessage{msg, 0, int64(leaderId)}
-		r.coordReqReplyChan <- msg
+		if code == 0 {
+			// r.interShardChan <- &genericsmr.RPCMessage{msg, 0, int64(leaderId)}
+			r.interShardChan <- msg
+		} else {
+			// r.interShardReplyChan <- &genericsmr.RPCMessage{msg, 0, int64(leaderId)}
+			r.interShardReplyChan <- msg
+		}
 	}
+
 }
 
 // append a log entry to stable storage
@@ -426,15 +445,22 @@ func (r *Replica) run() {
 				onOffProposeChan = nil
 			}
 			break
-    case coordinationRequest := <-r.MDLCoordReqChan:
-      NewPrintf(LEVELALL, "-----------CoordReq Chan-----------")
-      r.handleCoordinationRequest(coordinationRequest)
-      break
-    case coordinationRReply := <-coordReqReplyChan:
-      NewPrintf(LEVELALL, "----------CoordReqReply Chan--------")
-      CRR := coordinationRReply.(*mdlinproto.CoordinationResponse
-      r.handleCoordinationRReply(CRR)
-      break
+
+		case ismsg := <-r.interShardChan:
+			NewPrintf(LEVELALL, "----------InterShardChan--------")
+			ismessage := ismsg.(*mdlinproto.InterShard)
+			r.handleInterShard(ismessage)
+			break
+
+		case ismsgrep := <-r.interShardReplyChan:
+			NewPrintf(LEVELALL, "-----InterShardReplyChan-----")
+			isrmessage := ismsgrep.(*mdlinproto.InterShardReply)
+			r.handleInterShardReply(isrmessage)
+
+		case ind := <-r.detectConfChan:
+			NewPrintf(LEVEL0, "-----Detect_Conf_Chan-------")
+			r.detectConflicts(ind)
+			break
 
 		case prepareS := <-r.prepareChan:
 			prepare := prepareS.(*mdlinproto.Prepare)
@@ -470,6 +496,20 @@ func (r *Replica) run() {
 			acceptReply := acceptReplyS.(*mdlinproto.AcceptReply)
 			//got an Accept reply
 			r.handleAcceptReply(acceptReply)
+			break
+
+		case reorderS := <-r.reorderChan:
+			NewPrintf(LEVELALL, "--------ReorderChan-------")
+			reorder := reorderS.(*mdlinproto.Reorder)
+			//got a reorder message
+			r.handleReorder(reorder)
+			break
+
+		case reorderReplyS := <-r.reorderReplyChan:
+			NewPrintf(LEVELALL, "------ReorderReplyChan-----")
+			reorderReply := reorderReplyS.(*mdlinproto.ReorderReply)
+			//got a reorder reply
+			r.handleReorderReply(reorderReply)
 			break
 
 			// case metricsRequest := <-r.MetricsChan:
@@ -853,6 +893,33 @@ func copyMap(map1 map[int64]int64, map2 map[int64]int64) {
 	}
 }
 
+func handleVersion(c state.Command) state.Version {
+	if state.IsRead(&c) {
+		return state.GetVersion(&c)
+	}
+	return state.IncrVersion(&c)
+}
+
+func (r *Replica) askShardsForDeps(deps []mdlinproto.Tag, myInstance int32) {
+	NewPrintf(LEVELALL, "Step 3. Send out req. to shard leaders for log dependencies")
+	var shardTo int32
+	for _, d := range deps {
+		//TODO 1. can optimize this if you cache deps previously asked for!
+		//TODO 2. can also optimize if you combine messages to per shard... rn we'll be
+		//        sending n messages to a shard for n dependencies to the same shard
+		shardTo = r.resolveShardFromKey(d.K)
+		if shardTo == -1 {
+			panic("We couldn't find the shard responsible for this key??")
+		}
+		// Need to send inter shard RPC to ask for log dependencies with versions
+		msg := &mdlinproto.InterShard{myInstance, d, int32(r.shardId)}
+		e := r.instanceSpace[myInstance]
+		NewPrintf(LEVELALL, "The len of this entry's proposals is %d", len(e.lb.clientProposals))
+		NewPrintf(LEVELALL, "      Step3. Shard %d commanId %d asking Shard %d for Tag %v, AskerInstance %d", r.shardId, e.lb.clientProposals[0].CommandId, shardTo, d, myInstance)
+		r.sendInterShardMsg(shardTo, msg, 0)
+	}
+}
+
 func (r *Replica) resolveShardFromKey(k state.Key) int32 {
 	// Return the shardId of the shard that is responsible for this key
 	return int32(state.KeyModulo(k, len(r.shards)))
@@ -876,16 +943,106 @@ func (r *Replica) findEntry(tag mdlinproto.Tag) (*Instance, int, int32) {
 	return nil, -1, -1
 }
 
-func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
-  ok := 1 //TODO
-  e, _, _ = r.findEntry(cr.AskeeTag)
-  // Need to check whether cr.AskerTag is committed and coordinated! TODO
-  shardTo = cr.From
-  msg := &mdlinproto.CoordinationResponse{cr.AskerTag, cr.AskeeTag, int32(r.shardId), ok}
-  r.sendCoordResp(shardTo, msg)
+var pis mdlinproto.InterShard
+
+func (r *Replica) handleInterShard(ismessage *mdlinproto.InterShard) {
+	NewPrintf(LEVELALL, "*Shard %d recv messge from Shard %d for ld of Tag %v, AskerInstance %d*", r.shardId, ismessage.From, ismessage.AskeeTag, ismessage.AskerInstance)
+	// First, find the dependency, this is based on the ismessage.AskeeCommandId
+	e, _, _ := r.findEntry(ismessage.AskeeTag)
+	// If it exists, then reply to the shard
+	if e != nil {
+		//TODO it's not always safe to do this for uncommitted entries... but does that slow shit down?
+		printDeps(e.initial_ld, "*initial ld", LEVELALL)
+		msg := &mdlinproto.InterShardReply{ismessage.AskerInstance, ismessage.AskeeTag, ismessage.From, e.initial_ld}
+		r.sendInterShardMsg(ismessage.From, msg, 1)
+	} else {
+		// If it doesn't exist, then put this message back in the channel to process later
+		NewPrintf(LEVELALL, "     *batch dependency didn't arrive yet, adding back to proposal channel")
+		r.interShardChan <- fastrpc.Serializable(ismessage)
+		//TODO consider having a clock for these so that we can make progress on
+		//assigning versions without needlessly asking for them before they're ready
+	}
 }
 
-func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse) {
+func (r *Replica) handleInterShardReply(ismessage *mdlinproto.InterShardReply) {
+	NewPrintf(LEVELALL, "Step 4. Receiving deps from shard %d. AskerInstance: %d, AskeeTag: %v, ", ismessage.From, ismessage.AskerInstance, ismessage.AskeeTag)
+	// We have to identify the entry that wanted this information
+	e := r.instanceSpace[ismessage.AskerInstance]
+	if e.bd == nil {
+		panic("We should never be getting a reply for an entry with bd=nil, since we shouldn't have issued a message")
+	}
+	// Add the dependencies/versions to new_ld
+	e.new_ld = append(e.new_ld, ismessage.LogDependencies)
+	printDeps(ismessage.LogDependencies, "  Step4. Received this ld", LEVELALL)
+	if len(e.new_ld) < len(e.bd) {
+		// We need to await the other dependency versions before we can detect conflicts
+		// Not safe to do it early, since it might not be a holistic ordering
+		NewPrintf(LEVELALL, "     Step4. Received ld for commandId %d, buttt we're still not ready. We have %d acks out of %d", e.lb.clientProposals[0].CommandId, len(e.new_ld), len(e.bd))
+		return
+	}
+
+	if e.lb.acceptOKs+1 <= r.N>>1 {
+		// Don't detect conflicts yet, this logic will happen inside of handleAcceptReply
+		NewPrintf(LEVELALL, "     Step4. We got all our intershard dependencies for command %d, but the log entry hasn't been replicated at a majority, NOT detecting confs", e.lb.clientProposals[0].CommandId)
+		return
+	}
+	NewPrintf(LEVELALL, "Calling detectConflict from handleISReply for commandId %d...", e.lb.clientProposals[0].CommandId)
+	r.detectConflicts(ismessage.AskerInstance)
+}
+
+func (r *Replica) detectConflicts(my_index int32) {
+	//TODO - if i'm a read and i'm being swapped with a read with no writes between us
+	//TODO - if i'm a write being swapped, but my dependencies came from a read behind only reads
+	e := r.instanceSpace[my_index] //TODO this isn't actually safe when failures start occurring!
+	// Detect conflicts
+	my_k := e.cmds[0].K //TODO remove when batching enabled
+	my_op := e.cmds[0].Op
+	my_ver := e.version
+	my_pid := e.pid
+	new_index := int32(-1)
+	var iindex int32
+	for _, deps := range e.new_ld {
+		for _, d := range deps {
+			if r.resolveShardFromKey(d.K) != int32(r.shardId) || d.K != my_k || d.PID <= my_pid {
+				NewPrintf(LEVELALL, "     DC: Shard %d SKIPPING the linear search for Tag %v", r.shardId, d)
+				continue
+			}
+			NewPrintf(LEVELALL, "     DC: Shard %d looking for Tag %v", r.shardId, d)
+			e, _, iindex = r.findEntry(d)
+			if e == nil {
+				NewPrintf(LEVEL0, "      DC: Dep{Key: %d, PID: %d, Key %d} hasn't arrived at us yet! so we should detect conflicts later...", d.K, d.PID, d.K)
+				r.detectConfChan <- my_index
+				return
+			}
+			NewPrintf(LEVELALL, "      DC: d.K(%d) == my_k(%d) && d.ver(%d) >= my_ver(%d) && d.PID(%d) > my_pid(%d) && d.index(%d) > my_index(%d)",
+				d.K, my_k, e.version, my_ver, d.PID, my_pid, iindex, my_index)
+			if d.K == my_k && e.version >= my_ver && d.PID > my_pid && iindex > my_index {
+				// if i'm a read and i'm being swapped with a read with no writes between us, then it's not a conflict!
+				if e.cmds[0].Op == my_op && my_op == state.GET && e.version == my_ver {
+					continue
+				}
+				// conflict detected
+				NewPrintf(LEVEL0, "     DC: !!!!======***=======!!!!CONF DETECTED")
+				NewPrintf(LEVEL0, "      DC: d.K(%d) == my_k(%d) && d.ver(%d) >= my_ver(%d) && d.PID(%d) > my_pid(%d) && d.index(%d) > my_index(%d)",
+					d.K, my_k, e.version, my_ver, d.PID, my_pid, iindex, my_index)
+				if new_index == -1 || iindex > new_index {
+					new_index = iindex
+				}
+			}
+		}
+	}
+	if new_index == -1 {
+		// No conflicts found!
+		NewPrintf(LEVELALL, "     !!!!!!!!!!!!NO CONFLICTS FOUND!!")
+		r.readyToCommit(my_index)
+	} else if new_index >= r.crtInstance {
+		panic("Some bug with assigning new_index")
+	} else {
+		NewPrintf(LEVELALL, "     Trying to swap me %d with %d, my_old_index == %d my_new_index == %d",
+			r.instanceSpace[my_index].lb.clientProposals[0].CommandId, r.instanceSpace[new_index].lb.clientProposals[0].CommandId, my_index, new_index)
+		r.num_conflicts++
+		r.bcastReorder(my_index, new_index)
+	}
 }
 
 func (r *Replica) readyToCommit(instance int32) {
@@ -918,6 +1075,28 @@ func commandToStr(c state.Command) string {
 		s = fmt.Sprintf("W(%d) = %v", c.K, c.V)
 	}
 	return s
+}
+
+func (r *Replica) reorderInLog(oldInstance int32, newInstance int32) {
+	NewPrintf(LEVELALL, "I think this function reorderInLog line 1007 is buggy")
+	newE := r.instanceSpace[newInstance]
+	k := r.instanceSpace[oldInstance].cmds[0].K
+	mypid := r.instanceSpace[oldInstance].pid
+	for i := oldInstance; i < r.crtInstance; i++ {
+		e := r.instanceSpace[i]
+		for j, c := range e.cmds {
+			//FIXME
+			if c.K == k && e.pid == mypid {
+				e.status = REORDERING
+				newE.cmds = append(newE.cmds, c)
+				if r.IsLeader {
+					newE.lb.clientProposals = append(newE.lb.clientProposals, e.lb.clientProposals[j])
+				}
+			}
+		}
+	}
+	NewPrintf(LEVELALL, "After the reordering the log looks like...")
+	r.printLog(LEVELALL)
 }
 
 var pr mdlinproto.Reorder
@@ -1196,7 +1375,6 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
 	}
 }
 
-/*
 func (r *Replica) handleReorder(reorder *mdlinproto.Reorder) {
 	var rreply *mdlinproto.ReorderReply
 	NewPrintf(LEVELALL, "Replica received reorder message, reordering! from %d to %d", reorder.OldInstance, reorder.NewInstance)
@@ -1227,7 +1405,6 @@ func (r *Replica) handleReorderReply(rreply *mdlinproto.ReorderReply) {
 		panic("why was the reorder RPC response OK==false?")
 	}
 }
-*/
 
 func (r *Replica) executeCommands() {
 	i := int32(0)

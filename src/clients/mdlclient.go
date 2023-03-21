@@ -13,6 +13,7 @@ type MDLClient struct {
 	*AbstractClient
 	proposeReplyChan chan fastrpc.Serializable
 	propose          *mdlinproto.Propose
+  coordinationReq  *mdlinproto.CoordinationRequest
 	opCount          int32
 	fast             bool
 	noLeader         bool
@@ -25,6 +26,7 @@ func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE), // proposeReplyChan
 		new(mdlinproto.Propose), // propose
+    new(mdlinproto.CoordinationRequest), // coordinationReq
 		0,                       // opCount
 		fast,                    // fast
 		noLeader,                // noLeader
@@ -39,7 +41,7 @@ func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
 	fanout := len(keys)
 	start := c.opCount
-	batchDeps := make([]mdlinproto.Tag, 0)
+  prevTag := nil
 	for i, opType := range opTypes {
 		k := keys[i]
 		l := c.GetShardFromKey(state.Key(k))
@@ -51,6 +53,11 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		}
 		// Assign the sequence number and batch dependencies for this request
 		c.setSeqnoBd(c.seqnos[l], c.filterdeps(batchDeps, state.Key(k)))
+    if (prevTag == nil) {
+      c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
+    } else {
+      c.propose.Predecessor = prevTag
+    }
 		if opType == state.GET {
 			c.Read(k)
 		} else if opType == state.PUT {
@@ -58,7 +65,13 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		} else {
 			c.CompareAndSwap(k, int64(k-1), int64(k))
 		}
-		batchDeps = append(batchDeps, mdlinproto.Tag{K: state.Key(k), PID: int64(c.id), SeqNo: c.seqnos[l]})
+    if (prevTag != nil) {
+      // Send the coordination request
+      // (Keep this after sending the request for now, since 
+      // logic in the send function assumes request was send)
+      c.sendCoordinationRequest(prevTag)
+    }
+    prevTag = mdlinproto.Tag{K: state.Key(k), PID: int64(c.id), SeqNo: c.seqnos[l]}
 	}
 	success, e := c.readReplies(start, fanout)
 	if !success {
@@ -115,6 +128,20 @@ func (c *MDLClient) sendPropose() {
 
 	c.writers[shard].WriteByte(clientproto.MDL_PROPOSE)
 	c.propose.Marshal(c.writers[shard])
+	c.writers[shard].Flush()
+}
+
+func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag) {
+	shard := c.GetShardFromKey(tag.K)
+	dlog.Printf("Sending CoordinationRequest to shard %d\n", shard)
+
+  // Prepare the coordination request object
+  c.coordinationReq.AskerTag = mdlinproto.Tag{K: c.propose.Command.K, PID: int64(c.id), SeqNo: c.propose.SeqNo}
+  c.coordinationReq.AskeeTag = predecessorTag
+  c.coordinationReq.From = c.GetShardFromKey(c.propose.Command.K)
+
+	c.writers[shard].WriteByte(clientproto.MDL_COORDREQ)
+	c.coordinationReq.Marshal(c.writers[shard])
 	c.writers[shard].Flush()
 }
 

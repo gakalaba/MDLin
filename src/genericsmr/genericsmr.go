@@ -38,6 +38,11 @@ type MDLPropose struct {
 	Reply *bufio.Writer
 }
 
+type MDLCoordReq struct {
+  *mdlinproto.CoordinationRequest
+  // response isn't to client but to shard
+}
+
 type ClientRPC struct {
 	Obj   fastrpc.Serializable
 	Reply *bufio.Writer
@@ -69,6 +74,7 @@ type Replica struct {
 	BeaconChan  chan *Beacon  // channel for beacons from peer replicas
 
 	MDLProposeChan chan *MDLPropose
+  MDLCoordReqChan chan *MDLCoordReq
 
 	Shutdown bool
 
@@ -116,6 +122,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
 		make(chan *Propose, CHAN_BUFFER_SIZE),
 		make(chan *Beacon, CHAN_BUFFER_SIZE),
 		make(chan *MDLPropose, CHAN_BUFFER_SIZE),
+		make(chan *MDLCoordReq, CHAN_BUFFER_SIZE),
 		false,
 		thrifty,
 		exec,
@@ -499,6 +506,15 @@ func (r *Replica) clientListener(conn net.Conn) {
 			}
 			r.MDLProposeChan <- &MDLPropose{prop, writer}
 			break
+
+    case clientproto.MDL_COORDREQ:
+      CR := new(mdlinproto.CoordinationRequest)
+      if err = CR.Unmarshal(reader); err != nil {
+        errS = "reading MDL_COORDREQ"
+        break
+      }
+      r.MDLCoordReqChan <- &MDLCoordReq{CR}
+      break
 
 		case clientproto.GEN_READ:
 			read := new(genericsmrproto.Read)

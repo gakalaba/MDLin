@@ -39,6 +39,7 @@ const (
 
 	MDL_PROPOSE
 	MDL_PROPOSE_REPLY
+  MDL_COORDREQ
 )
 
 type Ping struct {

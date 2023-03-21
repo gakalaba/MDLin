@@ -5,23 +5,27 @@ import (
 )
 
 const (
-	COORDREQ_REPLY = iota
+	INTERSHARD = iota
+	INTERSHARD_REPLY
 )
 
 type Tag struct {
+	//TODO consider that! Version doesn't need to be in here AND that commandID (our current uniqueID) could just be the K+PID+SeqNo concatonated together
 	K state.Key
+	//Version   state.Version //TODO delete me
 	PID int64
+	//CommandId int32 TODO delete me
 	SeqNo int64
 	//Instance  int32 // TODO this is an optimization!! Index in the log, comes from crtInstance
 }
 
 type Propose struct {
 	CommandId int32
-	Command   state.Command // state.key in here
+	Command   state.Command
 	Timestamp int64
 	SeqNo     int64 // Add these for multidispatch
 	PID       int64
-  Predecessor Tag
+	BatchDeps []Tag
 }
 
 type ProposeReply struct {
@@ -88,16 +92,26 @@ type CommitShort struct {
 }
 
 // Message types for MultiShard MDL
-type CoordinationRequest struct {
-	AskerTag      Tag
+type InterShard struct {
+	AskerInstance int32
 	AskeeTag      Tag
 	From          int32
 }
 
-type CoordinationResponse struct {
-	AskerTag        Tag
+type InterShardReply struct {
+	AskerInstance   int32
 	AskeeTag        Tag
 	From            int32
-  OK              uint8
+	LogDependencies []Tag
 }
 
+type Reorder struct {
+	LeaderId    int32
+	OldInstance int32
+	NewInstance int32
+}
+
+type ReorderReply struct {
+	OldInstance int32
+	OK          uint8
+}
