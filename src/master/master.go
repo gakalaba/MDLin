@@ -81,11 +81,9 @@ func main() {
 		log.Fatal("Master listen error:", err)
 	}
 
-  //TODO can use return value to obtain new leaders after failures?
-  if (*nShards > 1) {
-    log.Println("Master is registering itself with the coordinator")
-    registerWithCoordinator(fmt.Sprintf("%s:%d", *coordAddr, *coordPort))
-  }
+	// TODO: can use return value to obtain new leaders after failures?
+	log.Println("Master is registering itself with the coordinator")
+	registerWithCoordinator(fmt.Sprintf("%s:%d", *coordAddr, *coordPort))
 
 	go master.run()
 
@@ -235,6 +233,7 @@ func registerWithCoordinator(coordAddr string) []string {
 	var reply coordinatorproto.RegisterReply
 
 	for done := false; !done; {
+		log.Println("Trying coordinator: ", coordAddr)
 		ccli, err := rpc.DialHTTP("tcp", coordAddr)
 		if err == nil {
 			err = ccli.Call("Coordinator.Register", args, &reply)
@@ -243,7 +242,7 @@ func registerWithCoordinator(coordAddr string) []string {
 				break
 			}
 		}
-		time.Sleep(1e9)
+		time.Sleep(1 * time.Second)
 	}
 
 	return reply.MasterList
