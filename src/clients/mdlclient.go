@@ -42,6 +42,7 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 	fanout := len(keys)
 	start := c.opCount
   prevTag := nil
+  readPrefix := true // track the contiguous prefix of reads
 	for i, opType := range opTypes {
 		k := keys[i]
 		l := c.GetShardFromKey(state.Key(k))
@@ -59,11 +60,16 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
       c.propose.Predecessor = prevTag
     }
 		if opType == state.GET {
+      if (readPrefix) {
+        c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
+      }
 			c.Read(k)
 		} else if opType == state.PUT {
 			c.Write(k, int64(k))
+      readPrefix = false
 		} else {
 			c.CompareAndSwap(k, int64(k-1), int64(k))
+      readPrefix = false
 		}
     if (prevTag != nil) {
       // Send the coordination request

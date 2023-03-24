@@ -2,6 +2,7 @@ package mdlinproto
 
 import (
 	"state"
+  "io"
 )
 
 const (
@@ -29,7 +30,6 @@ type ProposeReply struct {
 	CommandId int32
 	Value     state.Value
 	Timestamp int64
-	NumConf   int64
 }
 
 type Prepare struct {
@@ -51,19 +51,18 @@ type Accept struct {
 	Instance     int32
 	Ballot       int32
 	Command      []state.Command
-  FinalRound   bool
+  PIDs         int64
+	SeqNos       int64
+	ExpectedSeqs map[int64]int64
+  FinalRound   uint8
   Epoch        int32
-
-	//PIDs         int64
-	//SeqNos       int64
-	//ExpectedSeqs map[int64]int64
 }
 
 type AcceptReply struct {
 	Instance   int32
 	OK         uint8
 	Ballot     int32
-  FinalRound bool
+  FinalRound uint8
   Epoch      int32
 }
 
@@ -74,8 +73,6 @@ type Commit struct {
 	Command   []state.Command
 	PIDs      int64
 	SeqNos    int64
-	Versions  state.Version
-	BatchDeps []Tag
 	Status    uint8
 }
 
@@ -101,3 +98,50 @@ type CoordinationResponse struct {
   OK              uint8
 }
 
+// Marshalling and Unmarshalling helpers for Tag type
+func (t *Tag) Marshal(w io.Writer) {
+  var b [8]byte
+
+  t.K.Marshal(w)
+  bs := b[:8]
+	tmp64 := t.PID
+	bs[0] = byte(tmp64)
+	bs[1] = byte(tmp64 >> 8)
+	bs[2] = byte(tmp64 >> 16)
+	bs[3] = byte(tmp64 >> 24)
+	bs[4] = byte(tmp64 >> 32)
+	bs[5] = byte(tmp64 >> 40)
+	bs[6] = byte(tmp64 >> 48)
+	bs[7] = byte(tmp64 >> 56)
+	w.Write(bs)
+
+	bs = b[:8]
+	tmp64 = t.SeqNo
+	bs[0] = byte(tmp64)
+	bs[1] = byte(tmp64 >> 8)
+	bs[2] = byte(tmp64 >> 16)
+	bs[3] = byte(tmp64 >> 24)
+	bs[4] = byte(tmp64 >> 32)
+	bs[5] = byte(tmp64 >> 40)
+	bs[6] = byte(tmp64 >> 48)
+	bs[7] = byte(tmp64 >> 56)
+	w.Write(bs)
+}
+
+func (t *Tag) Unmarshal(w io.Reader) error {
+  t.K.Unmarshal(w)
+
+  var b [8]byte
+  bs := b[:8]
+  if _, err := io.ReadAtLeast(w, bs, 8); err != nil {
+    return err
+  }
+  t.PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+
+  bs = b[:8]
+  if _, err := io.ReadAtLeast(w, bs, 8); err != nil {
+    return err
+  }
+  t.SeqNo = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+  return nil
+}

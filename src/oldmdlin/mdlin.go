@@ -57,8 +57,6 @@ type Replica struct {
 	IsLeader            bool        // does this replica think it is the leader
 	instanceSpace       []*Instance // the space of all instances (used and not yet used) //TODO change the name to orderedLog!!
   crtInstance         int32       // highest active instance number that this replica knows about NOT inclusive!
-  
-  bufferedLog         *Instance  // the unordered requests LINKED LIST
 
   defaultBallot       int32       // default ballot for new instances (0 until a Prepare(ballot, instance->infinity) from a leader)
 	Shutdown            bool
@@ -80,8 +78,6 @@ type Replica struct {
 	interShardReplyChan chan fastrpc.Serializable
 	shListener          net.Listener
 	buflock             *sync.Mutex
-
-  epoch               int32
 }
 
 type InstanceStatus int

@@ -62,39 +62,8 @@ func (t *Propose) Marshal(wire io.Writer) {
 	bs[6] = byte(tmp64 >> 48)
 	bs[7] = byte(tmp64 >> 56)
 	wire.Write(bs)
+  t.Predecessor.Marshal(wire)
 
-	bs = b[:]
-	alen1 := int64(len(t.BatchDeps))
-	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
-		wire.Write(b[0:wlen])
-	}
-	for i := int64(0); i < alen1; i++ {
-		t.BatchDeps[i].K.Marshal(wire)
-
-		bs = b[:8]
-		tmp64 = t.BatchDeps[i].PID
-		bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
-
-		bs = b[:8]
-		tmp64 = t.BatchDeps[i].SeqNo
-		bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
-	}
 }
 
 func (t *Propose) Unmarshal(rr io.Reader) error {
@@ -103,7 +72,6 @@ func (t *Propose) Unmarshal(rr io.Reader) error {
 	// Timestamp int64
 	// SeqNo     int64
 	// PID       int64
-	// BatchDeps []Tag, Tag is 24 bytes
 	var wire byteReader
 	var ok bool
 	if wire, ok = rr.(byteReader); !ok {
@@ -135,26 +103,7 @@ func (t *Propose) Unmarshal(rr io.Reader) error {
 	}
 	t.PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
 
-	alen1, err := binary.ReadVarint(wire)
-	if err != nil {
-		return err
-	}
-	t.BatchDeps = make([]Tag, alen1)
-	for i := int64(0); i < alen1; i++ {
-		t.BatchDeps[i].K.Unmarshal(wire)
-
-		bs = b[:8]
-		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-			return err
-		}
-		t.BatchDeps[i].PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-		bs = b[:8]
-		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-			return err
-		}
-		t.BatchDeps[i].SeqNo = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-	}
+  t.Predecessor.Unmarshal(wire)
 	return nil
 }
 
@@ -185,17 +134,6 @@ func (t *ProposeReply) Marshal(wire io.Writer) {
 	bs[6] = byte(tmp64 >> 48)
 	bs[7] = byte(tmp64 >> 56)
 	wire.Write(bs)
-	bs = b[:8]
-	tmp64 = t.NumConf
-	bs[0] = byte(tmp64)
-	bs[1] = byte(tmp64 >> 8)
-	bs[2] = byte(tmp64 >> 16)
-	bs[3] = byte(tmp64 >> 24)
-	bs[4] = byte(tmp64 >> 32)
-	bs[5] = byte(tmp64 >> 40)
-	bs[6] = byte(tmp64 >> 48)
-	bs[7] = byte(tmp64 >> 56)
-	wire.Write(bs)
 }
 
 func (t *ProposeReply) Unmarshal(wire io.Reader) error {
@@ -217,7 +155,6 @@ func (t *ProposeReply) Unmarshal(wire io.Reader) error {
 	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
 		return err
 	}
-	t.NumConf = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
 	return nil
 }
 
@@ -419,15 +356,15 @@ func (p *AcceptCache) Put(t *Accept) {
 	p.mu.Unlock()
 }
 func (t *Accept) Marshal(wire io.Writer) {
-	// LeaderId     int32
-	// Instance     int32
-	// Ballot       int32
-	// Command      []state.Command
-	// PIDs         []int64
-	// SeqNos       []int64
-	// ExpectedSeqs map[int64]int64
-	// Versions     []state.Version
-	// BatchDeps    [][]Tag
+	// LeaderId       int32
+	// Instance       int32
+	// Ballot         int32
+	// Command        []state.Command
+	// PIDs           []int64
+	// SeqNos         []int64
+	// ExpectedSeqs   map[int64]int64
+	// FinalRound     uint8
+	// Epoch          int32
 	var b [12]byte
 	var bs []byte
 	bs = b[:12]
@@ -519,41 +456,16 @@ func (t *Accept) Marshal(wire io.Writer) {
 		wire.Write(bs)
 	}
 
-	// Version array
-	t.Versions.Marshal(wire)
+  // FinalRound
+  bs = b[:5]
+  bs[0] = byte(t.FinalRound)
+  // Epoch
+  tmp32 = t.Epoch
+  bs[1] = byte(tmp32)
+  bs[2] = byte(tmp32 >> 8)
+  bs[3] = byte(tmp32 >> 16)
+  bs[4] = byte(tmp32 >> 24)
 
-	// BatchDep array
-	bs = b[:]
-	alen1 = int64(len(t.BatchDeps))
-	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
-		wire.Write(b[0:wlen])
-	}
-	for i := int64(0); i < alen1; i++ {
-		t.BatchDeps[i].K.Marshal(wire)
-		bs = b[:8]
-		tmp64 = t.BatchDeps[i].PID
-		bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
-
-		bs = b[:8]
-		tmp64 = t.BatchDeps[i].SeqNo
-		bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
-	}
 }
 
 func (t *Accept) Unmarshal(rr io.Reader) error {
@@ -620,30 +532,14 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
 		t.ExpectedSeqs[k] = v
 	}
 
-	// Version array
-	t.Versions.Unmarshal(wire)
+  // Final Round, Epoch
+  bs = b[:5]
+  if _, err := io.ReadAtLeast(wire, bs, 5); err != nil {
+    return err
+  }
+  t.FinalRound = uint8(bs[0])
+  t.Epoch = int32((uint32(bs[1]) | (uint32(bs[2]) << 8) | (uint32(bs[3]) << 16) | (uint32(bs[4]) << 24)))
 
-	// BatchDep array
-	alen1, err = binary.ReadVarint(wire)
-	if err != nil {
-		return err
-	}
-	t.BatchDeps = make([]Tag, alen1)
-	for i := int64(0); i < alen1; i++ {
-		t.BatchDeps[i].K.Unmarshal(wire)
-
-		bs = b[:8]
-		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-			return err
-		}
-		t.BatchDeps[i].PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-		bs = b[:8]
-		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-			return err
-		}
-		t.BatchDeps[i].SeqNo = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-	}
 	return nil
 }
 
@@ -651,7 +547,7 @@ func (t *AcceptReply) New() fastrpc.Serializable {
 	return new(AcceptReply)
 }
 func (t *AcceptReply) BinarySize() (nbytes int, sizeKnown bool) {
-	return 9, true
+	return 14, true
 }
 
 type AcceptReplyCache struct {
@@ -699,6 +595,15 @@ func (t *AcceptReply) Marshal(wire io.Writer) {
 	bs[7] = byte(tmp32 >> 16)
 	bs[8] = byte(tmp32 >> 24)
 	wire.Write(bs)
+  // FinalRound
+  bs = b[:5]
+  bs[0] = byte(t.FinalRound)
+  // Epoch
+  tmp32 = t.Epoch
+  bs[1] = byte(tmp32)
+  bs[2] = byte(tmp32 >> 8)
+  bs[3] = byte(tmp32 >> 16)
+  bs[4] = byte(tmp32 >> 24)
 }
 
 func (t *AcceptReply) Unmarshal(wire io.Reader) error {
@@ -711,6 +616,13 @@ func (t *AcceptReply) Unmarshal(wire io.Reader) error {
 	t.Instance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	t.OK = uint8(bs[4])
 	t.Ballot = int32((uint32(bs[5]) | (uint32(bs[6]) << 8) | (uint32(bs[7]) << 16) | (uint32(bs[8]) << 24)))
+  // Final Round, Epoch
+  bs = b[:5]
+  if _, err := io.ReadAtLeast(wire, bs, 5); err != nil {
+    return err
+  }
+  t.FinalRound = uint8(bs[0])
+  t.Epoch = int32((uint32(bs[1]) | (uint32(bs[2]) << 8) | (uint32(bs[3]) << 16) | (uint32(bs[4]) << 24)))
 	return nil
 }
 
@@ -804,41 +716,9 @@ func (t *Commit) Marshal(wire io.Writer) {
 	bs[7] = byte(tmp64 >> 56)
 	wire.Write(bs)
 
-	// Version array
-	t.Versions.Marshal(wire)
-
-	// BatchDep array
-	bs = b[:]
-	alen1 = int64(len(t.BatchDeps))
-	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
-		wire.Write(b[0:wlen])
-	}
-	for i := int64(0); i < alen1; i++ {
-		t.BatchDeps[i].K.Marshal(wire)
-		bs = b[:8]
-		tmp64 = t.BatchDeps[i].PID
-		bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
-
-		bs = b[:8]
-		tmp64 = t.BatchDeps[i].SeqNo
-		bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
-	}
+  // Status
+  bs = b[:1]
+  bs[0] = byte(t.Status)
 }
 
 func (t *Commit) Unmarshal(rr io.Reader) error {
@@ -873,37 +753,16 @@ func (t *Commit) Unmarshal(rr io.Reader) error {
 	t.PIDs = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
 
 	//SeqNos
-	bs = b[:8]
-	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
+	bs = b[:9]
+	if _, err := io.ReadAtLeast(wire, bs, 9); err != nil {
 		return err
 	}
 	t.SeqNos = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
 
-	// Version array
-	t.Versions.Unmarshal(wire)
+  // Status
+  t.Status = uint8(uint8(bs[8]) << 64)
 
-	// BatchDep array
-	alen1, err = binary.ReadVarint(wire)
-	if err != nil {
-		return err
-	}
-	t.BatchDeps = make([]Tag, alen1)
-	for i := int64(0); i < alen1; i++ {
-		t.BatchDeps[i].K.Unmarshal(wire)
-
-		bs = b[:8]
-		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-			return err
-		}
-		t.BatchDeps[i].PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-		bs = b[:8]
-		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-			return err
-		}
-		t.BatchDeps[i].SeqNo = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-	}
-	return nil
+  return nil
 }
 
 func (t *CommitShort) New() fastrpc.Serializable {
@@ -998,51 +857,21 @@ func (t *CommitShort) Unmarshal(wire io.Reader) error {
 }
 
 // For multi-sharded MDL
-// InterShard msg
-func (t *InterShard) New() fastrpc.Serializable {
-	return new(InterShard)
+// Coordination Request
+func (t *CoordinationRequest) New() fastrpc.Serializable {
+	return new(CoordinationRequest)
 }
 
-func (t *InterShard) Marshal(wire io.Writer) {
-	// AskerInstance  int32
-	// AskeeCommandId int32
+func (t *CoordinationRequest) Marshal(wire io.Writer) {
+	// AskerTag Tag
+	// AskeeTag Tag
+  // From     int32
+  t.AskerTag.Marshal(wire)
+  t.AskeeTag.Marshal(wire)
 	var b [8]byte
 	var bs []byte
 	bs = b[:4]
-	tmp32 := t.AskerInstance
-	bs[0] = byte(tmp32)
-	bs[1] = byte(tmp32 >> 8)
-	bs[2] = byte(tmp32 >> 16)
-	bs[3] = byte(tmp32 >> 24)
-	wire.Write(bs)
-
-	t.AskeeTag.K.Marshal(wire)
-	bs = b[:8]
-	tmp64 := t.AskeeTag.PID
-	bs[0] = byte(tmp64)
-	bs[1] = byte(tmp64 >> 8)
-	bs[2] = byte(tmp64 >> 16)
-	bs[3] = byte(tmp64 >> 24)
-	bs[4] = byte(tmp64 >> 32)
-	bs[5] = byte(tmp64 >> 40)
-	bs[6] = byte(tmp64 >> 48)
-	bs[7] = byte(tmp64 >> 56)
-	wire.Write(bs)
-
-	bs = b[:8]
-	tmp64 = t.AskeeTag.SeqNo
-	bs[0] = byte(tmp64)
-	bs[1] = byte(tmp64 >> 8)
-	bs[2] = byte(tmp64 >> 16)
-	bs[3] = byte(tmp64 >> 24)
-	bs[4] = byte(tmp64 >> 32)
-	bs[5] = byte(tmp64 >> 40)
-	bs[6] = byte(tmp64 >> 48)
-	bs[7] = byte(tmp64 >> 56)
-	wire.Write(bs)
-
-	bs = b[:4]
-	tmp32 = t.From
+	tmp32 := t.From
 	bs[0] = byte(tmp32)
 	bs[1] = byte(tmp32 >> 8)
 	bs[2] = byte(tmp32 >> 16)
@@ -1050,275 +879,67 @@ func (t *InterShard) Marshal(wire io.Writer) {
 	wire.Write(bs)
 }
 
-func (t *InterShard) Unmarshal(wire io.Reader) error {
-	// AskerInstance  int32
-	// AskeeCommandId int32
+func (t *CoordinationRequest) Unmarshal(wire io.Reader) error {
+	// AskerTag Tag
+	// AskeeTag Tag
+  // From     int32
+  t.AskerTag.Unmarshal(wire)
+  t.AskeeTag.Unmarshal(wire)
 	var b [8]byte
 	var bs []byte
-	bs = b[:4]
-	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-		return err
-	}
-	t.AskerInstance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-
-	t.AskeeTag.K.Unmarshal(wire)
-
-	bs = b[:8]
-	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-		return err
-	}
-	t.AskeeTag.PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-	bs = b[:8]
-	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-		return err
-	}
-	t.AskeeTag.SeqNo = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
 	bs = b[:4]
 	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
 		return err
 	}
 	t.From = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-
 	return nil
 }
 
-// InterShardReply msg
-func (t *InterShardReply) New() fastrpc.Serializable {
-	return new(InterShardReply)
+// CoordinationResponse
+func (t *CoordinationResponse) New() fastrpc.Serializable {
+	return new(CoordinationResponse)
 }
 
-func (t *InterShardReply) Marshal(wire io.Writer) {
-	// AskerInstance   int32
-	// AskeeCommandId  Tag
-	// LogDependencies []Tag
+func (t *CoordinationResponse) Marshal(wire io.Writer) {
+	// AskerTag Tag
+	// AskeeTag Tag
+	// From     int32
+  // OK       uint8
+  t.AskerTag.Marshal(wire)
+  t.AskeeTag.Marshal(wire)
 	var b [8]byte
 	var bs []byte
-	bs = b[:4]
-	tmp32 := t.AskerInstance
+	bs = b[:5]
+	tmp32 := t.From
 	bs[0] = byte(tmp32)
 	bs[1] = byte(tmp32 >> 8)
 	bs[2] = byte(tmp32 >> 16)
 	bs[3] = byte(tmp32 >> 24)
+  bs[4] = byte(t.OK)
 	wire.Write(bs)
-
-	t.AskeeTag.K.Marshal(wire)
-	bs = b[:8]
-	tmp64 := t.AskeeTag.PID
-	bs[0] = byte(tmp64)
-	bs[1] = byte(tmp64 >> 8)
-	bs[2] = byte(tmp64 >> 16)
-	bs[3] = byte(tmp64 >> 24)
-	bs[4] = byte(tmp64 >> 32)
-	bs[5] = byte(tmp64 >> 40)
-	bs[6] = byte(tmp64 >> 48)
-	bs[7] = byte(tmp64 >> 56)
-	wire.Write(bs)
-
-	bs = b[:8]
-	tmp64 = t.AskeeTag.SeqNo
-	bs[0] = byte(tmp64)
-	bs[1] = byte(tmp64 >> 8)
-	bs[2] = byte(tmp64 >> 16)
-	bs[3] = byte(tmp64 >> 24)
-	bs[4] = byte(tmp64 >> 32)
-	bs[5] = byte(tmp64 >> 40)
-	bs[6] = byte(tmp64 >> 48)
-	bs[7] = byte(tmp64 >> 56)
-	wire.Write(bs)
-
-	bs = b[:4]
-	tmp32 = t.From
-	bs[0] = byte(tmp32)
-	bs[1] = byte(tmp32 >> 8)
-	bs[2] = byte(tmp32 >> 16)
-	bs[3] = byte(tmp32 >> 24)
-	wire.Write(bs)
-
-	bs = b[:]
-	alen1 := int64(len(t.LogDependencies))
-	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
-		wire.Write(b[0:wlen])
-	}
-
-	for i := int64(0); i < alen1; i++ {
-		t.LogDependencies[i].K.Marshal(wire)
-		bs = b[:8]
-		tmp64 = t.LogDependencies[i].PID
-		bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
-
-		bs = b[:8]
-		tmp64 = t.LogDependencies[i].SeqNo
-		bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
-	}
 }
 
-func (t *InterShardReply) Unmarshal(rr io.Reader) error {
-	// AskerInstance   int32
-	// AskeeCommandId  int32
-	// LogDependencies []Tag
+func (t *CoordinationResponse) Unmarshal(rr io.Reader) error {
+	// AskerTag Tag
+	// AskeeTag Tag
+	// From     int32
+  // OK       uint8
 	var wire byteReader
 	var ok bool
 	if wire, ok = rr.(byteReader); !ok {
 		wire = bufio.NewReader(rr)
 	}
 
+  t.AskerTag.Unmarshal(wire)
+  t.AskeeTag.Unmarshal(wire)
 	var b [8]byte
-	var bs []byte
-	bs = b[:4]
-	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-		return err
-	}
-	t.AskerInstance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-
-	t.AskeeTag.K.Unmarshal(wire)
-
-	bs = b[:8]
-	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-		return err
-	}
-	t.AskeeTag.PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-	bs = b[:8]
-	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-		return err
-	}
-	t.AskeeTag.SeqNo = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-	bs = b[:4]
-	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-		return err
-	}
-	t.From = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-
-	alen1, err := binary.ReadVarint(wire)
-	if err != nil {
-		return err
-	}
-	t.LogDependencies = make([]Tag, alen1)
-	for i := int64(0); i < alen1; i++ {
-		t.LogDependencies[i].K.Unmarshal(wire)
-
-		bs = b[:8]
-		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-			return err
-		}
-		t.LogDependencies[i].PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-		bs = b[:8]
-		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-			return err
-		}
-		t.LogDependencies[i].SeqNo = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-	}
-	return nil
-}
-
-// Reorder msg
-func (t *Reorder) New() fastrpc.Serializable {
-	return new(Reorder)
-}
-
-func (t *Reorder) Marshal(wire io.Writer) {
-	// LeaderId    int32
-	// OldInstance int32
-	// NewInstance int32
-	var b [4]byte
-	var bs []byte
-	bs = b[:4]
-	tmp32 := t.LeaderId
-	bs[0] = byte(tmp32)
-	bs[1] = byte(tmp32 >> 8)
-	bs[2] = byte(tmp32 >> 16)
-	bs[3] = byte(tmp32 >> 24)
-	wire.Write(bs)
-
-	bs = b[:4]
-	tmp32 = t.OldInstance
-	bs[0] = byte(tmp32)
-	bs[1] = byte(tmp32 >> 8)
-	bs[2] = byte(tmp32 >> 16)
-	bs[3] = byte(tmp32 >> 24)
-	wire.Write(bs)
-
-	bs = b[:4]
-	tmp32 = t.NewInstance
-	bs[0] = byte(tmp32)
-	bs[1] = byte(tmp32 >> 8)
-	bs[2] = byte(tmp32 >> 16)
-	bs[3] = byte(tmp32 >> 24)
-	wire.Write(bs)
-}
-
-func (t *Reorder) Unmarshal(wire io.Reader) error {
-	var b [4]byte
-	var bs []byte
-	bs = b[:4]
-	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-		return err
-	}
-	t.LeaderId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-
-	bs = b[:4]
-	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-		return err
-	}
-	t.OldInstance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-
-	bs = b[:4]
-	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-		return err
-	}
-	t.NewInstance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-	return nil
-}
-
-// ReorderReply msg
-func (t *ReorderReply) New() fastrpc.Serializable {
-	return new(ReorderReply)
-}
-
-func (t *ReorderReply) Marshal(wire io.Writer) {
-	// OldInstance int32
-	// OK       uint8
-	var b [5]byte
-	var bs []byte
-	bs = b[:5]
-	tmp32 := t.OldInstance
-	bs[0] = byte(tmp32)
-	bs[1] = byte(tmp32 >> 8)
-	bs[2] = byte(tmp32 >> 16)
-	bs[3] = byte(tmp32 >> 24)
-	bs[4] = byte(t.OK)
-	wire.Write(bs)
-}
-
-func (t *ReorderReply) Unmarshal(wire io.Reader) error {
-	var b [5]byte
 	var bs []byte
 	bs = b[:5]
 	if _, err := io.ReadAtLeast(wire, bs, 5); err != nil {
 		return err
 	}
-	t.OldInstance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-	t.OK = uint8(bs[4])
+	t.From = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
+  t.OK = uint8(bs[4])
 	return nil
 }
+

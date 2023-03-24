@@ -113,7 +113,6 @@ for ((i = 0; i < ${#cmds[@]}; i++)); do
   sleep 3
 done
 echo "Cluster setup!"
-sleep 1000000000000
 clientPIDS=()
 if [ $mdl == false ] && [ $doscale == true ]
 then
