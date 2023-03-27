@@ -23,6 +23,7 @@ type Propose struct {
 	SeqNo     int64 // Add these for multidispatch
 	PID       int64
   Predecessor Tag
+  PredSize  int32
 }
 
 type ProposeReply struct {

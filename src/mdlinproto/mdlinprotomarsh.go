@@ -63,7 +63,13 @@ func (t *Propose) Marshal(wire io.Writer) {
 	bs[7] = byte(tmp64 >> 56)
 	wire.Write(bs)
   t.Predecessor.Marshal(wire)
-
+  bs = b[:4]
+  tmp32 = t.PredSize
+  bs[0] = byte(tmp32)
+  bs[1] = byte(tmp32 >> 8)
+  bs[2] = byte(tmp32 >> 16)
+  bs[3] = byte(tmp32 >> 24)
+  wire.Write(bs)
 }
 
 func (t *Propose) Unmarshal(rr io.Reader) error {
@@ -104,6 +110,11 @@ func (t *Propose) Unmarshal(rr io.Reader) error {
 	t.PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
 
   t.Predecessor.Unmarshal(wire)
+  bs = b[:4]
+  if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+    return err
+  }
+  t.PredSize = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	return nil
 }
 
