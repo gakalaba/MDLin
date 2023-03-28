@@ -5,6 +5,7 @@ import (
 	"genericsmr"
 	"math"
 	"mdlinproto"
+  "state"
 )
 
 /*
@@ -53,6 +54,7 @@ func merge(a []*genericsmr.MDLPropose, start1 int, start2 int, end int) {
 }
 
 /*
+// Python version, from CMU's 15-112 course website
 def mergeSort(a):
   n = len(a)
   step = 1
@@ -77,4 +79,41 @@ func MergeSort(a []*genericsmr.MDLPropose) {
 		}
 		step *= 2
 	}
+}
+
+func mergeSecond(a []int32, b []state.Command, start1 int, start2 int, end int) {
+	index1 := start1
+	index2 := start2
+	length := end - start1
+	aux := make([]state.Command, length)
+	for i := 0; i < length; i++ {
+		if (index1 == start2) || ((index2 != end) && (a[index1] < a[index2])) {
+			aux[i] = b[index2]
+			index2 += 1
+		} else {
+			aux[i] = b[index1]
+			index1 += 1
+		}
+	}
+	for i := start1; i < end; i++ {
+		b[i] = aux[i-start1]
+	}
+}
+
+func PredSort(a []int32, b []state.Command) {
+  if (len(a) != len(b)) {
+    panic("Cannot sort command list based on predecessor list of different length")
+  }
+  step := 1
+  n := len(a)
+  var start2 int
+  var end int
+  for step < n {
+    for start1 := 0; start1 < n; start1 += 2 * step {
+      start2 = int(math.Min(float64(start1+step), float64(n)))
+      end = int(math.Min(float64(start1+2*step), float64(n)))
+      mergeSecond(a, b, start1, start2, end)
+    }
+    step *= 2
+  }
 }

@@ -57,6 +57,7 @@ type Accept struct {
 	ExpectedSeqs map[int64]int64
   FinalRound   uint8
   Epoch        int32
+  PredSize     []int32
 }
 
 type AcceptReply struct {
@@ -75,6 +76,7 @@ type Commit struct {
 	PIDs      int64
 	SeqNos    int64
 	Status    uint8
+  PredSize  []int32
 }
 
 type CommitShort struct {

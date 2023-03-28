@@ -376,6 +376,7 @@ func (t *Accept) Marshal(wire io.Writer) {
 	// ExpectedSeqs   map[int64]int64
 	// FinalRound     uint8
 	// Epoch          int32
+  // PredSize       []int32
 	var b [12]byte
 	var bs []byte
 	bs = b[:12]
@@ -476,7 +477,23 @@ func (t *Accept) Marshal(wire io.Writer) {
   bs[2] = byte(tmp32 >> 8)
   bs[3] = byte(tmp32 >> 16)
   bs[4] = byte(tmp32 >> 24)
+  wire.Write(bs)
 
+  // PredSize
+  bs = b[:]
+  alen1 = int64(len(t.PredSize))
+  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
+    wire.Write(b[0:wlen])
+  }
+  for i := int64(0); i < alen1; i++ {
+    bs = b[:4]
+    tmp32 = t.PredSize[i]
+    bs[0] = byte(tmp32)
+    bs[1] = byte(tmp32 >> 8)
+    bs[2] = byte(tmp32 >> 16)
+    bs[3] = byte(tmp32 >> 24)
+    wire.Write(bs)
+  }
 }
 
 func (t *Accept) Unmarshal(rr io.Reader) error {
@@ -551,7 +568,21 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
   t.FinalRound = uint8(bs[0])
   t.Epoch = int32((uint32(bs[1]) | (uint32(bs[2]) << 8) | (uint32(bs[3]) << 16) | (uint32(bs[4]) << 24)))
 
-	return nil
+  // PredSize
+  alen1, err = binary.ReadVarint(wire)
+  if err != nil {
+    return err
+  }
+  t.PredSize = make([]int32, alen1)
+  for i := int64(0); i < alen1; i++ {
+    bs = b[:4]
+    if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+      return err
+    }
+    t.PredSize[i] = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
+  }
+
+  return nil
 }
 
 func (t *AcceptReply) New() fastrpc.Serializable {
@@ -730,6 +761,22 @@ func (t *Commit) Marshal(wire io.Writer) {
   // Status
   bs = b[:1]
   bs[0] = byte(t.Status)
+
+  // PredSize
+  bs = b[:]
+  alen1 = int64(len(t.PredSize))
+  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
+    wire.Write(b[0:wlen])
+  }
+  for i := int64(0); i < alen1; i++ {
+    bs = b[:4]
+    tmp32 = t.PredSize[i]
+    bs[0] = byte(tmp32)
+    bs[1] = byte(tmp32 >> 8)
+    bs[2] = byte(tmp32 >> 16)
+    bs[3] = byte(tmp32 >> 24)
+    wire.Write(bs)
+  }
 }
 
 func (t *Commit) Unmarshal(rr io.Reader) error {
@@ -773,6 +820,19 @@ func (t *Commit) Unmarshal(rr io.Reader) error {
   // Status
   t.Status = uint8(uint8(bs[8]) << 64)
 
+  // PredSize
+  alen1, err = binary.ReadVarint(wire)
+  if err != nil {
+    return err
+  }
+  t.PredSize = make([]int32, alen1)
+  for i := int64(0); i < alen1; i++ {
+    bs = b[:4]
+    if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+      return err
+    }
+    t.PredSize[i] = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
+  }
   return nil
 }
 
