@@ -97,7 +97,7 @@ const (
 //TODO currently structured so that batching is turned off
 type Instance struct {
 	cmds       []state.Command
-	ballot     int32
+  ballot     int32
 	status     InstanceStatus
 	lb         *LeaderBookkeeping
 	pid        int64
@@ -116,7 +116,6 @@ type LeaderBookkeeping struct {
 	maxRecvBallot   int32
 	prepareOKs      int
 	acceptOKs       int
-	reorderOKs      int
 	nacks           int
   coordinated     int8
 }
@@ -537,16 +536,19 @@ func (r *Replica) processEpoch() {
     // (2) issue the bcastAccept for this entry
     b := make([]state.Command, i)
     bi := make([]int32, i)
+    bp := make([]*genericsmr.MDLPropose, i)
 
     p = orderedBuff
     j := 0
     for p != nil {
       b[j] = p.cmds[0]
       bi[j] = p.predSetSize[0]
+      bp[j] = p.lb.clientProposals[0]
+      p = p.next
     }
 
     // add all ordered entries to the ordered log
-    instNo := r.addEntryToOrderedLog(b, bi)
+    instNo := r.addEntryToOrderedLog(b, bi, bp)
 
     // do last paxos roundtrip with this whole batch you just added
     r.bcastAccept(instNo, r.defaultBallot, b, -1, -1, TRUE, bi)
@@ -886,7 +888,7 @@ func (r *Replica) addEntryToBuffLog(cmds []state.Command, proposals []*genericsm
       cmds,
       ball,
       stat,
-      &LeaderBookkeeping{proposals, 0, 0, 0, 0, 0, coord},
+      &LeaderBookkeeping{proposals, 0, 0, 0, 0, coord},
       pid,
       seqno,
       pred,
@@ -907,7 +909,7 @@ func (r *Replica) addEntryToBuffLog(cmds []state.Command, proposals []*genericsm
 }
 
 
-func (r *Replica) addEntryToOrderedLog(cmds []state.Command, predSizes []int32) int32 {
+func (r *Replica) addEntryToOrderedLog(cmds []state.Command, predSizes []int32, cPs []*genericsmr.MDLPropose) int32 {
 	// Add entry to log
 	NewPrintf(LEVEL0, "Flushing ready entries buffLog --> orderedLog at END OF EPOCH!")
 
@@ -920,7 +922,7 @@ func (r *Replica) addEntryToOrderedLog(cmds []state.Command, predSizes []int32) 
 			cmds,
 			r.defaultBallot,
 			PREPARED,
-      nil,
+      &LeaderBookkeeping{cPs, 0, 0, 0, 0, int8(TRUE)}, // Need this to track acceptOKs
 			-1,
 			-1,
       nil,
@@ -1111,7 +1113,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
       }
       panic("final round sees a last entry at the replica that isn't from the leader sending this appendEntries")
     }
-    r.addEntryToOrderedLog(accept.Command, accept.PredSize)
+    r.addEntryToOrderedLog(accept.Command, accept.PredSize, nil)
     // TODO do we need to check if the epoch's are correct?
     areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, accept.Ballot, accept.FinalRound, accept.Epoch}
 		copyMap(r.nextSeqNo, accept.ExpectedSeqs)
@@ -1181,7 +1183,7 @@ func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
 	inst := r.instanceSpace[commit.Instance]
 
 	if inst == nil {
-    r.addEntryToOrderedLog(commit.Command, commit.PredSize)
+    r.addEntryToOrderedLog(commit.Command, commit.PredSize, nil)
 	} else {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
@@ -1204,7 +1206,7 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 	inst := r.instanceSpace[commit.Instance]
 
 	if inst == nil {
-    r.addEntryToOrderedLog(nil, nil)
+    r.addEntryToOrderedLog(nil, nil, nil)
 	} else {
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
@@ -1317,19 +1319,19 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
 	if inst.status != PREPARED && inst.status != ACCEPTED {
 		// The status is COMMITTED
 		// we've move on, these are delayed replies, so just ignore
-		NewPrintf(LEVELALL, "hello? %d", inst.lb.clientProposals[0].CommandId)
 		return
 	}
 
 	if areply.OK == TRUE {
 		inst.lb.acceptOKs++
 		if inst.lb.acceptOKs+1 > r.N>>1 {
-			NewPrintf(LEVELALL, "Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
       // Check if the successor already sent a CR for this req,
       // but before it was committed itself
       if (areply.FinalRound == TRUE) {
+        NewPrintf(LEVELALL, "FINAL ROUND Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
         r.readyToCommit(areply.Instance)
       } else {
+			  NewPrintf(LEVELALL, "Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
         if (inst.cr != nil) {
           r.checkCoordination(inst)
         }
@@ -1363,7 +1365,7 @@ func (r *Replica) executeCommands() {
 					// they will get executed in sorted order.
 					// This maintains MDL
 					val := inst.cmds[j].Execute(r.State)
-					if inst.lb != nil {
+					if inst.lb.clientProposals != nil {
 						propreply := &mdlinproto.ProposeReply{
 							TRUE,
 							inst.lb.clientProposals[j].CommandId,
