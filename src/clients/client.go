@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"clientproto"
 	"coordinatorproto"
-	"dlog"
+  "dlog"
 	"encoding/binary"
 	"fastrpc"
 	"fmt"
@@ -308,9 +308,8 @@ func (c *AbstractClient) leaderListener(leader int) {
 		}
 		dlog.Printf("Received opcode %d from replica %d.\n", msgType, leader)
 
-		if rpair, present := c.rpcTable[msgType]; present {
+    if rpair, present := c.rpcTable[msgType]; present {
 			obj := rpair.Obj.New()
-      dlog.Println("Unmarshalling response from leader!")
 			if err = obj.Unmarshal(c.readers[leader]); err != nil {
 				errS = "unmarshling message"
 				break

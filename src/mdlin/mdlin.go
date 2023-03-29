@@ -392,7 +392,8 @@ func (r *Replica) run() {
 			NewPrintf(LEVELALL, "---------ProposalChan---------")
 			r.handlePropose(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
-			if !r.noProposalsReady {
+			if r.noProposalsReady {
+        NewPrintf(LEVEL0, "TURNING OFF PROPOSAL CHAN")
 				onOffProposeChan = nil
 			}
 			break
@@ -563,7 +564,7 @@ func (r *Replica) updateCommittedUpTo() {
 		(r.instanceSpace[r.committedUpTo+1].status == COMMITTED) {
 		r.committedUpTo++
 	}
-	NewPrintf(LEVELALL, "Updating commit index from %d to %d", ini, r.committedUpTo)
+	NewPrintf(LEVEL0, "Updating commit index from %d to %d", ini, r.committedUpTo)
 }
 
 func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
@@ -653,6 +654,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 			NewPrintf(LEVEL0, "Commit bcast failed: %v", err)
 		}
 	}()
+  NewPrintf(LEVEL0, "Leader calling bcastCommit")
 	pc.LeaderId = r.Id
 	pc.Instance = instance
 	pc.Ballot = ballot
@@ -852,17 +854,13 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
   }
   for i := 0; i < found; i++ {
 		if r.defaultBallot == -1 {
-			NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting prepares....")
+			NewPrintf(LEVEL0, "    Step2. (candidate) leader broadcasting prepares....")
 			r.bcastPrepare(r.buffInstance-int32(found+i), r.makeUniqueBallot(0), true)
 		} else {
-      log.Println("A")
 			r.recordInstanceMetadata(currInst)
-			log.Println("B")
       r.recordCommands(currInst.cmds)
-			log.Println("C")
       r.sync()
-      log.Println("D")
-			NewPrintf(LEVELALL, "    Step2. Leader broadcasting Accepts")
+			NewPrintf(LEVEL0, "    Step2. Leader broadcasting Accepts with instance = %v, ballot = %v", r.buffInstance-int32(found+i), r.defaultBallot)
 			r.bcastAccept(r.buffInstance-int32(found+i), r.defaultBallot, currInst.cmds, currInst.pid, currInst.seqno, FALSE, currInst.predSetSize)
 		}
     currInst = currInst.next
@@ -1121,6 +1119,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
     return
   }
 
+  NewPrintf(LEVEL0, "New accept from leader, instance = %v", accept.Instance)
   inst := r.bufferedLog
   var i int32
   for i = 0; i < accept.Instance; i++ {
@@ -1328,10 +1327,10 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
       // Check if the successor already sent a CR for this req,
       // but before it was committed itself
       if (areply.FinalRound == TRUE) {
-        NewPrintf(LEVELALL, "FINAL ROUND Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
+        NewPrintf(LEVEL0, "FINAL ROUND Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
         r.readyToCommit(areply.Instance)
       } else {
-			  NewPrintf(LEVELALL, "Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
+			  NewPrintf(LEVEL0, "Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
         if (inst.cr != nil) {
           r.checkCoordination(inst)
         }
@@ -1375,7 +1374,9 @@ func (r *Replica) executeCommands() {
 						NewPrintf(LEVEL0, "EXECUTING --> CLIENT:OK = TRUE, CommandID = %d, val = %v, key = %d, seqno = %d, PID = %dHA", inst.lb.clientProposals[j].CommandId, val, inst.lb.clientProposals[j].Command.K, inst.lb.clientProposals[j].SeqNo, inst.lb.clientProposals[j].PID)
 
             r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
-					}
+					} else {
+            NewPrintf(LEVEL0, "REPLICAS EXECUTING!!")
+          }
 				}
 				i++
 				executed = true

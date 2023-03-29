@@ -7,6 +7,7 @@ import (
 	"genericsmr"
 	"mdlinproto"
 	"state"
+  "fmt"
 )
 
 type MDLClient struct {
@@ -104,7 +105,7 @@ func (c *MDLClient) Write(key int64, value int64) bool {
 	c.opCount++
 	c.preparePropose(commandId, key, value)
 	c.propose.Command.Op = state.PUT
-  dlog.Println("Propose{CommandId %v, Command %v, Timestamp %v, SeqNo %v, PID %v, Predecessor %v, PredSize %v}", c.propose.CommandId, c.propose.Command, c.propose.Timestamp, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, c.propose.PredSize)
+  dlog.Println(fmt.Sprintf("Propose{CommandId %v, Command %v, Timestamp %v, SeqNo %v, PID %v, Predecessor %v, PredSize %v}", c.propose.CommandId, c.propose.Command, c.propose.Timestamp, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, c.propose.PredSize))
 	c.sendPropose()
 	return true
 }
