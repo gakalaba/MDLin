@@ -10,10 +10,10 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
-  "strconv"
 )
 
 var portnum *int = flag.Int("port", 7087, "Port # to listen on. Defaults to 7087")
@@ -95,7 +95,7 @@ func (master *Master) run() {
 		master.lock.Lock()
 		if master.nConnected == master.N {
 			master.lock.Unlock()
-      log.Println("All connected!", master.nodeList) //TODO delete
+			log.Println("All connected!", master.nodeList) //TODO delete
 			break
 		}
 		master.lock.Unlock()
@@ -105,7 +105,7 @@ func (master *Master) run() {
 
 	// connect to SMR servers
 	for i := 0; i < master.N; i++ {
-    var err error
+		var err error
 		addr := fmt.Sprintf("%s:%d", master.addrList[i], master.portList[i]+1000)
 		master.nodes[i], err = rpc.DialHTTP("tcp", addr)
 		if err != nil {
@@ -116,10 +116,8 @@ func (master *Master) run() {
 	master.leader[0] = true
 
 	// send the leader to the Coordinator
-  if (*nShards > 0) {
-    //Needs to be different connection for intershard RPC, so we +100 to leader portnum
-	  sendLeaderToCoord(fmt.Sprintf("%s:%d", *coordAddr, *coordPort), fmt.Sprintf("%s:%d", master.addrList[0], master.portList[0]))
-  }
+	//Needs to be different connection for intershard RPC, so we +100 to leader portnum
+	sendLeaderToCoord(fmt.Sprintf("%s:%d", *coordAddr, *coordPort), fmt.Sprintf("%s:%d", master.addrList[0], master.portList[0]))
 
 	for true {
 		time.Sleep(3000 * 1000 * 1000)
@@ -249,7 +247,7 @@ func registerWithCoordinator(coordAddr string) []string {
 }
 
 func sendLeaderToCoord(coordAddr string, leader string) {
-  log.Printf("Registering Leader %s with Coordinator", leader)
+	log.Printf("Registering Leader %s with Coordinator", leader)
 	args := &coordinatorproto.RegisterLeaderArgs{leader, fmt.Sprintf("%s:%d", *myAddr, *portnum)}
 	var reply coordinatorproto.RegisterLeaderReply
 
@@ -265,31 +263,31 @@ func sendLeaderToCoord(coordAddr string, leader string) {
 	}
 }
 
-//Coordinator --> Master: giving list of shards when available
+// Coordinator --> Master: giving list of shards when available
 func (master *Master) RegisterShards(args *masterproto.RegisterShardsArgs, reply *masterproto.RegisterShardsReply) error {
 	master.lock.Lock()
 	defer master.lock.Unlock()
 
 	master.shards = args.ShardList
 	master.numShards = len(master.shards)
-  for i,e := range master.shards {
-    l := strings.Split(e, ":")
-    p, err := strconv.Atoi(l[1])
-    if (err != nil) {
-      panic("Malformed port")
-    }
-    master.shards[i] = fmt.Sprintf("%s:%d", l[0], p+100)
-    log.Printf("-->Shard %d has leader at %s\n", i, master.shards[i])
-  }
-  return nil
+	for i, e := range master.shards {
+		l := strings.Split(e, ":")
+		p, err := strconv.Atoi(l[1])
+		if err != nil {
+			panic("Malformed port")
+		}
+		master.shards[i] = fmt.Sprintf("%s:%d", l[0], p+100)
+		log.Printf("-->Shard %d has leader at %s\n", i, master.shards[i])
+	}
+	return nil
 }
 
 // Servers --> Master: asking for shards
 func (master *Master) GetShardList(args *masterproto.GetShardListArgs, reply *masterproto.GetShardListReply) error {
-  if (*nShards <= 1) {
-    reply.ShardList = nil
-    return nil
-  }
+	if *nShards <= 1 {
+		reply.ShardList = nil
+		return nil
+	}
 	for true {
 		master.lock.Lock()
 		if master.shards != nil {

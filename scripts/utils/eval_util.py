@@ -14,6 +14,19 @@ def convert_latency_nanos_to_millis(latencies):
 def get_num_regions(config):
     return len(config['server_names']) if not 'server_regions' in config else len(config['server_regions'])
 
+
+def get_region(config, server):
+    for region, servers in config["server_regions"].items():
+        if server in servers:
+            return region
+
+    raise ValueError("{} not in any region".format(server))
+
+
+def get_regions(config):
+    return set([get_region(config, s) for s in config["clients"] + config["server_names"]])
+
+
 def calculate_statistics(config, local_out_directory):
     runs = []
     op_latencies = {}
@@ -74,96 +87,100 @@ def calculate_statistics_for_run(config, local_out_directory, run):
     region_op_latencies = {}
     region_op_latency_counts = {}
 
-    total = 0
     stats = {}
-    num_regions = get_num_regions(config)
-    for i in range(num_regions):
+
+    regions = get_regions(config)
+    for region in regions:
         op_latencies = {}
         op_latency_counts = {}
-        for l in range(len(config['server_names']) // num_regions):
-            server_idx = l + i * len(config['server_names']) // num_regions
-            if not 'client_total' in config or total < config['client_total']:
-                for j in range(config['client_nodes_per_server']):
-                    client_dir = 'client-%d-%d' % (server_idx, j)
-                    for k in range(config['client_processes_per_client_node']):
-                        client_out_file = os.path.join(local_out_directory,
-                                client_dir,
-                                'client-%d-%d-%d-stdout-%d.log' % (server_idx,
-                                    j, k, run))
-                        with open(client_out_file) as f:
-                            ops = f.readlines()
-                            for op in ops:
-                                opCols = op.strip().split(',')
-                                for x in range(0, len(opCols), 2):
-                                    if opCols[x].isdigit():
-                                        break
-                                    if not opCols[x] in config['client_stats_blacklist']:
-                                        if 'input_latency_scale' in config:
-                                            opLat = float(opCols[x+1]) / config['input_latency_scale']
-                                        else:
-                                            opLat = float(opCols[x+1]) / 1e9
-                                        if 'output_latency_scale' in config:
-                                            opLat = opLat * config['output_latency_scale']
-                                        else:
-                                            opLat = opLat * 1e3
 
-                                        if opCols[x] in op_latencies:
-                                            op_latencies[opCols[x]].append(opLat)
-                                        else:
-                                            op_latencies[opCols[x]] = [opLat]
-                                        if not opCols[x] in config['client_combine_stats_blacklist']:
-                                            if 'combined' in op_latencies:
-                                                op_latencies['combined'].append(opLat)
-                                            else:
-                                                op_latencies['combined'] = [opLat]
-                                            if 'combined' in op_latency_counts:
-                                                op_latency_counts['combined'] += 1
-                                            else:
-                                                op_latency_counts['combined'] = 1
-                                        if opCols[x] in op_latency_counts:
-                                            op_latency_counts[opCols[x]] += 1
-                                        else:
-                                            op_latency_counts[opCols[x]] = 1
+        for client in config["clients"]:
+            if get_region(config, client) != region:
+                continue
 
-                        client_stats_file = os.path.join(local_out_directory,
-                                client_dir,
-                                'client-%d-%d-%d-stats-%d.json' % (server_idx, j,
-                                    k, run))
-                        try:
-                            with open(client_stats_file) as f:
-                                client_stats = json.load(f)
-                                for k, v in client_stats.items():
-                                    if not type(v) is dict:
-                                        if k not in stats:
-                                            stats[k] = v
-                                        else:
-                                            stats[k] += v
-                        except FileNotFoundError:
-                            print('No stats file %s.' % client_stats_file)
-                        except json.decoder.JSONDecodeError:
-                            print('Invalid JSON file %s.' % client_stats_file)
-                        total += 1
-                        if 'client_total' in config and total >= config['client_total']:
-                            break
-                    if 'client_total' in config and total >= config['client_total']:
-                        break
+            client_dir = client
+            for k in range(config["client_processes_per_client_node"]):
+                client_out_file = os.path.join(local_out_directory,
+                                               client_dir,
+                                               '%s-%d-stdout-%d.log' % (client, k, run))
 
-            server_stats_file = os.path.join(local_out_directory, 'server-%d' % server_idx,
-                    'server-%d-stats-%d.json' % (server_idx, run))
-            try:
-                with open(server_stats_file) as f:
-                    print(server_stats_file)
-                    server_stats = json.load(f)
-                    for k, v in server_stats.items():
-                        if not type(v) is dict:
-                            if k not in stats:
-                                stats[k] = v
-                            else:
-                                stats[k] += v
-            except FileNotFoundError:
-                print('No stats file %s.' % server_stats_file)
-            except json.decoder.JSONDecodeError:
-                print('Invalid JSON file %s.' % server_stats_file)
+                with open(client_out_file) as f:
+                    ops = f.readlines()
+                    for op in ops:
+                        opCols = op.strip().split(',')
+                        for x in range(0, len(opCols), 2):
+                            if opCols[x].isdigit():
+                                break
+                            if not opCols[x] in config['client_stats_blacklist']:
+                                if 'input_latency_scale' in config:
+                                    opLat = float(opCols[x+1]) / config['input_latency_scale']
+                                else:
+                                    opLat = float(opCols[x+1]) / 1e9
+                                if 'output_latency_scale' in config:
+                                    opLat = opLat * config['output_latency_scale']
+                                else:
+                                    opLat = opLat * 1e3
+
+                                if opCols[x] in op_latencies:
+                                    op_latencies[opCols[x]].append(opLat)
+                                else:
+                                    op_latencies[opCols[x]] = [opLat]
+                                if not opCols[x] in config['client_combine_stats_blacklist']:
+                                    if 'combined' in op_latencies:
+                                        op_latencies['combined'].append(opLat)
+                                    else:
+                                        op_latencies['combined'] = [opLat]
+                                    if 'combined' in op_latency_counts:
+                                        op_latency_counts['combined'] += 1
+                                    else:
+                                        op_latency_counts['combined'] = 1
+                                if opCols[x] in op_latency_counts:
+                                    op_latency_counts[opCols[x]] += 1
+                                else:
+                                    op_latency_counts[opCols[x]] = 1
+
+                client_stats_file = os.path.join(local_out_directory,
+                        client_dir,
+                        '%s-%d-stats-%d.json' % (client, k, run))
+                try:
+                    with open(client_stats_file) as f:
+                        client_stats = json.load(f)
+                        for k, v in client_stats.items():
+                            if not type(v) is dict:
+                                if k not in stats:
+                                    stats[k] = v
+                                else:
+                                    stats[k] += v
+                except FileNotFoundError:
+                    print('No stats file %s.' % client_stats_file)
+                except json.decoder.JSONDecodeError:
+                    print('Invalid JSON file %s.' % client_stats_file)
+
+        for shard_idx in range(len(config["shards"])):
+            shard = config["shards"][shard_idx]
+            for replica_idx in range(len(shard)):
+                replica = shard[replica_idx]
+                if get_region(config, replica) != region:
+                    continue
+
+                server_stats_file = os.path.join(local_out_directory,
+                                                 'server-%d' % (shard_idx),
+                                                 'server-%d-%d-stats-%d.json' % (shard_idx, replica_idx, run))
+                print(server_stats_file)
+                try:
+                    with open(server_stats_file) as f:
+                        print(server_stats_file)
+                        server_stats = json.load(f)
+                        for k, v in server_stats.items():
+                            if not type(v) is dict:
+                                if k not in stats:
+                                    stats[k] = v
+                                else:
+                                    stats[k] += v
+                except FileNotFoundError:
+                    print('No stats file %s.' % server_stats_file)
+                except json.decoder.JSONDecodeError:
+                    print('Invalid JSON file %s.' % server_stats_file)
 
         # print('Region %d had op counts: w=%d, r=%d, rmw=%d.' % (i, writes, reads, rmws))
         # normalize by server region to account for latency differences

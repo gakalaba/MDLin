@@ -1,11 +1,11 @@
 package main
 
 import (
+	"coordinatorproto"
 	"flag"
 	"fmt"
 	"log"
 	"masterproto"
-  "coordinatorproto"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -19,17 +19,17 @@ var nShards *int = flag.Int("N", 1, "Number of shards. Defaults to 1.")
 var masterIPs *string = flag.String("ips", "", "Space separated list of master IP addresses (ordered).")
 
 type Coordinator struct {
-	numShards              int
+	numShards        int
 	masterList       []string
-	addrList       []string
-	portList       []int
-	lock           *sync.Mutex
+	addrList         []string
+	portList         []int
+	lock             *sync.Mutex
 	masters          []*rpc.Client
-  shardLeaders []string
-	expectAddrList []string
-	connected      []bool
-	nConnected     int
-  leadersConnected int
+	shardLeaders     []string
+	expectAddrList   []string
+	connected        []bool
+	nConnected       int
+	leadersConnected int
 }
 
 func main() {
@@ -43,11 +43,11 @@ func main() {
 		ips = strings.Split(*masterIPs, ",")
 		log.Println("Ordered master ips:", ips, len(ips))
 	} else {
-    for i := 0; i < *nShards; i++ {
-	    ips = append(ips, "")
-	  }
-  }
-  log.Println(ips, len(ips))
+		for i := 0; i < *nShards; i++ {
+			ips = append(ips, "")
+		}
+	}
+	log.Println(ips, len(ips))
 	coordinator := &Coordinator{
 		*nShards,
 		make([]string, *nShards),
@@ -59,7 +59,7 @@ func main() {
 		ips,
 		make([]bool, *nShards),
 		0,
-    0,
+		0,
 	}
 
 	rpc.Register(coordinator)
@@ -86,7 +86,7 @@ func (coordinator *Coordinator) run() {
 	}
 	time.Sleep(2000000000)
 
-  log.Println("All the master nodes have registered with the coordinators", coordinator.masterList)
+	log.Println("All the master nodes have registered with the coordinators", coordinator.masterList)
 	// connect to master servers
 	for i := 0; i < coordinator.numShards; i++ {
 		var err error
@@ -94,16 +94,16 @@ func (coordinator *Coordinator) run() {
 		coordinator.masters[i], err = rpc.DialHTTP("tcp", addr)
 		if err != nil {
 			log.Fatalf("Error connecting to shard %d: %v\n", i, err)
-    }
+		}
 	}
 
-  // Give the masters the ips of all other shard masters/leaders
-  for true {
+	// Give the masters the ips of all other shard masters/leaders
+	for true {
 		coordinator.lock.Lock()
-    // we must wait until all the other leaders have been 
-    // registered by their respective master servers.
+		// we must wait until all the other leaders have been
+		// registered by their respective master servers.
 		if coordinator.leadersConnected == coordinator.numShards {
-      log.Println("All the shard leaders have been registered")
+			log.Println("All the shard leaders have been registered")
 			coordinator.lock.Unlock()
 			break
 		}
@@ -111,13 +111,13 @@ func (coordinator *Coordinator) run() {
 		time.Sleep(100000000)
 	}
 
-  coordinator.sendShardsToMasters()
+	coordinator.sendShardsToMasters()
 
-  log.Println("Shard setup complete!")
+	log.Println("Shard setup complete!")
 	for true {
 		time.Sleep(3000 * 1000 * 1000)
-    //TODO can add something for handling leader failure
-  }
+		//TODO can add something for handling leader failure
+	}
 }
 
 // Masters registering themselves
@@ -172,47 +172,46 @@ func (coordinator *Coordinator) Register(args *coordinatorproto.RegisterArgs, re
 
 // Master --> Coordinator : giving the leaders of replication group
 func (coordinator *Coordinator) RegisterLeader(args *coordinatorproto.RegisterLeaderArgs, reply *coordinatorproto.RegisterLeaderReply) error {
-  coordinator.lock.Lock()
-  defer coordinator.lock.Unlock()
-  for i:=0;i<coordinator.numShards;i++ {
-    if coordinator.masterList[i] == args.MasterAddr {
-      if coordinator.shardLeaders[i] == "" {
-        coordinator.leadersConnected++
-      }
-      coordinator.shardLeaders[i] = args.LeaderAddr
-    }
-  }
-  return nil
+	coordinator.lock.Lock()
+	defer coordinator.lock.Unlock()
+	for i := 0; i < coordinator.numShards; i++ {
+		if coordinator.masterList[i] == args.MasterAddr {
+			if coordinator.shardLeaders[i] == "" {
+				coordinator.leadersConnected++
+			}
+			coordinator.shardLeaders[i] = args.LeaderAddr
+		}
+	}
+	return nil
 }
 
 // Coordinator --> Master
 func (coordinator *Coordinator) sendShardsToMasters() error {
-  coordinator.lock.Lock()
-  defer coordinator.lock.Unlock()
+	coordinator.lock.Lock()
+	defer coordinator.lock.Unlock()
 
-  var reply masterproto.RegisterShardsReply
-  for _, mcli := range coordinator.masters {
-    args := &masterproto.RegisterShardsArgs{coordinator.shardLeaders}
-    if err := mcli.Call("Master.RegisterShards", args, &reply); err != nil {
-      log.Fatalf("Error making the RegisterShards RPC\n")
-    }
-  }
-  return nil
+	var reply masterproto.RegisterShardsReply
+	for _, mcli := range coordinator.masters {
+		args := &masterproto.RegisterShardsArgs{coordinator.shardLeaders}
+		if err := mcli.Call("Master.RegisterShards", args, &reply); err != nil {
+			log.Fatalf("Error making the RegisterShards RPC\n")
+		}
+	}
+	return nil
 }
 
 // Coordinator --> Client
 func (coordinator *Coordinator) GetShardLeaderList(args *coordinatorproto.GetShardLeaderListArgs, reply *coordinatorproto.GetShardLeaderListReply) error {
-  for true {
-    coordinator.lock.Lock()
-    if coordinator.leadersConnected == coordinator.numShards {
-      coordinator.lock.Unlock()
-      break
-    }
-    coordinator.lock.Unlock()
-    time.Sleep(100000000)
-  }
+	for true {
+		coordinator.lock.Lock()
+		if coordinator.leadersConnected == coordinator.numShards {
+			coordinator.lock.Unlock()
+			break
+		}
+		coordinator.lock.Unlock()
+		time.Sleep(100000000)
+	}
 
-  reply.LeaderList = coordinator.shardLeaders
-  return nil
+	reply.LeaderList = coordinator.shardLeaders
+	return nil
 }
-

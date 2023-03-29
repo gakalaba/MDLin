@@ -58,7 +58,6 @@ type AbstractClient struct {
 	glArgs             *masterproto.GetLeaderArgs
 	glReply            *masterproto.GetLeaderReply
 	replyChan          chan *ReplicaReply
-	masterRPCClient    *rpc.Client
 	leaderAddrs        []string
 	numLeaders         int
 	leaders            []net.Conn
@@ -87,7 +86,6 @@ func NewAbstractClient(id int32, coordinatorAddr string, coordinatorPort int, fo
 		&masterproto.GetLeaderArgs{},  // glArgs
 		&masterproto.GetLeaderReply{}, // glReply
 		make(chan *ReplicaReply),      // replyChan
-		nil,                           // masterRPCClient
 		make([]string, 0),             // replicaAddrs
 		-1,                            // numReplicas
 		make([]net.Conn, 0),           // replicas
@@ -122,7 +120,6 @@ func (c *AbstractClient) Finish() {
 		for _, replica := range c.leaders {
 			replica.Close()
 		}
-		c.masterRPCClient.Close()
 		c.shutdown = true
 	}
 }
@@ -212,15 +209,6 @@ func (c *AbstractClient) GetShardFromKey(k state.Key) int {
 	nShards := len(c.leaders)
 	return int(k) % nShards
 }
-
-// func (c *AbstractClient) DetermineLeader() {
-// 	err := c.masterRPCClient.Call("Master.GetLeader", c.glArgs, c.glReply)
-// 	if err != nil {
-// 		log.Fatalf("Error calling GetLeader: %v\n", err)
-// 	}
-// 	c.leader = c.glReply.LeaderId
-// 	log.Printf("The leader is replica %d\n", c.leader)
-// }
 
 // func (c *AbstractClient) DetermineReplicaPings() {
 // 	log.Printf("Determining replica pings...\n")
