@@ -38,7 +38,7 @@ var cpuProfile *string = flag.String(
 
 var debug *bool = flag.Bool(
 	"debug",
-	false,
+	true,
 	"Enable debug output.")
 
 var defaultReplicaOrder *bool = flag.Bool(
@@ -74,7 +74,7 @@ var coordinatorAddr *string = flag.String(
 
 var coordinatorPort *int = flag.Int(
 	"cport",
-	7087,
+	7097,
 	"Coordinator port.")
 
 var maxProcessors *int = flag.Int(
@@ -155,7 +155,7 @@ var thrifty *bool = flag.Bool(
 
 var writes *int = flag.Int(
 	"writes",
-	100,
+	1000,
 	"Percentage of updates (writes).")
 
 var zipfS = flag.Float64(

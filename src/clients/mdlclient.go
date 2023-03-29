@@ -77,7 +77,7 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
       // Send the coordination request
       // (Keep this after sending the request for now, since 
       // logic in the send function assumes request was send)
-      c.sendCoordinationRequest(prevTag)
+      c.sendCoordinationRequest(prevTag, l)
     }
     prevTag = mdlinproto.Tag{K: state.Key(k), PID: int64(c.id), SeqNo: c.seqnos[l]}
 	}
@@ -104,6 +104,7 @@ func (c *MDLClient) Write(key int64, value int64) bool {
 	c.opCount++
 	c.preparePropose(commandId, key, value)
 	c.propose.Command.Op = state.PUT
+  dlog.Println("Propose{CommandId %v, Command %v, Timestamp %v, SeqNo %v, PID %v, Predecessor %v, PredSize %v}", c.propose.CommandId, c.propose.Command, c.propose.Timestamp, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, c.propose.PredSize)
 	c.sendPropose()
 	return true
 }
@@ -142,8 +143,12 @@ func (c *MDLClient) sendPropose() {
 	c.writers[shard].Flush()
 }
 
-func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag) {
+func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, myShard int) {
 	shard := c.GetShardFromKey(predecessorTag.K)
+  if (shard == myShard) {
+    //TODO remove this
+    return
+  }
 	dlog.Printf("Sending CoordinationRequest to shard %d\n", shard)
 
   // Prepare the coordination request object

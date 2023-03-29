@@ -775,12 +775,12 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			r.addEntryToBuffLog(cmds, proposals, pid, seqno, coord, thisCr, &prop.Predecessor, prop.PredSize) //This seems like a bad idea TODO... the address of a message that's gonna disapear?
 			// Check if any others are ready
 			for true {
-        panic("Shouldn't be adding any buffered OoO reqs per client")
 				NewPrintf(LEVELALL, "looking for any others that might be ready from this PID %d", pid)
 				l := len(r.outstandingInst[pid])
 				NewPrintf(LEVELALL, "apppears there are %d outstanding for this pid", l)
 				expectedSeqno = r.nextSeqNo[pid]
 				if (l > 0) && (r.outstandingInst[pid][l-1].SeqNo == expectedSeqno) {
+          panic("Shouldn't be adding any buffered OoO reqs per client")
 					// We found previously outstanding requests that can be replicated now
 					prop = r.outstandingInst[pid][l-1]
 					r.outstandingInst[pid] = r.outstandingInst[pid][:l-1]
@@ -855,7 +855,7 @@ func (r *Replica) addEntryToBuffLog(cmds []state.Command, proposals []*genericsm
   seqno int64, coord int8, thisCr *genericsmr.MDLCoordReq, pred *mdlinproto.Tag, predSize int32) {
 
 	// Add entry to log
-  NewPrintf(LEVEL0, "addEntryToBuffLog --> Shard Leader Creating Log Entry{%s, ver: %d, CommandId: %d, PID: %d, SeqNo: %d, coord: %d, thisCr: %v, pred: %v",
+  NewPrintf(LEVEL0, "addEntryToBuffLog --> Shard Leader Creating Log Entry{%s, CommandId: %d, PID: %d, SeqNo: %d, coord: %d, thisCr: %v, pred: %v",
 		commandToStr(cmds[0]), proposals[0].CommandId, pid, seqno, coord, thisCr, pred)
 
   ball := r.defaultBallot
