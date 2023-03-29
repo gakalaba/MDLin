@@ -148,7 +148,7 @@ func main() {
 	rpc.Register(rep)
 	go catchKill(rep, interrupt)
 
-	serverlib.Serve(*rpcPort)
+	serverlib.Serve(*portnum+1000)
 }
 
 type Finishable interface {
