@@ -646,6 +646,7 @@ func (t *AcceptReply) Marshal(wire io.Writer) {
   bs[2] = byte(tmp32 >> 8)
   bs[3] = byte(tmp32 >> 16)
   bs[4] = byte(tmp32 >> 24)
+  wire.Write(bs)
 }
 
 func (t *AcceptReply) Unmarshal(wire io.Reader) error {

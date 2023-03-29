@@ -1116,6 +1116,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
     areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, accept.Ballot, accept.FinalRound, accept.Epoch}
 		copyMap(r.nextSeqNo, accept.ExpectedSeqs)
 	  r.replyAccept(accept.LeaderId, areply)
+    return
   }
 
   inst := r.bufferedLog
