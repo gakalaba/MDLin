@@ -147,6 +147,7 @@ func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, mySha
 	shard := c.GetShardFromKey(predecessorTag.K)
   if (shard == myShard) {
     //TODO remove this
+    dlog.Printf("Not sending CoordinationRequest to same shard as predecessor")
     return
   }
 	dlog.Printf("Sending CoordinationRequest to shard %d\n", shard)
@@ -169,9 +170,11 @@ func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, mySha
 func (c *MDLClient) readReplies(start int32, fanout int) (bool, int64) {
 	rarray := make([]int, fanout)
 	done := false
+  dlog.Println("Client completed AppRequest, now is awaiting results from leader")
 	for !done {
 		reply := (<-c.proposeReplyChan).(*mdlinproto.ProposeReply)
 		if reply.OK == 0 {
+      dlog.Println("Client received FAIL response for request")
 			return false, int64(reply.CommandId)
 		} else {
 			dlog.Printf("Received ProposeReply for %d\n", reply.CommandId)

@@ -29,7 +29,7 @@ const DEBUG_LEVEL = 0
 const LEVEL0 = 0
 const LEVELALL = 1
 
-const EPOCH = 1000 * 1000 * 5
+const EPOCH = 10
 const MAX_EPOCHS = 3
 
 func NewPrintf(level int, str ...interface{}) {
@@ -81,6 +81,7 @@ type Replica struct {
   outstandingCR       map[*mdlinproto.Tag]*genericsmr.MDLCoordReq
   outstandingCRR      map[*mdlinproto.Tag]*mdlinproto.CoordinationResponse
 
+  timer               *time.Timer
   epoch               int32
 }
 
@@ -161,6 +162,7 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int,
     make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
     make(map[*mdlinproto.Tag]*genericsmr.MDLCoordReq),
     make(map[*mdlinproto.Tag]*mdlinproto.CoordinationResponse),
+    time.NewTimer(EPOCH * time.Second),
     0}
 
 	r.Durable = durable
@@ -337,24 +339,12 @@ func (r *Replica) replyAccept(replicaId int32, reply *mdlinproto.AcceptReply) {
 /* ============= */
 
 var clockChan chan bool
-var epochChan chan bool
 
 func (r *Replica) clock() {
 	for !r.Shutdown {
 		time.Sleep(1000 * 1000 * 5)
 		clockChan <- true
 	}
-}
-
-func (r *Replica) epochTick() {
-  //TODO set this epoch value
-  for !r.Shutdown {
-    me := <-epochChan
-    if (!me) {
-      time.Sleep(EPOCH)
-    }
-    epochChan <- true
-  }
 }
 
 /* Main event processing loop */
@@ -381,22 +371,17 @@ func (r *Replica) run() {
 		go r.clock()
 	}
 
-  epochChan = make(chan bool, 1)
-  epochChan <- false //start the clock
-  go r.epochTick()
-
 	onOffProposeChan := r.MDLProposeChan
 
 	for !r.Shutdown {
 
 		select {
 
-    case timer := <-epochChan:
+    case <-r.timer.C:
       // The epoch has completed, so now we need to do processing
-      if timer {
-        r.processEpoch()
-      }
-      epochChan <- false
+      NewPrintf(LEVEL0, "---------END OF EPOCH-------")
+      r.processEpoch()
+      r.timer.Reset(EPOCH * time.Second)
       break
 
 		case <-clockChan:
@@ -474,8 +459,8 @@ func (r *Replica) makeUniqueBallot(ballot int32) int32 {
 
 // indexOL, orderedLog, bufferedLog
 func (r *Replica) processEpoch() {
-  var tmp *Instance = nil
-  var tmpEnd *Instance = nil
+  var orderedBuff *Instance = nil
+  var oBE *Instance = nil
   i := 0
   // scan through the bufferedLog
   p := r.bufferedLog
@@ -484,38 +469,58 @@ func (r *Replica) processEpoch() {
   for p != nil {
     coord := p.lb.coordinated
     committed := (p.lb.acceptOKs+1) > (r.N>>1)
+    NewPrintf(LEVEL0, "Buff log entry %v has coord = %v and committed = %v", i, coord, committed)
     if (coord == 1 && committed) {
       i++
       // remove ordered entries from the buffer log
       prev = p.prev
       next = p.next
-      if (prev != nil) {
+      if (prev == nil && next == nil) {
+        r.bufferedLog = nil
+        r.bLE = nil
+        p.next = nil
+      } else if (prev != nil && next == nil) {
         prev.next = next
-      }
-      if (next != nil) {
+        r.bLE = prev
+        p.next = nil
+      } else if (next != nil && prev == nil) {
+        next.prev = prev
+        r.bufferedLog = next
+      } else {
+        prev.next = next
         next.prev = prev
       }
       r.buffInstance--
-      if (tmp == nil) {
-        tmp = p
-        tmpEnd = p
+      if (orderedBuff == nil) {
+        orderedBuff = p
+        oBE = p
         p.next = nil
         p.prev = nil
       } else {
-        p.prev = tmpEnd
+        p.prev = oBE
         p.next = nil
-        tmpEnd.next = p
-        tmpEnd = p
+        oBE.next = p
+        oBE = p
       }
     } else if (r.epoch - p.epoch > MAX_EPOCHS) {
       // Remove stale entries from buffered log that
       // have not yet been coordinated and committed
+      NewPrintf(LEVEL0, "Found stale entry in buff log at index %v with epoch %v, we are in epoch %v, REMOVING IT", i, p.epoch, r.epoch)
       prev = p.prev
       next = p.next
-      if (prev != nil) {
+      if (prev == nil && next == nil) {
+        r.bufferedLog = nil
+        r.bLE = nil
+        p.next = nil
+      } else if (prev != nil && next == nil) {
         prev.next = next
-      }
-      if (next != nil) {
+        r.bLE = prev
+        p.next = nil
+      } else if (next != nil && prev == nil) {
+        next.prev = prev
+        r.bufferedLog = next
+      } else {
+        prev.next = next
         next.prev = prev
       }
       r.buffInstance--
@@ -523,15 +528,17 @@ func (r *Replica) processEpoch() {
       // it will implicitly fail in this same loop within
       // a few epochs anyway, so we choose not to send it
     }
+    p = p.next
   }
   if (i > 0) {
+    NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, i)
     // If some entries were added for this epoch, then
     // (1) add them as an entry in the ordered log
     // (2) issue the bcastAccept for this entry
     b := make([]state.Command, i)
     bi := make([]int32, i)
 
-    p = tmp
+    p = orderedBuff
     j := 0
     for p != nil {
       b[j] = p.cmds[0]
@@ -597,6 +604,8 @@ func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Comm
 			NewPrintf(LEVEL0, "Accept bcast failed: %v", err)
 		}
 	}()
+
+  NewPrintf(LEVEL0, "BcastAccept with final round == %v", fr)
 	pa.LeaderId = r.Id
 	pa.Instance = instance
 	pa.Ballot = ballot
@@ -836,14 +845,21 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 
 	r.noProposalsReady = false
 
+  if (currInst == nil) {
+    currInst = r.bufferedLog
+  }
   for i := 0; i < found; i++ {
 		if r.defaultBallot == -1 {
 			NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting prepares....")
 			r.bcastPrepare(r.buffInstance-int32(found+i), r.makeUniqueBallot(0), true)
 		} else {
+      log.Println("A")
 			r.recordInstanceMetadata(currInst)
-			r.recordCommands(currInst.cmds)
-			r.sync()
+			log.Println("B")
+      r.recordCommands(currInst.cmds)
+			log.Println("C")
+      r.sync()
+      log.Println("D")
 			NewPrintf(LEVELALL, "    Step2. Leader broadcasting Accepts")
 			r.bcastAccept(r.buffInstance-int32(found+i), r.defaultBallot, currInst.cmds, currInst.pid, currInst.seqno, FALSE, currInst.predSetSize)
 		}
@@ -855,8 +871,8 @@ func (r *Replica) addEntryToBuffLog(cmds []state.Command, proposals []*genericsm
   seqno int64, coord int8, thisCr *genericsmr.MDLCoordReq, pred *mdlinproto.Tag, predSize int32) {
 
 	// Add entry to log
-  NewPrintf(LEVEL0, "addEntryToBuffLog --> Shard Leader Creating Log Entry{%s, CommandId: %d, PID: %d, SeqNo: %d, coord: %d, thisCr: %v, pred: %v",
-		commandToStr(cmds[0]), proposals[0].CommandId, pid, seqno, coord, thisCr, pred)
+  NewPrintf(LEVEL0, "addEntryToBuffLog --> Shard Leader Creating Log Entry{%s, PID: %d, SeqNo: %d, coord: %d, thisCr: %v, pred: %v, epoch: %v",
+		commandToStr(cmds[0]), pid, seqno, coord, thisCr, pred, r.epoch)
 
   ball := r.defaultBallot
   stat := PREPARED
@@ -1149,6 +1165,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
 	}
 
 	if areply.OK == TRUE {
+    NewPrintf(LEVEL0, "Replica %v accepted this request in log", r.Id)
 		r.recordInstanceMetadata(inst)
 		r.recordCommands(accept.Command)
 		r.sync()
@@ -1273,6 +1290,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 }
 
 func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
+  NewPrintf(LEVEL0, "got RESPONSE to accept %v", areply.OK)
   var inst *Instance
   if areply.FinalRound == TRUE {
     // check whether this has been a quorum of acks, incrememnet the execution index

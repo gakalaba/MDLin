@@ -310,6 +310,7 @@ func (c *AbstractClient) leaderListener(leader int) {
 
 		if rpair, present := c.rpcTable[msgType]; present {
 			obj := rpair.Obj.New()
+      dlog.Println("Unmarshalling response from leader!")
 			if err = obj.Unmarshal(c.readers[leader]); err != nil {
 				errS = "unmarshling message"
 				break
