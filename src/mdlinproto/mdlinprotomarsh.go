@@ -373,7 +373,7 @@ func (t *Accept) Marshal(wire io.Writer) {
 	// FinalRound     uint8
 	// Epoch          int32
   // PredSize       []int32
-	// CommandId      []int32
+	// CommandId      []mdlinproto.Tag
   var b [12]byte
 	var bs []byte
 	bs = b[:12]
@@ -499,13 +499,7 @@ func (t *Accept) Marshal(wire io.Writer) {
     wire.Write(b[0:wlen])
   }
   for i := int64(0); i < alen1; i++ {
-    bs = b[:4]
-    tmp32 = t.CommandId[i]
-    bs[0] = byte(tmp32)
-    bs[1] = byte(tmp32 >> 8)
-    bs[2] = byte(tmp32 >> 16)
-    bs[3] = byte(tmp32 >> 24)
-    wire.Write(bs)
+    t.CommandId[i].Marshal(wire)
   }
 }
 
@@ -600,13 +594,9 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
   if err != nil {
     return err
   }
-  t.CommandId = make([]int32, alen1)
+  t.CommandId = make([]Tag, alen1)
   for i := int64(0); i < alen1; i++ {
-    bs = b[:4]
-    if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-      return err
-    }
-    t.CommandId[i] = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
+    t.CommandId[i].Unmarshal(wire)
   }
 
   return nil
