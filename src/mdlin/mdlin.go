@@ -652,7 +652,7 @@ func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Comm
 var pc mdlinproto.Commit
 var pcs mdlinproto.CommitShort
 
-func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Command, pids int64, seqnos int64, status InstanceStatus) {
+func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Command, pids int64, seqnos int64, status InstanceStatus, ps []int32) {
 	defer func() {
 		if err := recover(); err != nil {
 			NewPrintf(LEVEL0, "Commit bcast failed: %v", err)
@@ -666,6 +666,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 	pc.PIDs = pids
 	pc.SeqNos = seqnos
 	pc.Status = uint8(status)
+  pc.PredSize = ps
 	args := &pc
 	pcs.LeaderId = r.Id
 	pcs.Instance = instance
@@ -1073,7 +1074,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
   }
 }
 
-func (r *Replica) readyToCommit(instance int32) {
+func (r *Replica) readyToCommit(instance int32, ps []int32) {
 	inst := r.instanceSpace[instance]
 	inst.status = COMMITTED
 
@@ -1082,7 +1083,7 @@ func (r *Replica) readyToCommit(instance int32) {
 
 	r.updateCommittedUpTo()
 
-	r.bcastCommit(instance, inst.ballot, inst.cmds, inst.pid, inst.seqno, COMMITTED)
+	r.bcastCommit(instance, inst.ballot, inst.cmds, inst.pid, inst.seqno, COMMITTED, ps)
 }
 
 func (r *Replica) printLog(level int) {
@@ -1375,7 +1376,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
       // but before it was committed itself
       if (areply.FinalRound == TRUE) {
         NewPrintf(LEVEL0, "FINAL ROUND Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
-        r.readyToCommit(areply.Instance)
+        r.readyToCommit(areply.Instance, inst.predSetSize)
       } else {
 			  NewPrintf(LEVEL0, "Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
         if (inst.cr != nil) {
