@@ -629,6 +629,7 @@ func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Comm
   pa.PredSize = ps
 	args := &pa
 
+  NewPrintf(LEVEL0, "Broadcasting accept with message %v", pa)
 	n := r.N - 1
 	if r.Thrifty {
 		n = r.N >> 1 //n = n//2
@@ -734,7 +735,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
 	}
-	currInst := r.bLE //The current available spot
+	currInst := r.bLE //The current last element
 
 	found := 0
 	var expectedSeqno int64
@@ -853,7 +854,12 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	r.noProposalsReady = false
 
   if (currInst == nil) {
+    // If there were no entries in the buffered log at the beginning
+    // then all entries added now start at the beginning of bufflog
     currInst = r.bufferedLog
+  } else {
+    // otherwise, start with the first entry we just added to bufferedLog
+    currInst = currInst.next
   }
   for i := 0; i < found; i++ {
 		if r.defaultBallot == -1 {
@@ -874,29 +880,29 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 
 func (r *Replica) removeEntryFromBuffLog(cmdid []mdlinproto.Tag) {
   p := r.bufferedLog
-  i := 0
   var prev *Instance
   var next *Instance
   for (p != nil) {
-    t := cmdid[i]
-    if p.pid == t.PID && p.seqno == t.SeqNo && t.K == p.cmds[0].K {
-      i++
-      prev = p.prev
-      next = p.next
-      if (prev == nil && next == nil) {
-        r.bufferedLog = nil
-        r.bLE = nil
-        p.next = nil
-      } else if (prev != nil && next == nil) {
-        prev.next = next
-        r.bLE = prev
-        p.next = nil
-      } else if (next != nil && prev == nil) {
-        next.prev = prev
-        r.bufferedLog = next
-      } else {
-        prev.next = next
-        next.prev = prev
+    for i:=0; i<len(cmdid); i++ {
+      t := cmdid[i]
+      if p.pid == t.PID && p.seqno == t.SeqNo && t.K == p.cmds[0].K {
+        prev = p.prev
+        next = p.next
+        if (prev == nil && next == nil) {
+          r.bufferedLog = nil
+          r.bLE = nil
+          p.next = nil
+        } else if (prev != nil && next == nil) {
+          prev.next = next
+          r.bLE = prev
+          p.next = nil
+        } else if (next != nil && prev == nil) {
+          next.prev = prev
+          r.bufferedLog = next
+        } else {
+          prev.next = next
+          next.prev = prev
+        }
       }
     }
     p = p.next
@@ -931,6 +937,8 @@ func (r *Replica) addEntryToBuffLog(cmds []state.Command, proposals []*genericsm
       nil,
       nil,
       predSetSize}
+
+  // Insert into linked list
   if (r.bufferedLog == nil) {
     r.bufferedLog = e
     r.bLE = e
