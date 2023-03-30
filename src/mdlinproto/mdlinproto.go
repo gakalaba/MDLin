@@ -58,6 +58,7 @@ type Accept struct {
   FinalRound   uint8
   Epoch        int32
   PredSize     []int32
+  CommandId    []int32
 }
 
 type AcceptReply struct {

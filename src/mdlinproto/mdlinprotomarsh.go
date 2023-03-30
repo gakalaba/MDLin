@@ -373,7 +373,8 @@ func (t *Accept) Marshal(wire io.Writer) {
 	// FinalRound     uint8
 	// Epoch          int32
   // PredSize       []int32
-	var b [12]byte
+	// CommandId      []int32
+  var b [12]byte
 	var bs []byte
 	bs = b[:12]
 	tmp32 := t.LeaderId
@@ -490,6 +491,22 @@ func (t *Accept) Marshal(wire io.Writer) {
     bs[3] = byte(tmp32 >> 24)
     wire.Write(bs)
   }
+
+  // CommandId
+  bs = b[:]
+  alen1 = int64(len(t.CommandId))
+  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
+    wire.Write(b[0:wlen])
+  }
+  for i := int64(0); i < alen1; i++ {
+    bs = b[:4]
+    tmp32 = t.CommandId[i]
+    bs[0] = byte(tmp32)
+    bs[1] = byte(tmp32 >> 8)
+    bs[2] = byte(tmp32 >> 16)
+    bs[3] = byte(tmp32 >> 24)
+    wire.Write(bs)
+  }
 }
 
 func (t *Accept) Unmarshal(rr io.Reader) error {
@@ -576,6 +593,20 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
       return err
     }
     t.PredSize[i] = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
+  }
+
+  // CommandId
+  alen1, err = binary.ReadVarint(wire)
+  if err != nil {
+    return err
+  }
+  t.CommandId = make([]int32, alen1)
+  for i := int64(0); i < alen1; i++ {
+    bs = b[:4]
+    if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+      return err
+    }
+    t.CommandId[i] = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
   }
 
   return nil

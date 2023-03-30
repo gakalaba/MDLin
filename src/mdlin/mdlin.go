@@ -105,6 +105,7 @@ type Instance struct {
   pred       *mdlinproto.Tag
   cr         *genericsmr.MDLCoordReq
   epoch      int32
+  commandId  int32
   // For linked list
   prev *Instance
   next *Instance
@@ -539,12 +540,14 @@ func (r *Replica) processEpoch() {
     bi := make([]int32, i)
     bp := make([]*genericsmr.MDLPropose, i)
 
+    cmdids := make([]int32, i)
     p = orderedBuff
     j := 0
     for p != nil {
       b[j] = p.cmds[0]
       bi[j] = p.predSetSize[0]
       bp[j] = p.lb.clientProposals[0]
+      cmdids[j] = p.lb.clientProposals[0].CommandId
       p = p.next
     }
 
@@ -552,7 +555,7 @@ func (r *Replica) processEpoch() {
     instNo := r.addEntryToOrderedLog(b, bi, bp)
 
     // do last paxos roundtrip with this whole batch you just added
-    r.bcastAccept(instNo, r.defaultBallot, b, -1, -1, TRUE, bi)
+    r.bcastAccept(instNo, r.defaultBallot, b, -1, -1, TRUE, bi, cmdids)
   }
   // increment the epoch
   r.epoch++
@@ -601,7 +604,7 @@ func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 
 var pa mdlinproto.Accept
 
-func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Command, pids int64, seqnos int64, fr uint8, ps []int32) {
+func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Command, pids int64, seqnos int64, fr uint8, ps []int32, cmdids []int32) {
 	defer func() {
 		if err := recover(); err != nil {
 			NewPrintf(LEVEL0, "Accept bcast failed: %v", err)
@@ -615,6 +618,7 @@ func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Comm
 	pa.Command = command
 	pa.PIDs = pids
 	pa.SeqNos = seqnos
+  pa.CommandId = cmdids
 	// Make a copy of the nextSeqNo map
 	//expectedSeqs := make(map[int64]int64)
 	//copyMap(expectedSeqs, r.nextSeqNo)
@@ -785,7 +789,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
         delete(r.outstandingCRR, t)
       }
 
-			r.addEntryToBuffLog(cmds, proposals, pid, seqno, coord, thisCr, &prop.Predecessor, prop.PredSize) //This seems like a bad idea TODO... the address of a message that's gonna disapear?
+			r.addEntryToBuffLog(cmds, proposals, pid, seqno, coord, thisCr, &prop.Predecessor, prop.PredSize, prop.CommandId) //This seems like a bad idea TODO... the address of a message that's gonna disapear?
 			// Check if any others are ready
 			for true {
 				NewPrintf(LEVELALL, "looking for any others that might be ready from this PID %d", pid)
@@ -823,7 +827,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
           }
 
 					NewPrintf(LEVELALL, "head of it's buff Q is ready, with command %d", prop.CommandId)
-					r.addEntryToBuffLog(cmds, proposals, pid, expectedSeqno, coord, thisCr, &prop.Predecessor, prop.PredSize) //This seems like a bad idea TODO... the address of a message that's gonna disapear?
+					r.addEntryToBuffLog(cmds, proposals, pid, expectedSeqno, coord, thisCr, &prop.Predecessor, prop.PredSize, prop.CommandId) //This seems like a bad idea TODO... the address of a message that's gonna disapear?
 					found++
 				} else {
 					break
@@ -861,14 +865,46 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
       r.recordCommands(currInst.cmds)
       r.sync()
 			NewPrintf(LEVEL0, "    Step2. Leader broadcasting Accepts with instance = %v, ballot = %v", r.buffInstance-int32(found+i), r.defaultBallot)
-			r.bcastAccept(r.buffInstance-int32(found+i), r.defaultBallot, currInst.cmds, currInst.pid, currInst.seqno, FALSE, currInst.predSetSize)
+      cmdids := make([]int32, 1)
+      cmdids[0] = currInst.commandId
+			r.bcastAccept(r.buffInstance-int32(found+i), r.defaultBallot, currInst.cmds, currInst.pid, currInst.seqno, FALSE, currInst.predSetSize, cmdids)
 		}
     currInst = currInst.next
 	}
 }
 
+func (r *Replica) removeEntryFromBuffLog(cmdid []int32) {
+  p := r.bufferedLog
+  i := 0
+  var prev *Instance
+  var next *Instance
+  for (p != nil) {
+    if p.commandId == cmdid[i] {
+      i++
+      prev = p.prev
+      next = p.next
+      if (prev == nil && next == nil) {
+        r.bufferedLog = nil
+        r.bLE = nil
+        p.next = nil
+      } else if (prev != nil && next == nil) {
+        prev.next = next
+        r.bLE = prev
+        p.next = nil
+      } else if (next != nil && prev == nil) {
+        next.prev = prev
+        r.bufferedLog = next
+      } else {
+        prev.next = next
+        next.prev = prev
+      }
+    }
+    p = p.next
+  }
+}
+
 func (r *Replica) addEntryToBuffLog(cmds []state.Command, proposals []*genericsmr.MDLPropose, pid int64,
-  seqno int64, coord int8, thisCr *genericsmr.MDLCoordReq, pred *mdlinproto.Tag, predSize int32) {
+  seqno int64, coord int8, thisCr *genericsmr.MDLCoordReq, pred *mdlinproto.Tag, predSize int32, cmdid int32) {
 
 	// Add entry to log
   NewPrintf(LEVEL0, "addEntryToBuffLog --> Shard Leader Creating Log Entry{%s, PID: %d, SeqNo: %d, coord: %d, thisCr: %v, pred: %v, epoch: %v",
@@ -892,6 +928,7 @@ func (r *Replica) addEntryToBuffLog(cmds []state.Command, proposals []*genericsm
       pred,
       thisCr,
       r.epoch,
+      cmdid,
       nil,
       nil,
       predSetSize}
@@ -926,6 +963,7 @@ func (r *Replica) addEntryToOrderedLog(cmds []state.Command, predSizes []int32, 
       nil,
       nil,
       r.epoch,
+      -1,
       nil,
       nil,
       predSizes}
@@ -1112,6 +1150,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
       panic("final round sees a last entry at the replica that isn't from the leader sending this appendEntries")
     }
     r.addEntryToOrderedLog(accept.Command, accept.PredSize, nil)
+    r.removeEntryFromBuffLog(accept.CommandId)
     // TODO do we need to check if the epoch's are correct?
     areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, accept.Ballot, accept.FinalRound, accept.Epoch}
 		copyMap(r.nextSeqNo, accept.ExpectedSeqs)
@@ -1137,7 +1176,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
 		if accept.Ballot < r.defaultBallot {
 			areply = &mdlinproto.AcceptReply{accept.Instance, FALSE, r.defaultBallot, accept.FinalRound, accept.Epoch}
 		} else {
-      r.addEntryToBuffLog(accept.Command, nil, accept.PIDs, accept.SeqNos, -1, nil, nil, accept.PredSize[0]) // , ACCEPTED) //TODO
+      r.addEntryToBuffLog(accept.Command, nil, accept.PIDs, accept.SeqNos, -1, nil, nil, accept.PredSize[0], accept.CommandId[0]) // , ACCEPTED) //TODO
 			areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot, accept.FinalRound, accept.Epoch}
 		}
 	} else if inst.ballot > accept.Ballot {
@@ -1271,7 +1310,9 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 			}
 			r.recordInstanceMetadata(r.instanceSpace[preply.Instance])
 			r.sync()
-			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds, inst.pid, inst.seqno, FALSE, inst.predSetSize)
+      cmdids := make([]int32, 1)
+      cmdids[0] = inst.commandId
+			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds, inst.pid, inst.seqno, FALSE, inst.predSetSize, cmdids)
 		}
 	} else {
 		// TODO: there is probably another active leader
