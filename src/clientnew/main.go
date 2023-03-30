@@ -242,10 +242,10 @@ func main() {
 	var before time.Time
 	var after time.Time
 
-	go func(client clients.Client) {
-		time.Sleep(time.Duration(*expLength+1) * time.Second)
-		client.Finish()
-	}(client)
+	//go func(client clients.Client) {
+	//	time.Sleep(time.Duration(*expLength+1) * time.Second)
+	//	client.Finish()
+	//}(client)
 
 	start := time.Now()
 	now := start
