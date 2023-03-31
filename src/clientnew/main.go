@@ -239,13 +239,11 @@ func main() {
 
 	var count int32
 	count = 0
-	var before time.Time
-	var after time.Time
 
-	//go func(client clients.Client) {
-	//	time.Sleep(time.Duration(*expLength+1) * time.Second)
-	//	client.Finish()
-	//}(client)
+	go func(client clients.Client) {
+		time.Sleep(time.Duration(*expLength+1) * time.Second)
+		client.Finish()
+	}(client)
 
 	start := time.Now()
 	now := start
@@ -254,7 +252,7 @@ func main() {
 		if *randSleep > 0 {
 			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
 		}
-		var opString string
+
 		var opTypes []state.Operation
 		var k int64
 		var keys []int64
@@ -283,17 +281,20 @@ func main() {
 		}
 
 		var success bool
-		before = time.Now()
 
+		before := time.Now()
 		success, _ = client.AppRequest(opTypes, keys)
+		after := time.Now()
 
+		opString := "app"
 		if !success {
 			log.Printf("Failed %s(%d).\n", opString, count)
 		}
 		count++
 		dlog.Printf("AppRequests attempted: %d\n", count)
 
-		if *rampUp < int(currRuntime.Seconds()) && int(currRuntime.Seconds()) < *expLength-*rampDown {
+		currInt := int(currRuntime.Seconds())
+		if *rampUp < currInt && currInt < *expLength-*rampDown {
 			lat := int64(after.Sub(before).Nanoseconds())
 			fmt.Printf("%s,%d,%d,%d\n", opString, lat, k, count)
 
