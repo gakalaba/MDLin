@@ -752,6 +752,7 @@ func (t *Commit) Marshal(wire io.Writer) {
 	}
 	// PID array
 	var tmp64 int64
+  bs = b[:8]
 	tmp64 = t.PIDs
 	bs[0] = byte(tmp64)
 	bs[1] = byte(tmp64 >> 8)
@@ -779,6 +780,7 @@ func (t *Commit) Marshal(wire io.Writer) {
   // Status
   bs = b[:1]
   bs[0] = byte(t.Status)
+  wire.Write(bs)
 
   // PredSize
   bs = b[:]

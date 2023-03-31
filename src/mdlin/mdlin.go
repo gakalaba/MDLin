@@ -551,7 +551,7 @@ func (r *Replica) processEpoch() {
     }
 
     // add all ordered entries to the ordered log
-    instNo := r.addEntryToOrderedLog(b, bi, bp)
+    instNo := r.addEntryToOrderedLog(b, bi, bp, PREPARED)
 
     // do last paxos roundtrip with this whole batch you just added
     r.bcastAccept(instNo, r.defaultBallot, b, -1, -1, TRUE, bi, cmdids)
@@ -952,29 +952,23 @@ func (r *Replica) addEntryToBuffLog(cmds []state.Command, proposals []*genericsm
 }
 
 
-func (r *Replica) addEntryToOrderedLog(cmds []state.Command, predSizes []int32, cPs []*genericsmr.MDLPropose) int32 {
+func (r *Replica) addEntryToOrderedLog(cmds []state.Command, predSizes []int32, cPs []*genericsmr.MDLPropose, status InstanceStatus) int32 {
 	// Add entry to log
 	NewPrintf(LEVEL0, "Flushing ready entries buffLog --> orderedLog at END OF EPOCH!")
 
-	if r.defaultBallot == -1 {
-    panic(`This shouldn't be happening... at the end of an epoch we either
-    have already set the ballot value or we haven't but no entries are ready
-    to enter the ordered log, so this function shouldn't be getting called`)
-	} else {
-		r.instanceSpace[r.crtInstance] = &Instance{
-			cmds,
-			r.defaultBallot,
-			PREPARED,
-      &LeaderBookkeeping{cPs, 0, 0, 0, 0, int8(TRUE)}, // Need this to track acceptOKs
-			-1,
-			-1,
-      nil,
-      nil,
-      r.epoch,
-      nil,
-      nil,
-      predSizes}
-	}
+	r.instanceSpace[r.crtInstance] = &Instance{
+		cmds,
+		r.defaultBallot,
+		status,
+    &LeaderBookkeeping{cPs, 0, 0, 0, 0, int8(TRUE)}, // Need this to track acceptOKs
+		-1,
+		-1,
+    nil,
+    nil,
+    r.epoch,
+    nil,
+    nil,
+    predSizes}
 	r.crtInstance++
   return r.crtInstance-1
 }
@@ -1156,7 +1150,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
       }
       panic("final round sees a last entry at the replica that isn't from the leader sending this appendEntries")
     }
-    r.addEntryToOrderedLog(accept.Command, accept.PredSize, nil)
+    r.addEntryToOrderedLog(accept.Command, accept.PredSize, nil, ACCEPTED)
     r.removeEntryFromBuffLog(accept.CommandId)
     // TODO do we need to check if the epoch's are correct?
     areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, accept.Ballot, accept.FinalRound, accept.Epoch}
@@ -1228,7 +1222,7 @@ func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
 	inst := r.instanceSpace[commit.Instance]
 
 	if inst == nil {
-    r.addEntryToOrderedLog(commit.Command, commit.PredSize, nil)
+    r.addEntryToOrderedLog(commit.Command, commit.PredSize, nil, COMMITTED)
 	} else {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
@@ -1251,7 +1245,7 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 	inst := r.instanceSpace[commit.Instance]
 
 	if inst == nil {
-    r.addEntryToOrderedLog(nil, nil, nil)
+    r.addEntryToOrderedLog(nil, nil, nil, COMMITTED)
 	} else {
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
