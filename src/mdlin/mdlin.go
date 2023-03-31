@@ -29,7 +29,7 @@ const DEBUG_LEVEL = 0
 const LEVEL0 = 0
 const LEVELALL = 1
 
-const EPOCH = 10
+const EPOCH = 1 //10
 const MAX_EPOCHS = 3
 
 func NewPrintf(level int, str ...interface{}) {

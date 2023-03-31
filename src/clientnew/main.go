@@ -294,7 +294,7 @@ func main() {
 		dlog.Printf("AppRequests attempted: %d\n", count)
 
 		currInt := int(currRuntime.Seconds())
-		if *rampUp < currInt && currInt < *expLength-*rampDown {
+		if *rampUp <= currInt && currInt < *expLength-*rampDown {
 			lat := int64(after.Sub(before).Nanoseconds())
 			fmt.Printf("%s,%d,%d,%d\n", opString, lat, k, count)
 
