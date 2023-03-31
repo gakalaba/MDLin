@@ -3,6 +3,7 @@ import time
 import concurrent.futures
 import os
 import sys
+import threading
 
 from utils.remote_util import *
 from utils.git_util import *
@@ -116,26 +117,26 @@ def terminate_clients_on_timeout(timeout, cond, client_ssh_threads):
         need_terminate = not cond.wait(timeout - (time.time() - start))
         cond.release()
     if need_terminate:
+        print("Terminating clients")
         for c in client_ssh_threads:
             c.terminate()
 
 
 def wait_for_clients_to_terminate(config, client_ssh_threads):
-    '''
     cond = threading.Condition()
     timeout_thread = threading.Thread(
-            target=terminate_clients_on_timeout,
-            args=(config['client_experiment_length'] + 10,
-                cond,
-                client_ssh_threads))
+        target=terminate_clients_on_timeout,
+        args=(config['client_experiment_length'] + 10,
+              cond,
+              client_ssh_threads))
+    timeout_thread.daemon = True
     timeout_thread.start()
     for c in client_ssh_threads:
         c.wait()
     cond.acquire()
     cond.notify()
     cond.release()
-    '''
-    time.sleep(config['client_experiment_length'] + 10)
+    #time.sleep(config['client_experiment_length'] + 10)
 
 
 def start_clients(config, local_exp_directory, remote_exp_directory, run):
@@ -564,6 +565,10 @@ def run_experiment(config_file, client_config_idx, executor):
             client_threads = start_clients(config, local_exp_directory,
                                            remote_exp_directory, i)
             wait_for_clients_to_terminate(config, client_threads)
+            print("Waiting {} seconds for clients to finish".format(5))
+            time.sleep(5)
+            kill_clients(config, executor)
+            time.sleep(1)
             for server_thread in server_threads:
                 server_thread.terminate()
             kill_servers(config, executor, ' -15')
