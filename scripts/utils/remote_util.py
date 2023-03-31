@@ -100,7 +100,6 @@ def get_replica_port(config, shard_idx, replica_idx):
     REPLICA_HOST_PORTS[replica_host] += 1
 
     REPLICA_PORTS[(shard_idx, replica_idx)] = replica_port
-    print(REPLICA_PORTS)
     return replica_port
 
 

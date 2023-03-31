@@ -178,13 +178,12 @@ def start_clients(config, local_exp_directory, remote_exp_directory, run):
                 appended_client_commands = appended_client_commands[:-2]
             if is_exp_remote(config):
                 client_processes.append(run_remote_command_async(
-                    appended_client_commands +
-                    ' & wait', config['emulab_user'],
+                    appended_client_commands + ' & wait',
+                    config['emulab_user'],
                     client_host, False))
             else:
                 client_processes.append(run_local_command_async(
-                                                appended_client_commands + ' & wait'))
-                print(appended_client_commands)
+                    appended_client_commands + ' & wait'))
 
     return client_processes
 
