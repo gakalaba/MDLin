@@ -3,7 +3,12 @@ import os
 from lib.experiment_codebase import ExperimentCodebase
 
 from utils.remote_util import get_coordinator_host
+from utils.remote_util import get_coordinator_port
 from utils.remote_util import get_master_host
+from utils.remote_util import get_master_port
+from utils.remote_util import get_replica_host
+from utils.remote_util import get_replica_port
+from utils.remote_util import get_replica_rpc_port
 from utils.remote_util import is_exp_local
 from utils.remote_util import is_using_tcsh
 from utils.remote_util import tcsh_redirect_output_to_files
@@ -30,7 +35,6 @@ class MDLCodebase(ExperimentCodebase):
             path_to_client_bin = os.path.join(config['src_directory'],
                                               config['bin_directory_name'],
                                               config['client_bin_name'])
-            coord_addr = 'localhost'
             stats_file = os.path.join(exp_directory,
                                       config['out_directory_name'], client,
                                       '%s-%d-stats-%d.json' % (client, k, run))
@@ -40,10 +44,12 @@ class MDLCodebase(ExperimentCodebase):
                                               config['bin_directory_name'],
                                               config['client_bin_name'])
 
-            coord_addr = get_coordinator_host(config)
             stats_file = os.path.join(exp_directory,
                                       config['out_directory_name'],
                                       '%s-%d-stats-%d.json' % (client, k, run))
+
+        coordinator_host = get_coordinator_host(config)
+        coordinator_port = get_coordinator_port(config)
 
         client_id = i * config['client_processes_per_client_node'] + k
 
@@ -51,8 +57,8 @@ class MDLCodebase(ExperimentCodebase):
             path_to_client_bin,
             '-clientId', client_id,
             '-expLength', config['client_experiment_length'],
-            '-caddr', coord_addr,
-            '-cport', config['coordinator_port'],
+            '-caddr', coordinator_host,
+            '-cport', coordinator_port,
             '-maxProcessors', config['client_max_processors'],
             '-numKeys', config['client_num_keys'],
             '-rampDown', config['client_ramp_down'],
@@ -117,7 +123,7 @@ class MDLCodebase(ExperimentCodebase):
             stdout_file = os.path.join(exp_directory,
                                        config['out_directory_name'],
                                        client,
-                                       '-%d-stdout-%d.log' % (client, k, run))
+                                       '%s-%d-stdout-%d.log' % (client, k, run))
             stderr_file = os.path.join(exp_directory,
                                        config['out_directory_name'],
                                        client,
@@ -144,20 +150,12 @@ class MDLCodebase(ExperimentCodebase):
 
     def get_replica_cmd(self, config, shard_idx, replica_idx, run, local_exp_directory,
                         remote_exp_directory):
-        n_shards = config["num_shards"]
-        shards = config["shards"]
-
-        if 'run_locally' in config and config['run_locally']:
+        if is_exp_local(config):
             path_to_server_bin = os.path.join(config['src_directory'],
                                               config['bin_directory_name'],
                                               config['server_bin_name'])
 
             exp_directory = local_exp_directory
-            replica_addr = 'localhost'
-            port_offset = (shard_idx * n_shards) + replica_idx
-            replica_port = config['server_port'] + port_offset 
-            replica_rpc_port = config['server_rpc_port'] + port_offset
-            master_addr = 'localhost'
             stats_file = os.path.join(exp_directory,
                                       config['out_directory_name'],
                                       'server-%d' % shard_idx,
@@ -167,21 +165,24 @@ class MDLCodebase(ExperimentCodebase):
                                               config['bin_directory_name'],
                                               config['server_bin_name'])
             exp_directory = remote_exp_directory
-            replica_addr = shards[shard_idx][replica_idx]
-            replica_port = config['server_port']
-            replica_rpc_port = config['server_rpc_port']
-            master_addr = get_master_host(config, shard_idx)
             stats_file = os.path.join(exp_directory,
                                       config['out_directory_name'],
                                       'server-%d-%d-stats-%d.json' % (shard_idx, replica_idx, run))
 
+        master_host = get_master_host(config, shard_idx)
+        master_port = get_master_port(config, shard_idx)
+
+        replica_host = get_replica_host(config, shard_idx, replica_idx, full=False)
+        replica_port = get_replica_port(config, shard_idx, replica_idx)
+        replica_rpc_port = get_replica_rpc_port(config, shard_idx, replica_idx)
+
         replica_command = ' '.join([str(x) for x in [
             path_to_server_bin,
-            '-addr', replica_addr,
+            '-addr', replica_host,
             '-port', replica_port,
             '-rpcport', replica_rpc_port,
-            '-maddr', master_addr,
-            '-mport', config['master_port'],
+            '-maddr', master_host,
+            '-mport', master_port,
             '-statsFile', stats_file
             ]])
         replica_command += self.get_replication_protocol_arg_from_name(config['replication_protocol'])
