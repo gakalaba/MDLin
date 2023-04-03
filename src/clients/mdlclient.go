@@ -137,7 +137,7 @@ func (c *MDLClient) setPredSize(n int32) {
 
 func (c *MDLClient) sendPropose() {
 	shard := c.GetShardFromKey(c.propose.Command.K)
-	dlog.Printf("Sending request to shard %d\n", shard)
+  dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, Command %v, Timestamp %v, SeqNo %v, PID %v, Predecessor %v, PredSize %v}", shard, c.propose.CommandId, c.propose.Command, c.propose.Timestamp, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, c.propose.PredSize))
 
 	c.writers[shard].WriteByte(clientproto.MDL_PROPOSE)
 	c.propose.Marshal(c.writers[shard])
@@ -146,11 +146,6 @@ func (c *MDLClient) sendPropose() {
 
 func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, myShard int) {
 	shard := c.GetShardFromKey(predecessorTag.K)
-  if (shard == myShard) {
-    //TODO remove this
-    dlog.Printf("Not sending CoordinationRequest to same shard as predecessor")
-    return
-  }
 	dlog.Printf("Sending CoordinationRequest to shard %d\n", shard)
 
   // Prepare the coordination request object

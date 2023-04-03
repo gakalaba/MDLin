@@ -15,6 +15,7 @@ import (
 	"state"
 	"sync"
 	"time"
+  "container/list"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -29,7 +30,7 @@ const DEBUG_LEVEL = 0
 const LEVEL0 = 0
 const LEVELALL = 1
 
-const EPOCH = 1 //10
+const EPOCH = 4 //10
 const MAX_EPOCHS = 3
 
 func NewPrintf(level int, str ...interface{}) {
@@ -74,9 +75,7 @@ type Replica struct {
 	shListener          net.Listener
 	buflock             *sync.Mutex
 
-  bufferedLog         *Instance  // the unordered requests LINKED LIST
-  bLE                 *Instance  // end of the bufferedLog LINKD LIST
-  buffInstance        int32
+  bufferedLog         *list.List  // the unordered requests LINKED LIST
   coordReqReplyChan   chan fastrpc.Serializable
   outstandingCR       map[*mdlinproto.Tag]*genericsmr.MDLCoordReq
   outstandingCRR      map[*mdlinproto.Tag]*mdlinproto.CoordinationResponse
@@ -155,9 +154,7 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int,
 		nil,
 		new(sync.Mutex),
 
-    nil,
-    nil,
-    0,
+    list.New(),
     make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
     make(map[*mdlinproto.Tag]*genericsmr.MDLCoordReq),
     make(map[*mdlinproto.Tag]*mdlinproto.CoordinationResponse),
@@ -215,6 +212,10 @@ func (r *Replica) waitForShardConnections(done chan bool) {
 	bs := b[:4]
 
 	var sherr error
+  if len(r.shardAddrList) == 0 {
+    done <- true
+    return
+  }
 	r.shListener, sherr = net.Listen("tcp", r.shardAddrList[r.shardId])
 	if sherr != nil {
 		panic(sherr)
@@ -273,6 +274,7 @@ func (r *Replica) sendCoordResp(leaderId int32, msg fastrpc.Serializable) {
 	r.buflock.Lock()
 	defer r.buflock.Unlock()
 
+  NewPrintf(LEVEL0, "sending to %v, we are r.shardId = %v and r.Id = %v", leaderId, r.shardId, r.Id)
 	if leaderId != int32(r.shardId) {
 		w := r.shardWriters[leaderId]
 		w.WriteByte(mdlinproto.COORDREQ_REPLY) // to tell what kind of message this is
@@ -398,11 +400,11 @@ func (r *Replica) run() {
 			}
 			break
     case coordinationRequest := <-r.MDLCoordReqChan:
-      NewPrintf(LEVELALL, "-----------CoordReq Chan-----------")
+      NewPrintf(LEVEL0, "-----------CoordReq Chan-----------")
       r.handleCoordinationRequest(coordinationRequest)
       break
     case coordinationRReply := <-r.coordReqReplyChan:
-      NewPrintf(LEVELALL, "----------CoordReqReply Chan--------")
+      NewPrintf(LEVEL0, "----------CoordReqReply Chan--------")
       CRR := coordinationRReply.(*mdlinproto.CoordinationResponse)
       r.handleCoordinationRReply(CRR)
       break
@@ -459,95 +461,49 @@ func (r *Replica) makeUniqueBallot(ballot int32) int32 {
 
 // indexOL, orderedLog, bufferedLog
 func (r *Replica) processEpoch() {
-  var orderedBuff *Instance = nil
-  var oBE *Instance = nil
-  i := 0
+  batch := list.New()
+  buffI := 0 // JUST FOR PRINTING TODO
   // scan through the bufferedLog
-  p := r.bufferedLog
-  var prev *Instance
-  var next *Instance
+  p := r.bufferedLog.Front()
+  next := p
   for p != nil {
-    coord := p.lb.coordinated
-    committed := (p.lb.acceptOKs+1) > (r.N>>1)
-    NewPrintf(LEVEL0, "Buff log entry %v has coord = %v and committed = %v", i, coord, committed)
+    next = p.Next()
+    coord := p.Value.(*Instance).lb.coordinated
+    committed := (p.Value.(*Instance).lb.acceptOKs+1) > (r.N>>1)
+    NewPrintf(LEVEL0, "Buff log entry %v has coord = %v and committed = %v", buffI, coord, committed)
     if (coord == 1 && committed) {
-      i++
       // remove ordered entries from the buffer log
-      prev = p.prev
-      next = p.next
-      if (prev == nil && next == nil) {
-        r.bufferedLog = nil
-        r.bLE = nil
-        p.next = nil
-      } else if (prev != nil && next == nil) {
-        prev.next = next
-        r.bLE = prev
-        p.next = nil
-      } else if (next != nil && prev == nil) {
-        next.prev = prev
-        r.bufferedLog = next
-      } else {
-        prev.next = next
-        next.prev = prev
-      }
-      r.buffInstance--
-      if (orderedBuff == nil) {
-        orderedBuff = p
-        oBE = p
-        p.next = nil
-        p.prev = nil
-      } else {
-        p.prev = oBE
-        p.next = nil
-        oBE.next = p
-        oBE = p
-      }
-    } else if (r.epoch - p.epoch > MAX_EPOCHS) {
+      r.bufferedLog.Remove(p)
+      batch.PushBack(p.Value)
+    } else if (r.epoch - p.Value.(*Instance).epoch > MAX_EPOCHS) {
       // Remove stale entries from buffered log that
       // have not yet been coordinated and committed
-      NewPrintf(LEVEL0, "Found stale entry in buff log at index %v with epoch %v, we are in epoch %v, REMOVING IT", i, p.epoch, r.epoch)
-      prev = p.prev
-      next = p.next
-      if (prev == nil && next == nil) {
-        r.bufferedLog = nil
-        r.bLE = nil
-        p.next = nil
-      } else if (prev != nil && next == nil) {
-        prev.next = next
-        r.bLE = prev
-        p.next = nil
-      } else if (next != nil && prev == nil) {
-        next.prev = prev
-        r.bufferedLog = next
-      } else {
-        prev.next = next
-        next.prev = prev
-      }
-      r.buffInstance--
+      NewPrintf(LEVEL0, "Found stale entry in buff log at index %v with epoch %v, we are in epoch %v, REMOVING IT", buffI, p.Value.(*Instance).epoch, r.epoch)
+      r.bufferedLog.Remove(p)
       // we should also send CR=fail to the successor, but
       // it will implicitly fail in this same loop within
       // a few epochs anyway, so we choose not to send it
     }
-    p = p.next
+    p = next
+    buffI++
   }
-  if (i > 0) {
-    NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, i)
+  n := batch.Len()
+  if (n > 0) {
+    NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
     // If some entries were added for this epoch, then
     // (1) add them as an entry in the ordered log
     // (2) issue the bcastAccept for this entry
-    b := make([]state.Command, i)
-    bi := make([]int32, i)
-    bp := make([]*genericsmr.MDLPropose, i)
-
-    cmdids := make([]mdlinproto.Tag, i)
-    p = orderedBuff
+    b := make([]state.Command, n)
+    bi := make([]int32, n)
+    bp := make([]*genericsmr.MDLPropose, n)
+    cmdids := make([]mdlinproto.Tag, n)
     j := 0
-    for p != nil {
-      b[j] = p.cmds[0]
-      bi[j] = p.predSetSize[0]
-      bp[j] = p.lb.clientProposals[0]
-      cmdids[j] = mdlinproto.Tag{K: p.cmds[0].K, PID: p.pid, SeqNo: p.seqno}
-      p = p.next
+    for p := batch.Front(); p != nil; p = p.Next() {
+      b[j] = p.Value.(*Instance).cmds[0]
+      bi[j] = p.Value.(*Instance).predSetSize[0]
+      bp[j] = p.Value.(*Instance).lb.clientProposals[0]
+      cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
+      j++
     }
 
     // add all ordered entries to the ordered log
@@ -736,7 +692,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
 	}
-	currInst := r.bLE //The current last element
+	currInst := r.bufferedLog.Back() //The current last element
 
 	found := 0
 	var expectedSeqno int64
@@ -857,56 +813,40 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
   if (currInst == nil) {
     // If there were no entries in the buffered log at the beginning
     // then all entries added now start at the beginning of bufflog
-    currInst = r.bufferedLog
+    currInst = r.bufferedLog.Front()
   } else {
     // otherwise, start with the first entry we just added to bufferedLog
-    currInst = currInst.next
+    currInst = currInst.Next()
   }
   for i := 0; i < found; i++ {
 		if r.defaultBallot == -1 {
 			NewPrintf(LEVEL0, "    Step2. (candidate) leader broadcasting prepares....")
-			r.bcastPrepare(r.buffInstance-int32(found+i), r.makeUniqueBallot(0), true)
+			r.bcastPrepare(int32(r.bufferedLog.Len()-found+i), r.makeUniqueBallot(0), true)
 		} else {
-			r.recordInstanceMetadata(currInst)
-      r.recordCommands(currInst.cmds)
+			r.recordInstanceMetadata(currInst.Value.(*Instance))
+      r.recordCommands(currInst.Value.(*Instance).cmds)
       r.sync()
-			NewPrintf(LEVEL0, "    Step2. Leader broadcasting Accepts with instance = %v, ballot = %v", r.buffInstance-int32(found+i), r.defaultBallot)
+			NewPrintf(LEVEL0, "    Step2. Leader broadcasting Accepts with instance = %v, ballot = %v", int32(r.bufferedLog.Len()-found+i), r.defaultBallot)
       cmdids := make([]mdlinproto.Tag, 1)
-      cmdids[0] = mdlinproto.Tag{K: currInst.cmds[0].K, PID: currInst.pid, SeqNo: currInst.seqno}
-			r.bcastAccept(r.buffInstance-int32(found+i), r.defaultBallot, currInst.cmds, currInst.pid, currInst.seqno, FALSE, currInst.predSetSize, cmdids)
+      cmdids[0] = mdlinproto.Tag{K: currInst.Value.(*Instance).cmds[0].K, PID: currInst.Value.(*Instance).pid, SeqNo: currInst.Value.(*Instance).seqno}
+			r.bcastAccept(int32(r.bufferedLog.Len()-found+i), r.defaultBallot, currInst.Value.(*Instance).cmds, currInst.Value.(*Instance).pid, currInst.Value.(*Instance).seqno, FALSE, currInst.Value.(*Instance).predSetSize, cmdids)
 		}
-    currInst = currInst.next
+    currInst = currInst.Next()
 	}
 }
 
 func (r *Replica) removeEntryFromBuffLog(cmdid []mdlinproto.Tag) {
-  p := r.bufferedLog
-  var prev *Instance
-  var next *Instance
+  p := r.bufferedLog.Front()
+  next := p
   for (p != nil) {
+    next = p.Next()
     for i:=0; i<len(cmdid); i++ {
       t := cmdid[i]
-      if p.pid == t.PID && p.seqno == t.SeqNo && t.K == p.cmds[0].K {
-        prev = p.prev
-        next = p.next
-        if (prev == nil && next == nil) {
-          r.bufferedLog = nil
-          r.bLE = nil
-          p.next = nil
-        } else if (prev != nil && next == nil) {
-          prev.next = next
-          r.bLE = prev
-          p.next = nil
-        } else if (next != nil && prev == nil) {
-          next.prev = prev
-          r.bufferedLog = next
-        } else {
-          prev.next = next
-          next.prev = prev
-        }
+      if p.Value.(*Instance).pid == t.PID && p.Value.(*Instance).seqno == t.SeqNo && t.K == p.Value.(*Instance).cmds[0].K {
+        r.bufferedLog.Remove(p)
       }
     }
-    p = p.next
+    p = next
   }
 }
 
@@ -914,8 +854,8 @@ func (r *Replica) addEntryToBuffLog(cmds []state.Command, proposals []*genericsm
   seqno int64, coord int8, thisCr *genericsmr.MDLCoordReq, pred *mdlinproto.Tag, predSize int32) {
 
 	// Add entry to log
-  NewPrintf(LEVEL0, "addEntryToBuffLog --> Shard Leader Creating Log Entry{%s, PID: %d, SeqNo: %d, coord: %d, thisCr: %v, pred: %v, epoch: %v",
-		commandToStr(cmds[0]), pid, seqno, coord, thisCr, pred, r.epoch)
+  NewPrintf(LEVEL0, "addEntryToBuffLog --> Shard Leader Creating Log Entry{%s, PID: %d, SeqNo: %d, coord: %d, thisCr: %v, pred: %v, epoch: %v, PredSize: %v",
+		commandToStr(cmds[0]), pid, seqno, coord, thisCr, pred, r.epoch, predSize)
 
   ball := r.defaultBallot
   stat := PREPARED
@@ -940,15 +880,7 @@ func (r *Replica) addEntryToBuffLog(cmds []state.Command, proposals []*genericsm
       predSetSize}
 
   // Insert into linked list
-  if (r.bufferedLog == nil) {
-    r.bufferedLog = e
-    r.bLE = e
-  } else {
-    e.prev = r.bLE
-    r.bLE.next = e
-    r.bLE = e
-  }
-  r.buffInstance++
+  r.bufferedLog.PushBack(e)
 }
 
 
@@ -988,15 +920,13 @@ func (r *Replica) resolveShardFromKey(k state.Key) int32 {
 func (r *Replica) findEntry(tag mdlinproto.Tag) (*Instance, int, int32) {
 	// TODO what if instead of a linear search, we kept a map
 	// that maps the CommandId to the index in the log??
-  p := r.bufferedLog
   // First search the buffered linked list log
-  for p != nil {
-    for j := 0; j < len(p.lb.clientProposals); j++ {
-      if p.pid == tag.PID && p.seqno == tag.SeqNo && p.lb.clientProposals[j].Command.K == tag.K {
-        return p, j, -1
+  for p := r.bufferedLog.Front(); p != nil; p = p.Next() {
+    for j := 0; j < len(p.Value.(*Instance).lb.clientProposals); j++ {
+      if p.Value.(*Instance).pid == tag.PID && p.Value.(*Instance).seqno == tag.SeqNo && p.Value.(*Instance).lb.clientProposals[j].Command.K == tag.K {
+        return p.Value.(*Instance), j, -1
       }
     }
-    p = p.next
   }
 
   // Now search the ordered log
@@ -1102,22 +1032,21 @@ func commandToStr(c state.Command) string {
 
 func (r *Replica) handlePrepare(prepare *mdlinproto.Prepare) {
   // Now searching in buffered log
-  inst := r.bufferedLog
+  NewPrintf(LEVEL0, "Replica at handlePrepare with prepare.Instance == %v", prepare.Instance)
+  e := r.bufferedLog.Front()
+  var inst *Instance
   var i int32
   for i = 0; i < prepare.Instance; i++ {
-    if (inst == nil) {
+    if (e == nil) {
+      inst = nil
       break
     }
-    inst = inst.next
+    inst = e.Value.(*Instance)
+    e = e.Next()
   }
 	var preply *mdlinproto.PrepareReply
 
-	if (inst == nil && i < prepare.Instance) {
-    // some of the log is missing...
-    panic("We shouldn't be missing parts of the log rn")
-    ok := FALSE
-    preply = &mdlinproto.PrepareReply{i, ok, r.defaultBallot, make([]state.Command, 0)}
-  } else if (inst == nil) {
+  if (inst == nil) {
 		ok := TRUE
 		if r.defaultBallot > prepare.Ballot {
 			ok = FALSE
@@ -1160,13 +1089,16 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
   }
 
   NewPrintf(LEVEL0, "New accept from leader, instance = %v", accept.Instance)
-  inst := r.bufferedLog
+  e := r.bufferedLog.Front()
+  var inst *Instance
   var i int32
   for i = 0; i < accept.Instance; i++ {
-    if (inst == nil) {
+    if (e == nil) {
+      inst = nil
       break
     }
-    inst = inst.next
+    inst = e.Value.(*Instance)
+    e = e.Next()
   }
 
 	expectedSeqs := accept.ExpectedSeqs
@@ -1264,13 +1196,17 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 
 func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 
-  inst := r.bufferedLog
+  NewPrintf(LEVEL0, "handlePrepareReply, prepare.Instance = %v", preply.Instance)
+  e := r.bufferedLog.Front()
+  var inst *Instance
   var i int32
   for i = 0; i < preply.Instance; i++ {
-    if (inst == nil) {
+    if (e == nil) {
+      inst = nil
       break
     }
-    inst = inst.next
+    inst = e.Value.(*Instance)
+    e = e.Next()
   }
 
   if (inst == nil) {
@@ -1343,16 +1279,18 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
     }
     inst = r.instanceSpace[areply.Instance]
   } else {
-    inst = r.bufferedLog
+    e := r.bufferedLog.Front()
     var i int32
     for i = 0; i < areply.Instance; i++ {
-      if (inst == nil) {
+      if (e == nil) {
+        inst = nil
         break
       }
-      inst = inst.next
+      inst = e.Value.(*Instance)
+      e = e.Next()
     }
 
-    if (inst == nil) {
+    if (e == nil) {
       panic("leader got index out of bounds in accept reply")
     }
   }

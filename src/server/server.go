@@ -95,7 +95,7 @@ func main() {
 		log.Println("Starting MD Linearizability replica...")
 		// Get the shards for multi-sharded MD-Lin
 		shards := getShardsFromMaster(fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
-		shardId := -1
+		shardId := 0
 		if shards != nil {
 			for i, e := range shards {
 				if e == fmt.Sprintf("%s:%d", *myAddr, *portnum+100) {

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"clientproto"
 	"coordinatorproto"
-  "dlog"
 	"encoding/binary"
 	"fastrpc"
 	"fmt"
@@ -306,7 +305,6 @@ func (c *AbstractClient) leaderListener(leader int) {
 			errS = "reading opcode"
 			break
 		}
-		dlog.Printf("Received opcode %d from replica %d.\n", msgType, leader)
 
     if rpair, present := c.rpcTable[msgType]; present {
 			obj := rpair.Obj.New()
