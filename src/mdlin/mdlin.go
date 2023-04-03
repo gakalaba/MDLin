@@ -66,6 +66,10 @@ type Replica struct {
 	nextSeqNo        map[int64]int64                    // Mapping client PID to next expected sequence number
 	outstandingInst  map[int64][]*genericsmr.MDLPropose // Mapping client PID to `sorted` list of outstanding proposals received
 	noProposalsReady bool
+  finalAcceptChan      chan fastrpc.Serializable
+  finalAcceptReplyChan chan fastrpc.Serializable
+  finalAcceptRPC        uint8
+  finalAcceptReplyRPC   uint8
 	// Add these for multi-sharded multi-dispatch
 	shardId             int
 	shardAddrList       []string
@@ -146,6 +150,9 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int,
 		make(map[int64]int64),
 		make(map[int64][]*genericsmr.MDLPropose),
 		true,
+    make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+    make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+    0, 0,
 		shId,
 		shardsList,
 		make([]net.Conn, len(shardsList)),
@@ -169,6 +176,8 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int,
 	r.commitShortRPC = r.RegisterRPC(new(mdlinproto.CommitShort), r.commitShortChan)
 	r.prepareReplyRPC = r.RegisterRPC(new(mdlinproto.PrepareReply), r.prepareReplyChan)
 	r.acceptReplyRPC = r.RegisterRPC(new(mdlinproto.AcceptReply), r.acceptReplyChan)
+  r.finalAcceptRPC = r.RegisterRPC(new(mdlinproto.FinalAccept), r.finalAcceptChan)
+  r.finalAcceptReplyRPC = r.RegisterRPC(new(mdlinproto.FinalAcceptReply), r.finalAcceptReplyChan)
 
 	go r.run()
 
@@ -333,6 +342,10 @@ func (r *Replica) replyPrepare(replicaId int32, reply *mdlinproto.PrepareReply) 
 	r.SendMsg(replicaId, r.prepareReplyRPC, reply)
 }
 
+func (r *Replica) replyFinalAccept(replicaId int32, reply *mdlinproto.FinalAcceptReply) {
+  r.SendMsg(replicaId, r.finalAcceptReplyRPC, reply)
+}
+
 func (r *Replica) replyAccept(replicaId int32, reply *mdlinproto.AcceptReply) {
 	r.SendMsg(replicaId, r.acceptReplyRPC, reply)
 }
@@ -415,6 +428,12 @@ func (r *Replica) run() {
 			r.handlePrepare(prepare)
 			break
 
+    case finalAcceptS := <-r.finalAcceptChan:
+      finalAccept := finalAcceptS.(*mdlinproto.FinalAccept)
+      //got a FinalAccept message
+      r.handleFinalAccept(finalAccept)
+      break
+
 		case acceptS := <-r.acceptChan:
 			accept := acceptS.(*mdlinproto.Accept)
 			//got an Accept message
@@ -438,6 +457,12 @@ func (r *Replica) run() {
 			//got a Prepare reply
 			r.handlePrepareReply(prepareReply)
 			break
+
+    case finalAcceptReplyS := <-r.finalAcceptReplyChan:
+      finalAcceptReply := finalAcceptReplyS.(*mdlinproto.FinalAcceptReply)
+      // got a FinalAccept reply
+      r.handleFinalAcceptReply(finalAcceptReply)
+      break
 
 		case acceptReplyS := <-r.acceptReplyChan:
 			acceptReply := acceptReplyS.(*mdlinproto.AcceptReply)
@@ -1067,6 +1092,12 @@ func (r *Replica) handlePrepare(prepare *mdlinproto.Prepare) {
 	}
 }
 
+func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
+  var fareply *mdlinproto.FinalAcceptReply
+  fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, r.defaultBallot}
+	r.replyFinalAccept(faccept.LeaderId, fareply)
+}
+
 func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
 	var areply *mdlinproto.AcceptReply
   if accept.FinalRound == TRUE {
@@ -1267,6 +1298,9 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 			}
 		}
 	}
+}
+
+func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
 }
 
 func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {

@@ -54,19 +54,30 @@ type Accept struct {
 	Command      []state.Command
   PIDs         int64
 	SeqNos       int64
+  PredSize     int32
 	ExpectedSeqs map[int64]int64
-  FinalRound   uint8
   Epoch        int32
-  PredSize     []int32
-  CommandId    []Tag
 }
 
 type AcceptReply struct {
 	Instance   int32
 	OK         uint8
 	Ballot     int32
-  FinalRound uint8
-  Epoch      int32
+}
+
+type FinalAccept struct {
+  LeaderId  int32
+  Instance  int32
+  Ballot    int32
+  Commands  []Tag
+  ExpectedSeqs  map[int64]int64
+  Epoch     int32
+}
+
+type FinalAcceptReply struct {
+  Instance  int32
+  OK        uint8
+  Ballot    int32
 }
 
 type Commit struct {
