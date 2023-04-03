@@ -1081,33 +1081,13 @@ func commandToStr(c state.Command) string {
 func (r *Replica) handlePrepare(prepare *mdlinproto.Prepare) {
   // Now searching in buffered log
   NewPrintf(LEVEL0, "Replica at handlePrepare with prepare.Instance == %v", prepare.Instance)
-  e := r.bufferedLog.Front()
-  var inst *Instance
-  var i int32
-  for i = 0; i < prepare.Instance; i++ {
-    if (e == nil) {
-      inst = nil
-      break
-    }
-    inst = e.Value.(*Instance)
-    e = e.Next()
-  }
 	var preply *mdlinproto.PrepareReply
 
-  if (inst == nil) {
-		ok := TRUE
-		if r.defaultBallot > prepare.Ballot {
-			ok = FALSE
-		}
-		preply = &mdlinproto.PrepareReply{prepare.Instance, ok, r.defaultBallot, make([]state.Command, 0)}
-	} else {
-		ok := TRUE
-		if prepare.Ballot < inst.ballot {
-			ok = FALSE
-		}
-		preply = &mdlinproto.PrepareReply{prepare.Instance, ok, inst.ballot, inst.cmds}
+	ok := TRUE
+	if r.defaultBallot > prepare.Ballot {
+    ok = FALSE
 	}
-
+	preply = &mdlinproto.PrepareReply{prepare.Instance, ok, r.defaultBallot, make([]state.Command, 0)}
 	r.replyPrepare(prepare.LeaderId, preply)
 
 	if prepare.ToInfinity == TRUE && prepare.Ballot > r.defaultBallot {
