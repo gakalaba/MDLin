@@ -54,7 +54,7 @@ type Replica struct {
 	prepareReplyRPC     uint8
 	acceptReplyRPC      uint8
 	IsLeader            bool        // does this replica think it is the leader
-	instanceSpace       []*Instance // the space of all instances (used and not yet used) //TODO change the name to orderedLog!!
+	instanceSpace       []*Instance // the space of all instances (used and not yet used)
   crtInstance         int32       // highest active instance number that this replica knows about NOT inclusive!
   defaultBallot       int32       // default ballot for new instances (0 until a Prepare(ballot, instance->infinity) from a leader)
 	Shutdown            bool
@@ -81,8 +81,8 @@ type Replica struct {
 
   bufferedLog         *list.List  // the unordered requests LINKED LIST
   coordReqReplyChan   chan fastrpc.Serializable
-  outstandingCR       map[*mdlinproto.Tag]*genericsmr.MDLCoordReq
-  outstandingCRR      map[*mdlinproto.Tag]*mdlinproto.CoordinationResponse
+  outstandingCR       map[mdlinproto.Tag]*genericsmr.MDLCoordReq
+  outstandingCRR      map[mdlinproto.Tag]*mdlinproto.CoordinationResponse
 
   timer               *time.Timer
   epoch               int32
@@ -163,8 +163,8 @@ func NewReplica(id int, peerAddrList []string, shardsList []string, shId int,
 
     list.New(),
     make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
-    make(map[*mdlinproto.Tag]*genericsmr.MDLCoordReq),
-    make(map[*mdlinproto.Tag]*mdlinproto.CoordinationResponse),
+    make(map[mdlinproto.Tag]*genericsmr.MDLCoordReq),
+    make(map[mdlinproto.Tag]*mdlinproto.CoordinationResponse),
     time.NewTimer(EPOCH * time.Second),
     0}
 
@@ -495,7 +495,9 @@ func (r *Replica) processEpoch() {
     next = p.Next()
     coord := p.Value.(*Instance).lb.coordinated
     committed := (p.Value.(*Instance).lb.acceptOKs+1) > (r.N>>1)
-    NewPrintf(LEVEL0, "Buff log entry %v has coord = %v and committed = %v", buffI, coord, committed)
+    if (r.Id == 0) {
+      NewPrintf(LEVEL0, "Buff[%v] w/ CommandId %v has coord = %v and committed = %v", buffI, p.Value.(*Instance).lb.clientProposals[0].CommandId, coord, committed)
+    }
     if (coord == 1 && committed) {
       // remove ordered entries from the buffer log
       r.bufferedLog.Remove(p)
@@ -601,7 +603,7 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdids []mdlinp
 	//copyMap(expectedSeqs, r.nextSeqNo)
   //pa.ExpectedSeqs = expectedMap
   //TODO what other maps..?
-  fpa.ExpectedSeqs = r.nextSeqNo // TODO is this correct ??
+  fpa.ExpectedSeqs = r.nextSeqNo
   fpa.Epoch = r.epoch
 	args := &fpa
 
@@ -644,7 +646,7 @@ func (r *Replica) bcastAccept(ballot int32, command []state.Command, pids int64,
 	//copyMap(expectedSeqs, r.nextSeqNo)
   //pa.ExpectedSeqs = expectedMap
   //TODO what other maps..?
-  pa.ExpectedSeqs = r.nextSeqNo // TODO is this correct ??
+  pa.ExpectedSeqs = r.nextSeqNo
   pa.Epoch = r.epoch
   pa.PredSize = ps
 	args := &pa
@@ -782,7 +784,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			if len(r.outstandingInst[pid]) > 1 {
 				mysort.MergeSort(r.outstandingInst[pid])
 			}
-			NewPrintf(LEVELALL, "Out of order, (got command %d seqno %d) buffering back into channel", prop.CommandId, seqno) //TODO do we need to sort?
+			NewPrintf(LEVELALL, "Out of order, (got command %d seqno %d) buffering back into channel", prop.CommandId, seqno)
 		} else {
 			cmds = append(cmds, prop.Command)
 			proposals = append(proposals, prop)
@@ -798,14 +800,16 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 
       // Check if coordination request from successor arrived
       // before the request arrived, if so add it
-      t := &mdlinproto.Tag{K: prop.Command.K, PID: pid, SeqNo: seqno}
+      t := mdlinproto.Tag{K: prop.Command.K, PID: pid, SeqNo: seqno}
       if v, ok := r.outstandingCR[t]; ok {
+        NewPrintf(LEVEL0, "^^^^^^^^^^^^found an awaiting CR for %v", t)
         thisCr = v
         delete(r.outstandingCR, t)
       }
       // Check if response from this request's coordination req
       // arrived from predecessor before this req arrived.
       if v, ok := r.outstandingCRR[t]; ok {
+        NewPrintf(LEVEL0, "!!!!!!!!!!!!!!found an awaiting CRR for %v", t)
         coord = int8(v.OK)
         delete(r.outstandingCRR, t)
       }
@@ -835,7 +839,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 
           // Check if coordination request from successor arrived
           // before the request arrived, if so add it
-          t = &mdlinproto.Tag{K: prop.Command.K, PID: pid, SeqNo: expectedSeqno}
+          t = mdlinproto.Tag{K: prop.Command.K, PID: pid, SeqNo: expectedSeqno}
           if v, ok := r.outstandingCR[t]; ok {
             thisCr = v
             delete(r.outstandingCR, t)
@@ -868,7 +872,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		NewPrintf(LEVELALL, "None of the proposals pulled out of the channel or in the buffers are ready!")
 		// We won't respond to the client, since that response
 		// will come when the command gets unbuffered and later executed
-		r.noProposalsReady = true //TODO delete me
+		r.noProposalsReady = true
 		return
 	}
 
@@ -885,7 +889,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
   for i := 0; i < found; i++ {
 		if r.defaultBallot == -1 {
 			NewPrintf(LEVEL0, "    Step2. (candidate) leader broadcasting prepares....")
-			r.bcastPrepare(int32(r.bufferedLog.Len()-found+i), r.makeUniqueBallot(0), true)
+			r.bcastPrepare(int32(r.bufferedLog.Len()-found+i+1), r.makeUniqueBallot(0), true)
 		} else {
 			r.recordInstanceMetadata(currInst.Value.(*Instance))
       r.recordCommands(currInst.Value.(*Instance).cmds)
@@ -1000,11 +1004,12 @@ func (r *Replica) findEntry(tag mdlinproto.Tag) (*Instance, int, int32) {
 // flags to get set, in either the handleAcceptReply or handleCoordinationRReply
 // methods, both of which can then issue the sendCoordResp messages to the asker shard.
 func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
+  NewPrintf(LEVEL0, "##########Received coord req for %v", cr.AskeeTag)
   e, _, _ := r.findEntry(cr.AskeeTag)
   if (e == nil) {
-    panic("Not yet sure what to do in the case where the CR arrives before the request hmm")
-    r.outstandingCR[&cr.AskeeTag] = cr //This seems like a bad idea TODO... the address of a message that's gonna disapear?
-    // return
+    NewPrintf(LEVEL0, "Coordination Request arrived before the predecessor did")
+    r.outstandingCR[cr.AskeeTag] = cr //This seems like a bad idea TODO... the address of a message that's gonna disapear?
+    return
   }
   e.cr = cr // won't be nil anymore, signals acceptReply() and coordReply()
   r.checkCoordination(e)
@@ -1021,6 +1026,7 @@ func (r *Replica) checkCoordination(e *Instance) {
     r.sendCoordResp(shardTo, msg)
   } else if (coord == 0) {
     // Fail the remaining chain of outstanding requests from this client
+    NewPrintf(LEVEL0, "     FAILING THIS INSTANCE COORD")
     msg := &mdlinproto.CoordinationResponse{e.cr.AskerTag, e.cr.AskeeTag, int32(r.shardId), 0}
     r.sendCoordResp(shardTo, msg)
   }
@@ -1029,11 +1035,12 @@ func (r *Replica) checkCoordination(e *Instance) {
 // When we receive a response for the predecessor of the asker, we can coordinate
 // the asker request
 func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse) {
+  NewPrintf(LEVEL0, "@@@@@@@@@@@Received coord ReSPONSE for %v", crr.AskerTag)
   e, _, _ := r.findEntry(crr.AskerTag)
   if (e == nil) {
-    panic("Received CR Response before request hmm")
-    r.outstandingCRR[&crr.AskerTag] = crr //This seems like a bad idea TODO... the address of a message that's gonna disapear?
-    // return
+    NewPrintf(LEVEL0, "Coordination Response arrived before the request did")
+    r.outstandingCRR[crr.AskerTag] = crr //This seems like a bad idea TODO... the address of a message that's gonna disapear?
+    return
   }
   if e.pred.SeqNo == -1 {
     panic("Received CR Response for request with no predecessor")
@@ -1260,7 +1267,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 	if preply.OK == TRUE {
 		inst.lb.prepareOKs++
 
-		if preply.Ballot > inst.lb.maxRecvBallot { //TODO CHANGE THIS THIS WILL BREAK MDL
+		if preply.Ballot > inst.lb.maxRecvBallot {
 			panic("This shouldn't be happening rn")
 			inst.cmds = preply.Command
 			inst.lb.maxRecvBallot = preply.Ballot
