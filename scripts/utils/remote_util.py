@@ -1,3 +1,4 @@
+import collections
 import os
 import shutil
 import subprocess
@@ -17,28 +18,114 @@ def is_exp_remote(config):
     return not is_exp_local(config)
 
 
-def get_coordinator_host(config):
-    return get_master_host(config, 0)
+def is_emulate_wan(config):
+    return is_exp_remote(config) and 'server_emulate_wan' in config and \
+        config['server_emulate_wan']
 
 
-def get_master_host(config, shard_num):
-    n_shards = config["num_shards"]
+def get_coordinator_host(config, full=True):
+    if is_exp_local(config):
+        return "localhost"
+    else:
+        return get_master_host(config, 0, full)
+
+
+def get_coordinator_port(config):
+    return config["coordinator_port"]
+
+
+def get_master_host(config, shard_idx, full=True):
+    if is_exp_local(config):
+        return "localhost"
+
     shards = config["shards"]
+    master_host = shards[shard_idx][0]
 
-    assert(len(shards) == n_shards)
+    if not full:
+        return master_host
+    else:
+        return config["server_host_format_str"] % (master_host, config["experiment_name"], config["project_name"])
 
-    master_host = shards[shard_num][0]
 
-    return config["server_host_format_str"] % (master_host, config["experiment_name"], config["project_name"])
+MASTER_HOST_PORTS = None
+MASTER_PORTS = {}
+
+def get_master_port(config, shard_idx):
+    global MASTER_HOST_PORTS
+    global MASTER_PORTS
+
+    if MASTER_HOST_PORTS is None:
+        MASTER_HOST_PORTS = collections.defaultdict(lambda: config["master_port"])
+
+    if shard_idx in MASTER_PORTS:
+        return MASTER_PORTS[shard_idx]
+
+    master_host = get_master_host(config, shard_idx)
+    master_port = MASTER_HOST_PORTS[master_host]
+    MASTER_HOST_PORTS[master_host] += 1
+
+    MASTER_PORTS[shard_idx] = master_port
+    return master_port
+
+
+def get_replica_host(config, shard_idx, replica_idx, full=True):
+    if is_exp_local(config):
+        return "localhost"
+    
+    shard = config["shards"][shard_idx]
+    replica_host = shard[replica_idx]
+
+    if not full:
+        return replica_host
+    else:
+        return config["server_host_format_str"] % (replica_host,
+                                                   config["experiment_name"],
+                                                   config["project_name"])
+
+REPLICA_HOST_PORTS = None
+REPLICA_PORTS = {}
+
+def get_replica_port(config, shard_idx, replica_idx):
+    global REPLICA_HOST_PORTS
+    global REPLICA_PORTS
+
+    if REPLICA_HOST_PORTS is None:
+        REPLICA_HOST_PORTS = collections.defaultdict(lambda: config["server_port"])
+
+    if (shard_idx, replica_idx) in REPLICA_PORTS:
+        return REPLICA_PORTS[(shard_idx, replica_idx)]
+
+    replica_host = get_replica_host(config, shard_idx, replica_idx)
+    replica_port = REPLICA_HOST_PORTS[replica_host]
+    REPLICA_HOST_PORTS[replica_host] += 1
+
+    REPLICA_PORTS[(shard_idx, replica_idx)] = replica_port
+    return replica_port
+
+
+REPLICA_HOST_RPCPORTS = None
+REPLICA_RPCPORTS = {}
+
+def get_replica_rpc_port(config, shard_idx, replica_idx):
+    global REPLICA_HOST_RPCPORTS
+    global REPLICA_RPCPORTS
+
+    if REPLICA_HOST_RPCPORTS is None:
+        REPLICA_HOST_RPCPORTS = collections.defaultdict(lambda: config["server_rpc_port"])
+
+    if (shard_idx, replica_idx) in REPLICA_RPCPORTS:
+        return REPLICA_RPCPORTS[(shard_idx, replica_idx)]
+
+    replica_host = get_replica_host(config, shard_idx, replica_idx)
+    replica_rpc_port = REPLICA_HOST_RPCPORTS[replica_host]
+    REPLICA_HOST_RPCPORTS[replica_host] += 1
+
+    REPLICA_RPCPORTS[(shard_idx, replica_idx)] = replica_rpc_port
+    return replica_rpc_port
 
 
 def get_server_host(config, i):
-    if isinstance(i, int):
-        return config['server_host_format_str'] % (config['server_names'][i], config['experiment_name'], config['project_name'])
-    elif isinstance(i, str):
-        return config['server_host_format_str'] % (i, config['experiment_name'], config['project_name'])
-    else:
-        raise ValueError("Unexpected value for i: {}".format(i))
+    return config['server_host_format_str'] % (config['server_names'][i], config['experiment_name'], config['project_name'])
 
 
 def get_client_host(config, client):
@@ -47,6 +134,18 @@ def get_client_host(config, client):
 
 def get_ip_for_interface(interface, remote_user, remote_host):
     return run_remote_command_sync('ip address show %s | awk \'/inet / {print $2}\'' % interface, remote_user, remote_host).rstrip()
+
+
+def run_local_command_sync(command):
+    print(command)
+    subprocess.run(command, stdout=subprocess.PIPE,
+                   universal_newlines=True, shell=True)
+
+
+def run_local_command_async(command):
+    print(command)
+    return subprocess.Popen(command, universal_newlines=True, shell=True)
+
 
 def ssh_args(command, remote_user, remote_host):
     return ["ssh", '-o', 'StrictHostKeyChecking=no',
@@ -103,20 +202,21 @@ def set_file_descriptor_limit(limit, remote_user, remote_host):
     run_remote_command_sync(command, remote_user, remote_host)
 
 def kill_remote_process_by_name(remote_process_name, remote_user, remote_host, kill_args):
-    run_remote_command_sync('pkill%s %s' % (kill_args, remote_process_name),
+    run_remote_command_sync('pkill %s %s' % (kill_args, remote_process_name),
                             remote_user, remote_host)
 
 def kill_remote_process_by_port(port, remote_user, remote_host, kill_args):
     run_remote_command_sync('lsof -ti:%d | xargs kill%s' % (port, kill_args),
                             remote_user, remote_host)
 
+
 def kill_process_by_name(process_name, kill_args):
-    subprocess.run('ps aux | grep -i \'%s\' | awk \'{print $2}\' | xargs kill%s' % (process_name, kill_args),
-        stdout=subprocess.PIPE, universal_newlines=True, shell=True)
+    run_local_command_sync('pkill %s %s' % (kill_args, process_name))
+
 
 def kill_process_by_port(port, kill_args):
-    subprocess.run('lsof -ti:%d | xargs kill%s' % (port, kill_args),
-            stdout=subprocess.PIPE, universal_newlines=True, shell=True)
+    run_local_command_sync('lsof -ti:%d | xargs kill%s' % (port, kill_args))
+
 
 def get_timestamped_exp_dir(config):
     now_string = time.strftime('%Y-%m-%d-%H-%M-%S',
@@ -126,8 +226,7 @@ def get_timestamped_exp_dir(config):
 def prepare_local_exp_directory(config, config_file):
     exp_directory = get_timestamped_exp_dir(config)
     os.makedirs(exp_directory)
-    shutil.copy(config_file, os.path.join(exp_directory,
-        os.path.basename(config_file)))
+    shutil.copy(config_file, os.path.join(exp_directory, os.path.basename(config_file)))
     return exp_directory
 
 def get_interface_for_ip(ip, remote_user, remote_host):

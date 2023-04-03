@@ -3,6 +3,7 @@ import time
 import concurrent.futures
 import os
 import sys
+import threading
 
 from utils.remote_util import *
 from utils.git_util import *
@@ -35,8 +36,7 @@ def collect_exp_data(config, remote_exp_directory, local_directory_base, executo
     for shard_idx in range(len(config["shards"])):
         shard = config["shards"][shard_idx]
         for replica_idx in range(len(shard)):
-            replica = shard[replica_idx]
-            server_host = get_server_host(config, replica)
+            server_host = get_replica_host(config, shard_idx, replica_idx)
 
             futures.append(executor.submit(copy_remote_directory_to_local,
                                            os.path.join(local_directory_base, "server-{}".format(shard_idx)),
@@ -52,7 +52,7 @@ def collect_exp_data(config, remote_exp_directory, local_directory_base, executo
     concurrent.futures.wait(futures)
 
 
-def kill_servers(config, executor, kill_args=' -9'):
+def kill_servers(config, executor, kill_args='-9'):
     futures = []
     for i in range(len(config['server_names'])):
         server_host = get_server_host(config, i)
@@ -73,10 +73,10 @@ def kill_clients_no_config(config, executor):
         if is_exp_remote(config):
             futures.append(executor.submit(kill_remote_process_by_name,
                                            config['client_bin_name'], config['emulab_user'],
-                                           client_host, ' -9'))
+                                           client_host, '-9'))
         else:
             futures.append(executor.submit(kill_process_by_name,
-                                           config['client_bin_name'], ' -9'))
+                                           config['client_bin_name'], '-9'))
     concurrent.futures.wait(futures)
 
 
@@ -94,16 +94,20 @@ def kill_masters(config, executor):
             futures.append(executor.submit(kill_remote_process_by_name,
                                            config["master_bin_name"],
                                            config["emulab_user"],
-                                           master_host, " -9"))
+                                           master_host, "-9"))
         else:
             futures.append(executor.submit(kill_process_by_name,
-                                           config["master_bin_name"], " -9"))
+                                           config["master_bin_name"], "-9"))
 
-    coordinator_host = get_coordinator_host(config)
-    futures.append(executor.submit(kill_remote_process_by_name,
-                                   config["coordinator_bin_name"],
-                                   config["emulab_user"],
-                                   coordinator_host, " -9"))
+    if is_exp_remote(config):
+        coordinator_host = get_coordinator_host(config)
+        futures.append(executor.submit(kill_remote_process_by_name,
+                                       config["coordinator_bin_name"],
+                                       config["emulab_user"],
+                                       coordinator_host, "-9"))
+    else:
+        futures.append(executor.submit(kill_process_by_name,
+                                       config["coordinator_bin_name"], "-9"))
 
     concurrent.futures.wait(futures)
 
@@ -116,26 +120,26 @@ def terminate_clients_on_timeout(timeout, cond, client_ssh_threads):
         need_terminate = not cond.wait(timeout - (time.time() - start))
         cond.release()
     if need_terminate:
+        print("Terminating clients")
         for c in client_ssh_threads:
             c.terminate()
 
 
 def wait_for_clients_to_terminate(config, client_ssh_threads):
-    '''
     cond = threading.Condition()
     timeout_thread = threading.Thread(
-            target=terminate_clients_on_timeout,
-            args=(config['client_experiment_length'] + 10,
-                cond,
-                client_ssh_threads))
+        target=terminate_clients_on_timeout,
+        args=(config['client_experiment_length'] + 10,
+              cond,
+              client_ssh_threads))
+    timeout_thread.daemon = True
     timeout_thread.start()
     for c in client_ssh_threads:
         c.wait()
     cond.acquire()
     cond.notify()
     cond.release()
-    '''
-    time.sleep(config['client_experiment_length'] + 10)
+    #time.sleep(config['client_experiment_length'] + 10)
 
 
 def start_clients(config, local_exp_directory, remote_exp_directory, run):
@@ -160,12 +164,12 @@ def start_clients(config, local_exp_directory, remote_exp_directory, run):
                     appended_client_commands = appended_client_commands[:-2]
                 if is_exp_remote(config):
                     client_processes.append(run_remote_command_async(
-                        appended_client_commands +
-                        ' & wait', config['emulab_user'],
+                        appended_client_commands + ' & wait',
+                        config['emulab_user'],
                         client_host, False))
                 else:
-                    client_processes.append(subprocess.Popen(
-                        appended_client_commands + ' & wait', shell=True))
+                    client_processes.append(run_local_command_async(
+                                                appended_client_commands + ' & wait'))
                     print(appended_client_commands)
                 appended_client_commands = ''
 
@@ -174,13 +178,12 @@ def start_clients(config, local_exp_directory, remote_exp_directory, run):
                 appended_client_commands = appended_client_commands[:-2]
             if is_exp_remote(config):
                 client_processes.append(run_remote_command_async(
-                    appended_client_commands +
-                    ' & wait', config['emulab_user'],
+                    appended_client_commands + ' & wait',
+                    config['emulab_user'],
                     client_host, False))
             else:
-                client_processes.append(subprocess.Popen(
-                    appended_client_commands + ' & wait', shell=True))
-                print(appended_client_commands)
+                client_processes.append(run_local_command_async(
+                    appended_client_commands + ' & wait'))
 
     return client_processes
 
@@ -190,17 +193,15 @@ def start_servers(config, local_exp_directory, remote_exp_directory, run):
 
     server_names = config["server_names"]
 
-    shards = config["shards"]
-    assert(len(shards) == config["num_shards"])
+    n_shards = len(config["shards"])
+    assert(n_shards == config["num_shards"])
 
     start_commands = {}
-    shard_idx = 0
-    for shard in shards:
-        replica_idx = 0
+    for shard_idx in range(n_shards):
+        n_replicas = len(config["shards"][shard_idx])
 
-        for replica in shard:
-            assert(replica in server_names)
-            server_idx = server_names.index(replica)
+        for replica_idx in range(n_replicas):
+            replica_host = get_replica_host(config, shard_idx, replica_idx)
 
             if is_exp_local(config):
                 out_dir = os.path.join(local_exp_directory,
@@ -212,20 +213,16 @@ def start_servers(config, local_exp_directory, remote_exp_directory, run):
                                              replica_idx, run,
                                              local_exp_directory, remote_exp_directory)
 
-            if not server_idx in start_commands:
-                start_commands[server_idx] = '(%s)' % server_command
+            if not replica_host in start_commands:
+                start_commands[replica_host] = '(%s)' % server_command
             else:
-                start_commands[server_idx] += ' & (%s)' % server_command
+                start_commands[replica_host] += ' & (%s)' % server_command
 
-            replica_idx += 1
-        shard_idx += 1
-
-    for idx, cmd in start_commands.items():
+    for replica_host, cmd in start_commands.items():
         if is_exp_remote(config):
-            server_host = get_server_host(config, idx)
             server_threads.append(run_remote_command_async(cmd,
                                                            config['emulab_user'],
-                                                           server_host, detach=False))
+                                                           replica_host, detach=False))
         else:
             server_threads.append(run_local_command_async(cmd))
         time.sleep(0.1)
@@ -245,31 +242,37 @@ def start_coordinator(config, local_exp_directory, remote_exp_directory, run):
         path_to_coordinator_bin = os.path.join(config["src_directory"],
                                                config["bin_directory_name"],
                                                config["coordinator_bin_name"])
+                                                           
+        out_dir = os.path.join(local_exp_directory,
+                               config["out_directory_name"],
+                               "coordinator")
+        os.makedirs(out_dir, exist_ok=True)
 
     n_shards = config["num_shards"]
     masters_hosts = []
     for i in range(n_shards):
-        if is_exp_remote(config):
-            master_host = get_master_host(config, i)
-        else:
-            master_host = "localhost"
-
+        master_host = get_master_host(config, i)
         masters_hosts.append(master_host)
 
+    coordinator_host = get_coordinator_host(config)
+    coordinator_port = get_coordinator_port(config)
+
     coordinator_command = ' '.join([str(x) for x in [path_to_coordinator_bin,
-                                                     "-port", config["coordinator_port"],
+                                                     "-port", coordinator_port,
                                                      "-N", n_shards,
                                                      "-ips", ','.join(masters_hosts)]])
 
     stdout_file = os.path.join(exp_directory,
                                config["out_directory_name"],
+                               "coordinator",
                                "coordinator-stdout-{}.log".format(run))
 
     stderr_file = os.path.join(exp_directory,
                                config["out_directory_name"],
+                               "coordinator",
                                "coordinator-stderr-{}.log".format(run))
 
-    if is_exp_remote(config) and is_using_tcsh(config):
+    if is_using_tcsh(config):
         coordinator_command = tcsh_redirect_output_to_files(coordinator_command,
                                                             stdout_file, stderr_file)
     else:
@@ -279,59 +282,70 @@ def start_coordinator(config, local_exp_directory, remote_exp_directory, run):
     coordinator_command = 'cd %s; %s' % (exp_directory, coordinator_command)
 
     if is_exp_remote(config):
-        coordinator_host = get_coordinator_host(config)
         coordinator_thread = run_remote_command_async(coordinator_command,
                                                       config["emulab_user"],
                                                       coordinator_host, detach=False)
     else:
-        coordinator_thread = subprocess.Popen(coordinator_command, shell=True)
+        coordinator_thread = run_local_command_async(coordinator_command)
 
     return coordinator_thread
-    
+
 
 def start_masters(config, local_exp_directory, remote_exp_directory, run):
     master_threads = []
+
+    master_threads.append(start_coordinator(config, local_exp_directory,
+                                            remote_exp_directory, run))
 
     if is_exp_remote(config):
         exp_directory = remote_exp_directory
         path_to_master_bin = os.path.join(
             config['base_remote_bin_directory_nfs'],
             config['bin_directory_name'], config['master_bin_name'])
-        coordinator_host = get_coordinator_host(config)
     else:
         exp_directory = local_exp_directory
         path_to_master_bin = os.path.join(
             config['src_directory'],
             config['bin_directory_name'], config['master_bin_name'])
-        coordinator_host = "localhost"
 
     n_shards = config["num_shards"]
     shards = config["shards"]
     assert(len(shards) == n_shards)
 
     for i in range(n_shards):
-        if is_exp_remote(config):
-            master_host = get_master_host(config, i)
-        else:
-            master_host = 'localhost'
+        if is_exp_local(config):
+            out_dir = os.path.join(local_exp_directory,
+                config["out_directory_name"],
+                "master-%d" % (i))
+            os.makedirs(out_dir, exist_ok=True)
 
-        shard = shards[i]
+        coordinator_host = get_coordinator_host(config)
+        coordinator_port = get_coordinator_port(config)
+        master_host = get_master_host(config, i)
+        master_port = get_master_port(config, i)
+
+        n_replicas = len(shards[i])
+        replica_hosts = []
+        for j in range(n_replicas):
+            replica_hosts.append(get_replica_host(config, i, j, full=False))
 
         master_command = ' '.join([str(x) for x in [path_to_master_bin,
                                                     '-addr', master_host,
-                                                    '-port', config["master_port"],
+                                                    '-port', master_port,
                                                     '-caddr', coordinator_host,
-                                                    '-cport', config["coordinator_port"],
-                                                    '-N', len(shard),
-                                                    '-ips', ','.join(shard),
+                                                    '-cport', coordinator_port,
+                                                    '-N', n_replicas,
+                                                    '-ips', ','.join(replica_hosts),
                                                     '-nshrds', n_shards]])
 
         stdout_file = os.path.join(exp_directory,
                                    config['out_directory_name'],
+                                   'master-%d' % (i),
                                    'master-%d-stdout-%d.log' % (i, run))
 
         stderr_file = os.path.join(exp_directory,
                                    config['out_directory_name'],
+                                   'master-%d' % (i),
                                    'master-%d-stderr-%d.log' % (i, run))
 
         if is_exp_remote(config) and is_using_tcsh(config):
@@ -348,9 +362,7 @@ def start_masters(config, local_exp_directory, remote_exp_directory, run):
                                                            config['emulab_user'],
                                                            master_host, detach=False))
         else:
-            master_threads.append(subprocess.Popen(master_command, shell=True))
-
-    master_threads.append(start_coordinator(config, local_exp_directory, remote_exp_directory, run))
+            master_threads.append(run_local_command_async(master_command))
 
     return master_threads
 
@@ -517,24 +529,31 @@ def run_experiment(config_file, client_config_idx, executor):
                 config['client_processes_per_client_node'] * \
                 len(config['server_names'])
 
-        wan = 'server_emulate_wan' in config and (config['server_emulate_wan'] and (
-            not 'run_locally' in config or not config['run_locally']))
-        print('Setting up emulated WAN latencies.')
-        setup_delays(config, wan, executor)
+        if is_exp_remote(config):
+            print('Setting up emulated WAN latencies.')
+            wan = is_emulate_wan(config)
+            setup_delays(config, wan, executor)
+
         kill_servers(config, executor)
         kill_clients(config, executor)
+        kill_masters(config, executor)
+
         if is_exp_remote(config):
             copy_binaries_to_nfs(config, executor)
+
         setup_nodes(config)
+
         local_exp_directory = prepare_local_exp_directory(config, config_file)
         local_out_directory = os.path.join(local_exp_directory,
                                            config['out_directory_name'])
         if is_exp_local(config):
             os.makedirs(local_out_directory)
-        remote_exp_directory = None
-        if is_exp_remote(config):
-            remote_exp_directory = prepare_remote_exp_directories(
-                config, local_exp_directory, executor)
+            remote_exp_directory = None
+        else:
+            remote_exp_directory = prepare_remote_exp_directories(config,
+                                                                  local_exp_directory,
+                                                                  executor)
+        
         for i in range(config['num_experiment_runs']):
             kill_clients(config, executor)
             servers_alive = False
@@ -546,17 +565,18 @@ def run_experiment(config_file, client_config_idx, executor):
                     kill_masters(config, executor)
                     master_threads = start_masters(config, local_exp_directory,
                                                    remote_exp_directory, i)
+                
                 kill_servers(config, executor)
                 time.sleep(2)
-                server_threads = start_servers(
-                    config, local_exp_directory, remote_exp_directory, i)
-                if len(server_threads) == len(config['server_names']):
-                    all_alive = True
-                    for server_thread in server_threads:
-                        if server_thread.poll() != None:
-                            all_alive = False
-                            break
-                    servers_alive = all_alive
+                
+                server_threads = start_servers(config, local_exp_directory,
+                                               remote_exp_directory, i)
+                all_alive = True
+                for server_thread in server_threads:
+                    if server_thread.poll() != None:
+                        all_alive = False
+                        break
+                servers_alive = all_alive
                 retries += 1
             if not servers_alive:
                 sys.stderr.write('Failed to start all servers.\n')
@@ -564,9 +584,13 @@ def run_experiment(config_file, client_config_idx, executor):
             client_threads = start_clients(config, local_exp_directory,
                                            remote_exp_directory, i)
             wait_for_clients_to_terminate(config, client_threads)
+            print("Waiting {} seconds for clients to finish".format(5))
+            time.sleep(5)
+            kill_clients(config, executor)
+            time.sleep(1)
             for server_thread in server_threads:
                 server_thread.terminate()
-            kill_servers(config, executor, ' -15')
+            kill_servers(config, executor, '-15')
             if is_using_masters(config):
                 for master_thread in master_threads:
                     master_thread.terminate()

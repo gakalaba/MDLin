@@ -113,13 +113,13 @@ func NewAbstractClient(id int32, coordinatorAddr string, coordinatorPort int, fo
 
 func (c *AbstractClient) Finish() {
 	if !c.shutdown {
+		c.shutdown = true
 		if len(c.statsFile) > 0 {
 			c.stats.Export(c.statsFile)
 		}
 		for _, replica := range c.leaders {
 			replica.Close()
 		}
-		c.shutdown = true
 	}
 }
 
@@ -306,7 +306,7 @@ func (c *AbstractClient) leaderListener(leader int) {
 			break
 		}
 
-    if rpair, present := c.rpcTable[msgType]; present {
+		if rpair, present := c.rpcTable[msgType]; present {
 			obj := rpair.Obj.New()
 			if err = obj.Unmarshal(c.readers[leader]); err != nil {
 				errS = "unmarshling message"
