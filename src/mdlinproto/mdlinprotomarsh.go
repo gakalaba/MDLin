@@ -364,7 +364,6 @@ func (p *AcceptCache) Put(t *Accept) {
 }
 func (t *Accept) Marshal(wire io.Writer) {
 	// LeaderId       int32
-	// Instance       int32
 	// Ballot         int32
 	// Command        []state.Command
 	// PIDs           []int64
@@ -374,22 +373,17 @@ func (t *Accept) Marshal(wire io.Writer) {
 	// Epoch          int32
   var b [12]byte
 	var bs []byte
-	bs = b[:12]
+	bs = b[:8]
 	tmp32 := t.LeaderId
 	bs[0] = byte(tmp32)
 	bs[1] = byte(tmp32 >> 8)
 	bs[2] = byte(tmp32 >> 16)
 	bs[3] = byte(tmp32 >> 24)
-	tmp32 = t.Instance
+	tmp32 = t.Ballot
 	bs[4] = byte(tmp32)
 	bs[5] = byte(tmp32 >> 8)
 	bs[6] = byte(tmp32 >> 16)
 	bs[7] = byte(tmp32 >> 24)
-	tmp32 = t.Ballot
-	bs[8] = byte(tmp32)
-	bs[9] = byte(tmp32 >> 8)
-	bs[10] = byte(tmp32 >> 16)
-	bs[11] = byte(tmp32 >> 24)
 	wire.Write(bs)
 
 	// Marshalling for variable length arrays:
@@ -490,13 +484,12 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
 	}
 	var b [12]byte
 	var bs []byte
-	bs = b[:12]
-	if _, err := io.ReadAtLeast(wire, bs, 12); err != nil {
+	bs = b[:8]
+	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
 		return err
 	}
 	t.LeaderId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-	t.Instance = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
-	t.Ballot = int32((uint32(bs[8]) | (uint32(bs[9]) << 8) | (uint32(bs[10]) << 16) | (uint32(bs[11]) << 24)))
+	t.Ballot = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
 
 	// Command
 	alen1, err := binary.ReadVarint(wire)
@@ -600,33 +593,29 @@ func (p *AcceptReplyCache) Put(t *AcceptReply) {
 	p.mu.Unlock()
 }
 func (t *AcceptReply) Marshal(wire io.Writer) {
-	var b [9]byte
+	var b [5]byte
 	var bs []byte
-	bs = b[:9]
-	tmp32 := t.Instance
-	bs[0] = byte(tmp32)
-	bs[1] = byte(tmp32 >> 8)
-	bs[2] = byte(tmp32 >> 16)
-	bs[3] = byte(tmp32 >> 24)
-	bs[4] = byte(t.OK)
-	tmp32 = t.Ballot
-	bs[5] = byte(tmp32)
-	bs[6] = byte(tmp32 >> 8)
-	bs[7] = byte(tmp32 >> 16)
-	bs[8] = byte(tmp32 >> 24)
+	bs = b[:5]
+	bs[0] = byte(t.OK)
+  tmp32 := t.Ballot
+	bs[1] = byte(tmp32)
+	bs[2] = byte(tmp32 >> 8)
+	bs[3] = byte(tmp32 >> 16)
+	bs[4] = byte(tmp32 >> 24)
 	wire.Write(bs)
+  t.IdTag.Marshal(wire)
 }
 
 func (t *AcceptReply) Unmarshal(wire io.Reader) error {
-	var b [9]byte
+	var b [5]byte
 	var bs []byte
-	bs = b[:9]
-	if _, err := io.ReadAtLeast(wire, bs, 9); err != nil {
+  bs = b[:5]
+	if _, err := io.ReadAtLeast(wire, bs, 5); err != nil {
 		return err
 	}
-	t.Instance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-	t.OK = uint8(bs[4])
-	t.Ballot = int32((uint32(bs[5]) | (uint32(bs[6]) << 8) | (uint32(bs[7]) << 16) | (uint32(bs[8]) << 24)))
+	t.OK = uint8(bs[0])
+	t.Ballot = int32((uint32(bs[1]) | (uint32(bs[2]) << 8) | (uint32(bs[3]) << 16) | (uint32(bs[4]) << 24)))
+  t.IdTag.Unmarshal(wire)
 	return nil
 }
 
@@ -639,7 +628,7 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 	// LeaderId  int32
   // Instance  int32
   // Ballot    int32
-  // Commands  []Tag
+  // CmdTags  []Tag
   // ExpectedSeqs map[int64]int64
   // Epoch     int32
   var b [12]byte
@@ -662,14 +651,14 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 	bs[11] = byte(tmp32 >> 24)
 	wire.Write(bs)
 
-  // Commands
+  // CmdTags
   bs = b[:]
-  alen1 := int64(len(t.Commands))
+  alen1 := int64(len(t.CmdTags))
   if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
     wire.Write(b[0:wlen])
   }
   for i := int64(0); i < alen1; i++ {
-    t.Commands[i].Marshal(wire)
+    t.CmdTags[i].Marshal(wire)
   }
 
 	// Expected Sequence Numbers Map
@@ -732,14 +721,14 @@ func (t *FinalAccept) Unmarshal(rr io.Reader) error {
 	t.Instance = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
 	t.Ballot = int32((uint32(bs[8]) | (uint32(bs[9]) << 8) | (uint32(bs[10]) << 16) | (uint32(bs[11]) << 24)))
 
-  // Commands
+  // CmdTags
   alen1, err := binary.ReadVarint(wire)
   if err != nil {
     return err
   }
-  t.Commands = make([]Tag, alen1)
+  t.CmdTags = make([]Tag, alen1)
   for i := int64(0); i < alen1; i++ {
-    t.Commands[i].Unmarshal(wire)
+    t.CmdTags[i].Unmarshal(wire)
   }
 
 	// ExpectedSeqs Map

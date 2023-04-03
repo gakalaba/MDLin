@@ -532,10 +532,10 @@ func (r *Replica) processEpoch() {
     }
 
     // add all ordered entries to the ordered log
-    instNo := r.addEntryToOrderedLog(b, bi, bp, PREPARED)
-
+    instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED)
+    r.crtInstance++
     // do last paxos roundtrip with this whole batch you just added
-    r.bcastAccept(instNo, r.defaultBallot, b, -1, -1, TRUE, bi, cmdids)
+    r.bcastFinalAccept(instNo, r.defaultBallot, cmdids)
   }
   // increment the epoch
   r.epoch++
@@ -582,23 +582,63 @@ func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 	}
 }
 
-var pa mdlinproto.Accept
+var fpa mdlinproto.FinalAccept
 
-func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Command, pids int64, seqnos int64, fr uint8, ps []int32, cmdids []mdlinproto.Tag) {
+func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdids []mdlinproto.Tag) {
 	defer func() {
 		if err := recover(); err != nil {
 			NewPrintf(LEVEL0, "Accept bcast failed: %v", err)
 		}
 	}()
 
-  NewPrintf(LEVEL0, "BcastAccept with final round == %v", fr)
+  NewPrintf(LEVEL0, "BcastFinalAccept")
+	fpa.LeaderId = r.Id
+	fpa.Instance = instance
+	fpa.Ballot = ballot
+  fpa.CmdTags = cmdids
+	// Make a copy of the nextSeqNo map
+	//expectedSeqs := make(map[int64]int64)
+	//copyMap(expectedSeqs, r.nextSeqNo)
+  //pa.ExpectedSeqs = expectedMap
+  //TODO what other maps..?
+  fpa.ExpectedSeqs = r.nextSeqNo // TODO is this correct ??
+  fpa.Epoch = r.epoch
+	args := &fpa
+
+  NewPrintf(LEVEL0, "Broadcasting accept with message %v", fpa)
+	n := r.N - 1
+	if r.Thrifty {
+		n = r.N >> 1 //n = n//2
+	}
+	q := r.Id
+
+	for sent := 0; sent < n; {
+		q = (q + 1) % int32(r.N)
+		if q == r.Id {
+			break
+		}
+		if !r.Alive[q] {
+			continue
+		}
+		sent++
+		r.SendMsg(q, r.finalAcceptRPC, args)
+	}
+}
+var pa mdlinproto.Accept
+
+func (r *Replica) bcastAccept(ballot int32, command []state.Command, pids int64, seqnos int64, ps int32) {
+	defer func() {
+		if err := recover(); err != nil {
+			NewPrintf(LEVEL0, "Accept bcast failed: %v", err)
+		}
+	}()
+
+  NewPrintf(LEVEL0, "BcastAccept regular")
 	pa.LeaderId = r.Id
-	pa.Instance = instance
 	pa.Ballot = ballot
 	pa.Command = command
 	pa.PIDs = pids
 	pa.SeqNos = seqnos
-  pa.CommandId = cmdids
 	// Make a copy of the nextSeqNo map
 	//expectedSeqs := make(map[int64]int64)
 	//copyMap(expectedSeqs, r.nextSeqNo)
@@ -606,7 +646,6 @@ func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Comm
   //TODO what other maps..?
   pa.ExpectedSeqs = r.nextSeqNo // TODO is this correct ??
   pa.Epoch = r.epoch
-  pa.FinalRound = fr
   pa.PredSize = ps
 	args := &pa
 
@@ -854,25 +893,10 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			NewPrintf(LEVEL0, "    Step2. Leader broadcasting Accepts with instance = %v, ballot = %v", int32(r.bufferedLog.Len()-found+i), r.defaultBallot)
       cmdids := make([]mdlinproto.Tag, 1)
       cmdids[0] = mdlinproto.Tag{K: currInst.Value.(*Instance).cmds[0].K, PID: currInst.Value.(*Instance).pid, SeqNo: currInst.Value.(*Instance).seqno}
-			r.bcastAccept(int32(r.bufferedLog.Len()-found+i), r.defaultBallot, currInst.Value.(*Instance).cmds, currInst.Value.(*Instance).pid, currInst.Value.(*Instance).seqno, FALSE, currInst.Value.(*Instance).predSetSize, cmdids)
+			r.bcastAccept(r.defaultBallot, currInst.Value.(*Instance).cmds, currInst.Value.(*Instance).pid, currInst.Value.(*Instance).seqno, currInst.Value.(*Instance).predSetSize[0])
 		}
     currInst = currInst.Next()
 	}
-}
-
-func (r *Replica) removeEntryFromBuffLog(cmdid []mdlinproto.Tag) {
-  p := r.bufferedLog.Front()
-  next := p
-  for (p != nil) {
-    next = p.Next()
-    for i:=0; i<len(cmdid); i++ {
-      t := cmdid[i]
-      if p.Value.(*Instance).pid == t.PID && p.Value.(*Instance).seqno == t.SeqNo && t.K == p.Value.(*Instance).cmds[0].K {
-        r.bufferedLog.Remove(p)
-      }
-    }
-    p = next
-  }
 }
 
 func (r *Replica) addEntryToBuffLog(cmds []state.Command, proposals []*genericsmr.MDLPropose, pid int64,
@@ -909,11 +933,11 @@ func (r *Replica) addEntryToBuffLog(cmds []state.Command, proposals []*genericsm
 }
 
 
-func (r *Replica) addEntryToOrderedLog(cmds []state.Command, predSizes []int32, cPs []*genericsmr.MDLPropose, status InstanceStatus) int32 {
+func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, predSizes []int32, cPs []*genericsmr.MDLPropose, status InstanceStatus) int32 {
 	// Add entry to log
 	NewPrintf(LEVEL0, "Flushing ready entries buffLog --> orderedLog at END OF EPOCH!")
 
-	r.instanceSpace[r.crtInstance] = &Instance{
+	r.instanceSpace[index] = &Instance{
 		cmds,
 		r.defaultBallot,
 		status,
@@ -926,8 +950,7 @@ func (r *Replica) addEntryToOrderedLog(cmds []state.Command, predSizes []int32, 
     nil,
     nil,
     predSizes}
-	r.crtInstance++
-  return r.crtInstance-1
+  return index
 }
 
 // Helper to copy contents of map2 to map1
@@ -1092,100 +1115,104 @@ func (r *Replica) handlePrepare(prepare *mdlinproto.Prepare) {
 	}
 }
 
-func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
-  var fareply *mdlinproto.FinalAcceptReply
-  fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, r.defaultBallot}
-	r.replyFinalAccept(faccept.LeaderId, fareply)
+func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
+  var areply *mdlinproto.AcceptReply
+  if (accept.Ballot < r.defaultBallot) {
+    t := mdlinproto.Tag{K: -1, PID: -1, SeqNo: -1}
+    areply = &mdlinproto.AcceptReply{FALSE, r.defaultBallot, t}
+  } else {
+    t := mdlinproto.Tag{K: accept.Command[0].K, PID: accept.PIDs, SeqNo: accept.SeqNos}
+    // could add predecessor Req to Accept message type so that new elected leader can issue coordReq!
+    r.addEntryToBuffLog(accept.Command, nil, accept.PIDs, accept.SeqNos, -1, nil, nil, accept.PredSize)
+    areply = &mdlinproto.AcceptReply{TRUE, r.defaultBallot, t}
+  }
+
+  if areply.OK == TRUE {
+    NewPrintf(LEVEL0, "Replica %v added this request to buffLog", r.Id)
+    copyMap(r.nextSeqNo, accept.ExpectedSeqs)
+  }
+	r.replyAccept(accept.LeaderId, areply)
 }
 
-func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
-	var areply *mdlinproto.AcceptReply
-  if accept.FinalRound == TRUE {
-    //TODO when do the replicas prune their buffered logs?
-    //TODO this is currently not thought out
-    inst := r.instanceSpace[accept.Instance]
-    if inst != nil {
-      if inst.ballot > accept.Ballot {
-        panic("final round sees last entry at replica with greater ballot")
+func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
+  var fareply *mdlinproto.FinalAcceptReply
+
+  NewPrintf(LEVEL0, "New FINAL Accept from leader, instance = %v", faccept.Instance)
+  inst := r.instanceSpace[faccept.Instance]
+  if inst != nil {
+    panic("No failures happening yet, so we shouldn't be hitting this case")
+    if inst.ballot > faccept.Ballot {
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, inst.ballot}
+    } else if inst.ballot < faccept.Ballot {
+      inst.ballot = faccept.Ballot
+      inst.status = ACCEPTED
+      inst.epoch = faccept.Epoch
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot}
+      if inst.lb != nil && inst.lb.clientProposals != nil {
+        //TODO: is this correct?
+        // try the proposal in a different instance
+        for i := 0; i < len(inst.lb.clientProposals); i++ {
+          r.MDLProposeChan <- inst.lb.clientProposals[i]
+        }
+        inst.lb.clientProposals = nil
       }
-      panic("final round sees a last entry at the replica that isn't from the leader sending this appendEntries")
+    } else {
+      // reordered ACCEPT
+      r.instanceSpace[faccept.Instance].cmds = nil //accept.Command
+      if r.instanceSpace[faccept.Instance].status != COMMITTED {
+        r.instanceSpace[faccept.Instance].status = ACCEPTED
+      }
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, r.defaultBallot}
     }
-    r.addEntryToOrderedLog(accept.Command, accept.PredSize, nil, ACCEPTED)
-    r.removeEntryFromBuffLog(accept.CommandId)
-    // TODO do we need to check if the epoch's are correct?
-    areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, accept.Ballot, accept.FinalRound, accept.Epoch}
-		copyMap(r.nextSeqNo, accept.ExpectedSeqs)
-	  r.replyAccept(accept.LeaderId, areply)
-    return
+  } else {
+    if faccept.Ballot < r.defaultBallot {
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, r.defaultBallot}
+    } else {
+      p := r.bufferedLog.Front()
+      next := p
+      n := len(faccept.CmdTags)
+      b := make([]state.Command, n)
+      bi := make([]int32, n)
+      j := 0
+      for (p != nil) {
+        next = p.Next()
+        for _, e := range faccept.CmdTags {
+          if p.Value.(*Instance).pid == e.PID && p.Value.(*Instance).seqno == e.SeqNo && p.Value.(*Instance).cmds[0].K == e.K {
+            r.bufferedLog.Remove(p)
+            b[j] = p.Value.(*Instance).cmds[0]
+            bi[j] = p.Value.(*Instance).predSetSize[0]
+            j++
+          }
+        }
+        p = next
+      }
+      if j == n {
+        r.addEntryToOrderedLog(faccept.Instance, b, bi, nil, ACCEPTED)
+        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot}
+      } else {
+        panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
+        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, faccept.Ballot}
+      }
+    }
   }
 
-  NewPrintf(LEVEL0, "New accept from leader, instance = %v", accept.Instance)
-  e := r.bufferedLog.Front()
-  var inst *Instance
-  var i int32
-  for i = 0; i < accept.Instance; i++ {
-    if (e == nil) {
-      inst = nil
-      break
-    }
-    inst = e.Value.(*Instance)
-    e = e.Next()
-  }
-
-	expectedSeqs := accept.ExpectedSeqs
-  if (inst == nil && i < accept.Instance) {
-    panic("We shouldn't be getting accept entries for entries past our log length rn, replica")
-    areply = &mdlinproto.AcceptReply{i, FALSE, r.defaultBallot, accept.FinalRound, accept.Epoch}
-  } else if inst == nil {
-		if accept.Ballot < r.defaultBallot {
-			areply = &mdlinproto.AcceptReply{accept.Instance, FALSE, r.defaultBallot, accept.FinalRound, accept.Epoch}
-		} else {
-      r.addEntryToBuffLog(accept.Command, nil, accept.PIDs, accept.SeqNos, -1, nil, nil, accept.PredSize[0]) // , ACCEPTED) //TODO
-			areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot, accept.FinalRound, accept.Epoch}
-		}
-	} else if inst.ballot > accept.Ballot {
-		areply = &mdlinproto.AcceptReply{accept.Instance, FALSE, inst.ballot, accept.FinalRound, accept.Epoch}
-	} else if inst.ballot < accept.Ballot {
-    panic("Invalid ballot case in handleAccept() at replica")
-		inst.cmds = accept.Command
-		inst.ballot = accept.Ballot
-		inst.status = ACCEPTED
-		areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, inst.ballot, accept.FinalRound, accept.Epoch}
-		if inst.lb != nil && inst.lb.clientProposals != nil {
-			//TODO: is this correct?
-			// try the proposal in a different instance
-			for i := 0; i < len(inst.lb.clientProposals); i++ {
-				r.MDLProposeChan <- inst.lb.clientProposals[i]
-			}
-			inst.lb.clientProposals = nil
-		}
-	} else {
-		// reordered ACCEPT
-    panic("Invalid reorder case in handleAccept() at replica")
-		r.instanceSpace[accept.Instance].cmds = accept.Command
-		if r.instanceSpace[accept.Instance].status != COMMITTED {
-			r.instanceSpace[accept.Instance].status = ACCEPTED
-		}
-		areply = &mdlinproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot, accept.FinalRound, accept.Epoch}
-	}
-
-	if areply.OK == TRUE {
-    NewPrintf(LEVEL0, "Replica %v accepted this request in log", r.Id)
-		r.recordInstanceMetadata(inst)
-		r.recordCommands(accept.Command)
+	if fareply.OK == TRUE {
+    NewPrintf(LEVEL0, "Replica %v accepted this request in OrderedLog", r.Id)
+		r.recordInstanceMetadata(r.instanceSpace[faccept.Instance])
+		r.recordCommands(r.instanceSpace[faccept.Instance].cmds)
 		r.sync()
 		// If we are to accep the Proposal from the leader, we also need to bump up our nextSeqNo
-		copyMap(r.nextSeqNo, expectedSeqs)
+		copyMap(r.nextSeqNo, faccept.ExpectedSeqs)
 	}
 
-	r.replyAccept(accept.LeaderId, areply)
+	r.replyFinalAccept(faccept.LeaderId, fareply)
 }
 
 func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
 	inst := r.instanceSpace[commit.Instance]
 
 	if inst == nil {
-    r.addEntryToOrderedLog(commit.Command, commit.PredSize, nil, COMMITTED)
+    r.addEntryToOrderedLog(commit.Instance, commit.Command, commit.PredSize, nil, COMMITTED)
 	} else {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
@@ -1208,7 +1235,7 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 	inst := r.instanceSpace[commit.Instance]
 
 	if inst == nil {
-    r.addEntryToOrderedLog(nil, nil, nil, COMMITTED)
+    r.addEntryToOrderedLog(commit.Instance, nil, nil, nil, COMMITTED)
 	} else {
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
@@ -1280,7 +1307,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 			r.sync()
       cmdids := make([]mdlinproto.Tag, 1)
       cmdids[0] = mdlinproto.Tag{K: inst.cmds[0].K, PID: inst.pid, SeqNo: inst.seqno}
-			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds, inst.pid, inst.seqno, FALSE, inst.predSetSize, cmdids)
+			r.bcastAccept(inst.ballot, inst.cmds, inst.pid, inst.seqno, inst.predSetSize[0])
 		}
 	} else {
 		// TODO: there is probably another active leader
@@ -1300,34 +1327,28 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 	}
 }
 
-func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
-}
-
 func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
-  NewPrintf(LEVEL0, "got RESPONSE to accept %v", areply.OK)
-  var inst *Instance
-  if areply.FinalRound == TRUE {
-    // check whether this has been a quorum of acks, incrememnet the execution index
-    if areply.OK != TRUE {
-      panic("Didn't get success for handleaccept reply...")
-    }
-    inst = r.instanceSpace[areply.Instance]
-  } else {
-    e := r.bufferedLog.Front()
-    var i int32
-    for i = 0; i < areply.Instance; i++ {
-      if (e == nil) {
-        inst = nil
-        break
-      }
-      inst = e.Value.(*Instance)
-      e = e.Next()
-    }
+  NewPrintf(LEVEL0, "got RESPONSE to (regular) accept %v", areply.OK)
+  if areply.OK != TRUE {
+    panic("Replica didn't accept buffered appendEntries?")
+  }
 
-    if (e == nil) {
-      panic("leader got index out of bounds in accept reply")
+  inst,_,_ := r.findEntry(areply.IdTag)
+  if inst == nil {
+    panic("Got handleAcceptReply for entry we don't have in our logs")
+  }
+  inst.lb.acceptOKs++
+  if inst.lb.acceptOKs+1 > r.N>>1 {
+    NewPrintf(LEVEL0, "Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
+    if (inst.cr != nil) {
+      r.checkCoordination(inst)
     }
   }
+}
+
+func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
+  NewPrintf(LEVEL0, "got RESPONSE to FINAL accept %v", fareply.OK)
+  inst := r.instanceSpace[fareply.Instance]
 
 	if inst.status != PREPARED && inst.status != ACCEPTED {
 		// The status is COMMITTED
@@ -1335,27 +1356,19 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
 		return
 	}
 
-	if areply.OK == TRUE {
+	if fareply.OK == TRUE {
 		inst.lb.acceptOKs++
 		if inst.lb.acceptOKs+1 > r.N>>1 {
       // Check if the successor already sent a CR for this req,
       // but before it was committed itself
-      if (areply.FinalRound == TRUE) {
-        NewPrintf(LEVEL0, "FINAL ROUND Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
-        r.readyToCommit(areply.Instance, inst.predSetSize)
-      } else {
-			  NewPrintf(LEVEL0, "Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
-        if (inst.cr != nil) {
-          r.checkCoordination(inst)
-        }
-      }
-      //TODO r.readyToCommit(acceptReply.Instance)
+      NewPrintf(LEVEL0, "FINAL ROUND Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
+      r.readyToCommit(fareply.Instance, inst.predSetSize)
 		}
 	} else {
 		// TODO: there is probably another active leader
 		inst.lb.nacks++
-		if areply.Ballot > inst.lb.maxRecvBallot {
-			inst.lb.maxRecvBallot = areply.Ballot
+		if fareply.Ballot > inst.lb.maxRecvBallot {
+			inst.lb.maxRecvBallot = fareply.Ballot
 		}
 		if inst.lb.nacks >= r.N>>1 {
 			// TODO
