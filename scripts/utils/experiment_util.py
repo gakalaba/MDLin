@@ -262,15 +262,25 @@ def start_coordinator(config, local_exp_directory, remote_exp_directory, run):
                                                      "-N", n_shards,
                                                      "-ips", ','.join(masters_hosts)]])
 
-    stdout_file = os.path.join(exp_directory,
-                               config["out_directory_name"],
-                               "coordinator",
-                               "coordinator-stdout-{}.log".format(run))
+    if is_exp_remote(config):
+        stdout_file = os.path.join(exp_directory,
+                                   config["out_directory_name"],
+                                   "coordinator-stdout-{}.log".format(run))
 
-    stderr_file = os.path.join(exp_directory,
-                               config["out_directory_name"],
-                               "coordinator",
-                               "coordinator-stderr-{}.log".format(run))
+        stderr_file = os.path.join(exp_directory,
+                                   config["out_directory_name"],
+                                   "coordinator-stderr-{}.log".format(run))
+    else:
+        stdout_file = os.path.join(exp_directory,
+                                   config["out_directory_name"],
+                                   "coordinator",
+                                   "coordinator-stdout-{}.log".format(run))
+
+        stderr_file = os.path.join(exp_directory,
+                                   config["out_directory_name"],
+                                   "coordinator",
+                                   "coordinator-stderr-{}.log".format(run))
+
 
     if is_using_tcsh(config):
         coordinator_command = tcsh_redirect_output_to_files(coordinator_command,
@@ -338,17 +348,26 @@ def start_masters(config, local_exp_directory, remote_exp_directory, run):
                                                     '-ips', ','.join(replica_hosts),
                                                     '-nshrds', n_shards]])
 
-        stdout_file = os.path.join(exp_directory,
-                                   config['out_directory_name'],
-                                   'master-%d' % (i),
-                                   'master-%d-stdout-%d.log' % (i, run))
+        if is_exp_remote(config):
+            stdout_file = os.path.join(exp_directory,
+                                       config['out_directory_name'],
+                                       'master-%d-stdout-%d.log' % (i, run))
 
-        stderr_file = os.path.join(exp_directory,
-                                   config['out_directory_name'],
-                                   'master-%d' % (i),
-                                   'master-%d-stderr-%d.log' % (i, run))
+            stderr_file = os.path.join(exp_directory,
+                                       config['out_directory_name'],
+                                       'master-%d-stderr-%d.log' % (i, run))
+        else:
+            stdout_file = os.path.join(exp_directory,
+                                       config['out_directory_name'],
+                                       'master-%d' % (i),
+                                       'master-%d-stdout-%d.log' % (i, run))
 
-        if is_exp_remote(config) and is_using_tcsh(config):
+            stderr_file = os.path.join(exp_directory,
+                                       config['out_directory_name'],
+                                       'master-%d' % (i),
+                                       'master-%d-stderr-%d.log' % (i, run))
+
+        if is_using_tcsh(config):
             master_command = tcsh_redirect_output_to_files(master_command,
                                                            stdout_file, stderr_file)
         else:
