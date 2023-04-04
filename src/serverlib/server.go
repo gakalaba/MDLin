@@ -21,9 +21,10 @@ func Serve(rpcPort int) {
 	http.Serve(l, nil)
 }
 
-func RegisterWithMaster(myAddr string, portnum int, masterAddr string) (int, []string) {
-	args := &masterproto.RegisterArgs{myAddr, portnum}
+func RegisterWithMaster(myAddr string, portnum int, rpcPort int, masterAddr string) (int, []string) {
+	args := &masterproto.RegisterArgs{myAddr, portnum, rpcPort}
 	var reply masterproto.RegisterReply
+	log.Println("Hi, registering with master using myAddr portnum rpcPort", myAddr, portnum, rpcPort)
 
 	for done := false; !done; {
 		mcli, err := rpc.DialHTTP("tcp", masterAddr)

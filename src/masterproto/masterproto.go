@@ -3,6 +3,7 @@ package masterproto
 type RegisterArgs struct {
 	Addr string
 	Port int
+	RpcPort int
 }
 
 type RegisterReply struct {
@@ -38,5 +39,6 @@ type GetShardListArgs struct {
 }
 
 type GetShardListReply struct {
+	ShardId   int
 	ShardList []string
 }

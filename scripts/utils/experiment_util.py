@@ -346,7 +346,8 @@ def start_masters(config, local_exp_directory, remote_exp_directory, run):
                                                     '-cport', coordinator_port,
                                                     '-N', n_replicas,
                                                     '-ips', ','.join(replica_hosts),
-                                                    '-nshrds', n_shards]])
+                                                    '-nshrds', n_shards,
+                                                    '-shardId', i]])
 
         if is_exp_remote(config):
             stdout_file = os.path.join(exp_directory,

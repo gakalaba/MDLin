@@ -23,6 +23,7 @@ var nodeIPs *string = flag.String("ips", "", "Space separated list of IP address
 var coordAddr *string = flag.String("caddr", "", "Coordinator address. Defaults to localhost")
 var coordPort *int = flag.Int("cport", 7097, "Coordinator port. Defaults to 7097.")
 var nShards *int = flag.Int("nshrds", 1, "Number of shards. Defaults to 1.")
+var myShardId *int = flag.Int("shardId", 0, "My shard id. Defaults to 0.")
 
 type Master struct {
 	N              int
@@ -30,6 +31,7 @@ type Master struct {
 	nodeList       []string
 	addrList       []string
 	portList       []int
+	rpcPortList    []int
 	lock           *sync.Mutex
 	nodes          []*rpc.Client
 	leader         []bool
@@ -39,6 +41,7 @@ type Master struct {
 	nConnected     int
 	numShards      int
 	shards         []string
+	shardId		int
 }
 
 func main() {
@@ -63,6 +66,7 @@ func main() {
 		make([]string, *numNodes),
 		make([]string, *numNodes),
 		make([]int, *numNodes),
+		make([]int, *numNodes),
 		new(sync.Mutex),
 		make([]*rpc.Client, *numNodes),
 		make([]bool, *numNodes),
@@ -72,6 +76,7 @@ func main() {
 		0,
 		-1,
 		nil,
+		*myShardId,
 	}
 
 	rpc.Register(master)
@@ -106,7 +111,7 @@ func (master *Master) run() {
 	// connect to SMR servers
 	for i := 0; i < master.N; i++ {
 		var err error
-		addr := fmt.Sprintf("%s:%d", master.addrList[i], master.portList[i]+1000)
+		addr := fmt.Sprintf("%s:%d", master.addrList[i], master.portList[i])
 		master.nodes[i], err = rpc.DialHTTP("tcp", addr)
 		if err != nil {
 			log.Fatalf("Error connecting to replica %d: %v\n", i, err)
@@ -117,7 +122,7 @@ func (master *Master) run() {
 
 	// send the leader to the Coordinator
 	//Needs to be different connection for intershard RPC, so we +100 to leader portnum
-	sendLeaderToCoord(fmt.Sprintf("%s:%d", *coordAddr, *coordPort), fmt.Sprintf("%s:%d", master.addrList[0], master.portList[0]))
+	sendLeaderToCoord(fmt.Sprintf("%s:%d", *coordAddr, *coordPort), fmt.Sprintf("%s:%d", master.addrList[0], master.rpcPortList[0]))
 
 	for true {
 		time.Sleep(3000 * 1000 * 1000)
@@ -157,7 +162,7 @@ func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterprot
 	defer master.lock.Unlock()
 
 	addrPort := fmt.Sprintf("%s:%d", args.Addr, args.Port)
-
+	log.Println("Hi, master getting", addrPort, args.RpcPort)
 	i := master.N + 1
 
 	for index, ap := range master.nodeList {
@@ -187,6 +192,7 @@ func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterprot
 		master.nodeList[i] = addrPort
 		master.addrList[i] = args.Addr
 		master.portList[i] = args.Port
+		master.rpcPortList[i] = args.RpcPort
 		master.connected[i] = true
 		master.nConnected++
 	}
@@ -194,7 +200,11 @@ func (master *Master) Register(args *masterproto.RegisterArgs, reply *masterprot
 	if master.nConnected == master.N {
 		reply.Ready = true
 		reply.ReplicaId = i
-		reply.NodeList = master.nodeList
+		reply.NodeList = make([]string, master.N)
+		for k, p := range master.rpcPortList {
+			reply.NodeList[k] = fmt.Sprintf("%s:%d", master.addrList[k], p)
+		}
+
 	} else {
 		reply.Ready = false
 	}
@@ -284,10 +294,6 @@ func (master *Master) RegisterShards(args *masterproto.RegisterShardsArgs, reply
 
 // Servers --> Master: asking for shards
 func (master *Master) GetShardList(args *masterproto.GetShardListArgs, reply *masterproto.GetShardListReply) error {
-	if *nShards <= 1 {
-		reply.ShardList = nil
-		return nil
-	}
 	for true {
 		master.lock.Lock()
 		if master.shards != nil {
@@ -299,5 +305,6 @@ func (master *Master) GetShardList(args *masterproto.GetShardListArgs, reply *ma
 	}
 
 	reply.ShardList = master.shards
+	reply.ShardId = master.shardId
 	return nil
 }

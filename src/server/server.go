@@ -9,7 +9,6 @@ import (
 	"gpaxos"
 	"gryff"
 	"log"
-	"masterproto"
 	"mdlin"
 	"mencius"
 	"net/rpc"
@@ -44,6 +43,7 @@ var batch = flag.Bool("batch", false, "Enables batching of inter-server messages
 var rpcPort = flag.Int("rpcport", 8070, "Port # for RPC requests. Defaults to 8070")
 var proxy = flag.Bool("proxy", false, "Proxy client requests at nearest replica.")
 var epaxosMode = flag.Bool("epaxosMode", false, "Run Gryff with same message pattern as EPaxos.")
+var numShards = flag.Int("nshards", 1, "Number of shards.")
 
 var statsFile = flag.String("statsFile", "", "Name of file to which stats should be written.")
 var memProfile = flag.String("memProfile", "", "Name of file to which a memory profile should be written.")
@@ -75,7 +75,10 @@ func main() {
 
 	log.Printf("Server starting on port %d\n", *portnum)
 
-	replicaId, nodeList := serverlib.RegisterWithMaster(*myAddr, *portnum, fmt.Sprintf("%s:%d", *masterAddr,
+	// portnum -- used for replica <--> master communication
+	// rpcPort -- used for replica <--> replica AND replica <--> client communication
+	// shardPort -- used for replica (shard leader) <--> replica (shard leader) communication
+	replicaId, nodeList := serverlib.RegisterWithMaster(*myAddr, *portnum, *rpcPort, fmt.Sprintf("%s:%d", *masterAddr,
 		*masterPort))
 
 	log.Printf("Got node list from master: [")
@@ -93,18 +96,7 @@ func main() {
 	var rep Finishable
 	if *doMDLin {
 		log.Println("Starting MD Linearizability replica...")
-		// Get the shards for multi-sharded MD-Lin
-		shards := getShardsFromMaster(fmt.Sprintf("%s:%d", *masterAddr, *masterPort))
-		shardId := 0
-		if shards != nil {
-			for i, e := range shards {
-				if e == fmt.Sprintf("%s:%d", *myAddr, *portnum+100) {
-					shardId = i
-				}
-				log.Printf("-->Shard %d leader at %s", i, e)
-			}
-		}
-		rep = mdlin.NewReplica(replicaId, nodeList, shards, shardId, *thrifty, *exec, *dreply, *durable, *batch, *statsFile)
+		rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *batch, *statsFile, *numShards)
 	} else if *doGryff {
 		log.Println("Starting Gryff replica...")
 		var rmwHandlerType gryff.RMWHandlerType
@@ -148,28 +140,11 @@ func main() {
 	rpc.Register(rep)
 	go catchKill(rep, interrupt)
 
-	serverlib.Serve(*portnum+1000)
+	serverlib.Serve(*portnum) // to listen to master connections?
 }
 
 type Finishable interface {
 	Finish()
-}
-
-func getShardsFromMaster(masterAddr string) []string {
-	var args masterproto.GetShardListArgs
-	var reply masterproto.GetShardListReply
-
-	for done := false; !done; {
-		mcli, err := rpc.DialHTTP("tcp", masterAddr)
-		if err == nil {
-			err = mcli.Call("Master.GetShardList", &args, &reply)
-			if err == nil {
-				done = true
-				break
-			}
-		}
-	}
-	return reply.ShardList
 }
 
 func catchKill(f Finishable, interrupt chan os.Signal) {

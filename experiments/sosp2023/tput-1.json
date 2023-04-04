@@ -1,15 +1,7 @@
 {
   "experiment_independent_vars": [
-    [
-      "replication_protocol",
-      "replication_protocol_settings",
-      "plot_cdf_series_title",
-      "plot_tput_lat_series_title"
-    ],
-    [
-      "client_total",
-      "client_processes_per_client_node"
-    ]
+    ["replication_protocol", "replication_protocol_settings", "plot_cdf_series_title", "plot_tput_lat_series_title"],
+    ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol": [
     "mdl"
@@ -22,9 +14,9 @@
     }
   ],
   "server_names": [
-    "us-east-1-0",
-    "us-east-1-1",
-    "us-east-1-2"
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
   ],
   "num_shards": 1,
   "shards": [
@@ -58,28 +50,24 @@
     ]
   },
   "region_rtt_latencies": {
-    "us-west-1": {
-      "us-west-1": 0,
-      "eu-west-1": 151,
-      "us-east-1": 72
-    },
-    "eu-west-1": {
-      "us-west-1": 151,
-      "eu-west-1": 0,
-      "us-east-1": 88
-    },
-    "us-east-1": {
-      "us-west-1": 72,
-      "eu-west-1": 88,
-      "us-east-1": 0
-    }
+      "us-west-1": {
+        "us-west-1": 0,
+        "eu-west-1": 151,
+        "us-east-1": 72
+      },
+      "eu-west-1": {
+        "us-west-1": 151,
+        "eu-west-1": 0,
+        "us-east-1": 88
+      },
+      "us-east-1": {
+        "us-west-1": 72,
+        "eu-west-1": 88,
+        "us-east-1": 0
+      }
   },
-  "client_total": [
-    2
-  ],
-  "client_processes_per_client_node": [
-    1
-  ],
+  "client_total": [2],
+  "client_processes_per_client_node": [1],
   "client_threads_per_process": 1,
   "client_conflict_percentage": 25,
   "client_write_percentage": 500,
@@ -99,26 +87,13 @@
       "height": 600,
       "width": 800,
       "series_indep_vars_idx": 0,
-      "series_titles": [
-        "Gryff",
-        "EPaxos",
-        "Multi-Paxos"
-      ],
+      "series_titles": ["Gryff", "EPaxos", "Multi-Paxos"],
       "x_var_is_config": false,
-      "x_var": [
-        "run_stats",
-        "combined",
-        "tput",
-        "p50"
-      ],
+      "x_var": ["run_stats", "combined", "tput", "p50"],
       "x_label": "Throughput (ops/s)",
       "y_label": "p50 Latency",
       "x_indep_vars_idx": 1,
-      "y_var": [
-        "aggregate",
-        "combined",
-        "p50"
-      ]
+      "y_var": ["aggregate", "combined", "p50"]
     },
     {
       "name": "tput-lat-p99",
@@ -126,48 +101,31 @@
       "height": 600,
       "width": 800,
       "series_indep_vars_idx": 0,
-      "series_titles": [
-        "Gryff",
-        "EPaxos",
-        "Multi-Paxos"
-      ],
+      "series_titles": ["Gryff", "EPaxos", "Multi-Paxos"],
       "x_var_is_config": false,
-      "x_var": [
-        "run_stats",
-        "combined",
-        "tput",
-        "p50"
-      ],
+      "x_var": ["run_stats", "combined", "tput", "p50"],
       "x_label": "Throughput (ops/s)",
       "y_label": "p50 Latency",
       "x_indep_vars_idx": 1,
-      "y_var": [
-        "aggregate",
-        "combined",
-        "p99"
-      ]
+      "y_var": ["aggregate", "combined", "p99"]
     }
   ],
   "plot_cdf_png_font": "DejaVu Sans,12",
   "plot_cdf_png_height": 600,
   "plot_cdf_png_width": 800,
-  "plot_cdf_series_title": [
-    "MDL"
-  ],
+  "plot_cdf_series_title": ["MDL"],
   "plot_cdf_x_label": "Latency (ms)",
   "plot_cdf_y_label": "Cumulative ratio of operations",
   "plot_directory_name": "plots",
   "plot_tput_lat_png_font": "DejaVu Sans,12",
   "plot_tput_lat_png_height": 600,
   "plot_tput_lat_png_width": 800,
-  "plot_tput_lat_series_title": [
-    "MDL"
-  ],
+  "plot_tput_lat_series_title": ["MDL"],
   "plot_tput_lat_x_label": "Throughput (ops/sec)",
   "plot_tput_lat_y_label": "Latency (ms)",
-  "base_local_exp_directory": "/home/akalaba/git/md/MDLin/experiments/sosp2023/results/tput-3",
+  "base_local_exp_directory": "/users/akalaba/MDLin/experiments/sosp2023/results/tput-3",
   "base_mounted_fs_path": "/mnt/extra",
-  "base_remote_bin_directory_nfs": "/home/akalaba/git/md/MDLin",
+  "base_remote_bin_directory_nfs": "/users/akalaba/MDLin",
   "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
@@ -186,10 +144,10 @@
   "experiment_name": "MDL",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
-  "coordinator_port": 5087,
+  "coordinator_port": 7067,
   "use_masters": true,
   "master_bin_name": "master",
-  "master_port": 6087,
+  "master_port": 7077,
   "max_bandwidth": "10gibps",
   "max_file_descriptors": 65535,
   "max_retries": 0,
@@ -206,11 +164,11 @@
   "server_port": 7087,
   "server_rpc_port": 8087,
   "src_commit_hash": "scripts",
-  "src_directory": "/home/akalaba/git/md/MDLin",
+  "src_directory": "/users/akalaba/MDLin",
   "codebase_name": "mdl",
   "remote_bin_directory_nfs_enabled": false,
   "server_emulate_wan": false,
-  "run_locally": true,
+  "run_locally": false,
   "default_remote_shell": "bash",
   "client_disable_gc": true,
   "server_disable_gc": true
