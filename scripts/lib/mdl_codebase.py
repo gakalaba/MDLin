@@ -68,6 +68,7 @@ class MDLCodebase(ExperimentCodebase):
             '-rmws', config['client_rmw_percentage'],
             '-statsFile', stats_file,
             '-writes', config['client_write_percentage'],
+            '-fanout', config['client_fanout'],
         ]])
         if 'client_cpuprofile' in config and config['client_cpuprofile']:
             client_command += ' -cpuProfile %s' % os.path.join(exp_directory,
