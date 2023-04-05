@@ -41,7 +41,7 @@ type Master struct {
 	nConnected     int
 	numShards      int
 	shards         []string
-	shardId		int
+	shardId		int32
 }
 
 func main() {
@@ -76,7 +76,7 @@ func main() {
 		0,
 		-1,
 		nil,
-		*myShardId,
+		int32(*myShardId),
 	}
 
 	rpc.Register(master)
@@ -121,7 +121,6 @@ func (master *Master) run() {
 	master.leader[0] = true
 
 	// send the leader to the Coordinator
-	//Needs to be different connection for intershard RPC, so we +100 to leader portnum
 	sendLeaderToCoord(fmt.Sprintf("%s:%d", *coordAddr, *coordPort), fmt.Sprintf("%s:%d", master.addrList[0], master.rpcPortList[0]))
 
 	for true {
@@ -286,7 +285,7 @@ func (master *Master) RegisterShards(args *masterproto.RegisterShardsArgs, reply
 		if err != nil {
 			panic("Malformed port")
 		}
-		master.shards[i] = fmt.Sprintf("%s:%d", l[0], p+100)
+		master.shards[i] = fmt.Sprintf("%s:%d", l[0], p)
 		log.Printf("-->Shard %d has leader at %s\n", i, master.shards[i])
 	}
 	return nil

@@ -65,7 +65,7 @@ type Replica struct {
 	Peers        []net.Conn // cache of connections to all other replicas
 	PeerReaders  []*bufio.Reader
 	PeerWriters  []*bufio.Writer
-	ShardId             int
+	ShardId             int32
         ShardAddrList       []string
         Shards              []net.Conn // cache of connections to all other replicas
         ShardReaders        []*bufio.Reader
@@ -326,11 +326,12 @@ func (r *Replica) ConnectToShards() {
 	bs := b[:4]
 	done := make(chan bool)
 
-	go r.waitForShardConnections(done)
+	log.Printf("Shard %v sees shardAddrList as %v", r.ShardId, r.ShardAddrList)
+	//go r.waitForShardConnections(done)
 
 	log.Printf("Beginning to connect to shardLeaders...\n")
 	//connect to shardLeaders
-	for i := 0; i < r.ShardId; i++ {
+	for i := 0; i < int(r.ShardId); i++ {
 		for done := false; !done; {
 			log.Printf("Dialing shardLeader %d with addr %s\n", i,
                                 r.ShardAddrList[i])
@@ -341,19 +342,27 @@ func (r *Replica) ConnectToShards() {
 				time.Sleep(1e9)
 			}
 		}
-		log.Printf("Sending my id %d to shardLeader %d\n", r.Id, i)
-		binary.LittleEndian.PutUint32(bs, uint32(r.ShardId))
-		if _, err := r.Shards[i].Write(bs); err != nil {
+		r.ShardReaders[i] = bufio.NewReader(conn)
+		r.ShardWriters[i] = bufio.NewWriter(conn)
+
+		log.Printf("Sending my id %d to shardLeader %d\n", r.ShardId, i)
+		binary.LittleEndian.PutUint32(bs, 69)
+		//binary.LittleEndian.PutUint32(bs, uint32(r.ShardId))
+		if _, err := r.ShardWriters[i].Write(bs); err != nil {
 			log.Printf("Write id error: %v\n", err)
 			continue
 		}
-		r.ShardReaders[i] = bufio.NewReader(r.Shards[i])
-		r.ShardWriters[i] = bufio.NewWriter(r.Shards[i])
-
-		go r.shardListener(i, r.ShardReaders[i])
+		r.ShardWriters[i].Flush()
 	}
-	<-done
+	//<-done
+	r.waitForShardConnections(done)
 	log.Printf("Shard Leader %d: Done connecting to all shard leaders\n", r.ShardId)
+	for shid, reader := range r.ShardReaders {
+		if int32(shid) == r.ShardId {
+			continue
+		}
+		go r.shardListener(shid, reader)
+	}
 }
 
 func (r *Replica) ConnectToPeersNoListeners() {
@@ -409,7 +418,7 @@ func (r *Replica) waitForPeerConnections(done chan bool) {
 				err)
 			continue
 		}
-		dlog.Printf("Accepted connection from peer %s.\n", conn.RemoteAddr().String())
+		log.Printf("Accepted connection from peer %s.\n", conn.RemoteAddr().String())
 		if n, err := io.ReadFull(conn, bs); err != nil || n != len(bs) {
 			log.Printf("Error reading peer id: %v (%d bytes read)\n", err, n)
 			continue
@@ -435,25 +444,32 @@ func (r *Replica) waitForShardConnections(done chan bool) {
 	var b [4]byte
 	bs := b[:4]
 
-	for i := r.ShardId + 1; i < len(r.ShardAddrList); i++ {
+	for i := r.ShardId + 1; i < int32(len(r.ShardAddrList)); i++ {
 		conn, err := r.Listener.Accept()
 		if err != nil {
-			log.Printf("Error accepting shardLeader connection: %v\n", err)
+			log.Printf("^Error accepting shardLeader connection: %v\n", err)
 			continue
 		}
-		if n, err := io.ReadFull(conn, bs); err != nil {
-			log.Printf("Error reading shardId: %v (%d bytes read)\n", err, n)
+		log.Printf("^Accepted connection from shardLeader %s.\n", conn.RemoteAddr().String())
+		br := bufio.NewReader(conn)
+		bw := bufio.NewWriter(conn)
+
+		if n, err := io.ReadFull(br, bs); err != nil {
+			log.Printf("^Error reading shardId: %v (%d bytes read)\n", err, n)
 			continue
 		}
 		id := int32(binary.LittleEndian.Uint32(bs))
+		if id <= int32(r.ShardId) || id >= int32(len(r.ShardAddrList)) {
+			log.Printf("^Read incorrect shardId %d from connecting shards\n", id)
+		}
+		log.Printf("^ShardLeader sent %d as shardid (%d total shards).\n", id, len(r.Peers))
 		r.Shards[id] = conn
-		r.ShardReaders[id] = bufio.NewReader(conn)
-		r.ShardWriters[id] = bufio.NewWriter(conn)
-
-		go r.shardListener(int(id), r.ShardReaders[id])
+		r.ShardReaders[id] = br
+		r.ShardWriters[id] = bw
+		log.Printf("^Successfully established connection with shardLeader %d\n", id)
 	}
 
-	done <- true
+	//done <- true
 }
 
 /* Client connections dispatcher */

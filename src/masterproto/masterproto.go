@@ -39,6 +39,6 @@ type GetShardListArgs struct {
 }
 
 type GetShardListReply struct {
-	ShardId   int
+	ShardId   int32
 	ShardList []string
 }
