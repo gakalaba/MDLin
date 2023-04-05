@@ -65,6 +65,12 @@ type Replica struct {
 	Peers        []net.Conn // cache of connections to all other replicas
 	PeerReaders  []*bufio.Reader
 	PeerWriters  []*bufio.Writer
+	ShardId             int
+        ShardAddrList       []string
+        Shards              []net.Conn // cache of connections to all other replicas
+        ShardReaders        []*bufio.Reader
+        ShardWriters        []*bufio.Writer
+        //shListener          net.Listener
 	Alive        []bool // connection status
 	Listener     net.Listener
 
@@ -108,7 +114,7 @@ type Replica struct {
 	delayedRPC       []map[uint8]chan fastrpc.Serializable
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool, clientConnect bool, statsFile string) *Replica {
+func NewReplica(id int, peerAddrList []string, numShards int, thrifty bool, exec bool, dreply bool, clientConnect bool, statsFile string) *Replica {
 	r := &Replica{
 		len(peerAddrList),
 		int32(id),
@@ -116,6 +122,11 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
 		make([]net.Conn, len(peerAddrList)),
 		make([]*bufio.Reader, len(peerAddrList)),
 		make([]*bufio.Writer, len(peerAddrList)),
+		0,
+		make([]string, numShards),
+		make([]net.Conn, numShards),
+                make([]*bufio.Reader, numShards),
+                make([]*bufio.Writer, numShards),
 		make([]bool, len(peerAddrList)),
 		nil,
 		state.NewState(),
@@ -266,7 +277,7 @@ func (r *Replica) handlePing(ping *clientproto.Ping, w *bufio.Writer) {
 }
 
 /* ============= */
-
+// Dial up half the peers
 func (r *Replica) ConnectToPeers() {
 	var b [4]byte
 	bs := b[:4]
@@ -309,6 +320,42 @@ func (r *Replica) ConnectToPeers() {
 	}
 }
 
+// Dial up half the shards
+func (r *Replica) ConnectToShards() {
+	var b [4]byte
+	bs := b[:4]
+	done := make(chan bool)
+
+	go r.waitForShardConnections(done)
+
+	log.Printf("Beginning to connect to shardLeaders...\n")
+	//connect to shardLeaders
+	for i := 0; i < r.ShardId; i++ {
+		for done := false; !done; {
+			log.Printf("Dialing shardLeader %d with addr %s\n", i,
+                                r.ShardAddrList[i])
+			if conn, err := net.Dial("tcp", r.ShardAddrList[i]); err == nil {
+				r.Shards[i] = conn
+				done = true
+			} else {
+				time.Sleep(1e9)
+			}
+		}
+		log.Printf("Sending my id %d to shardLeader %d\n", r.Id, i)
+		binary.LittleEndian.PutUint32(bs, uint32(r.ShardId))
+		if _, err := r.Shards[i].Write(bs); err != nil {
+			log.Printf("Write id error: %v\n", err)
+			continue
+		}
+		r.ShardReaders[i] = bufio.NewReader(r.Shards[i])
+		r.ShardWriters[i] = bufio.NewWriter(r.Shards[i])
+
+		go r.shardListener(i, r.ShardReaders[i])
+	}
+	<-done
+	log.Printf("Shard Leader %d: Done connecting to all shard leaders\n", r.ShardId)
+}
+
 func (r *Replica) ConnectToPeersNoListeners() {
 	var b [4]byte
 	bs := b[:4]
@@ -341,6 +388,7 @@ func (r *Replica) ConnectToPeersNoListeners() {
 }
 
 /* Peer (replica) connections dispatcher */
+// Listen for half the peers
 func (r *Replica) waitForPeerConnections(done chan bool) {
 	var b [4]byte
 	bs := b[:4]
@@ -381,6 +429,33 @@ func (r *Replica) waitForPeerConnections(done chan bool) {
 	done <- true
 }
 
+/* Shard leader (replica) connections dispatcher */
+// Listen for half the shards
+func (r *Replica) waitForShardConnections(done chan bool) {
+	var b [4]byte
+	bs := b[:4]
+
+	for i := r.ShardId + 1; i < len(r.ShardAddrList); i++ {
+		conn, err := r.Listener.Accept()
+		if err != nil {
+			log.Printf("Error accepting shardLeader connection: %v\n", err)
+			continue
+		}
+		if n, err := io.ReadFull(conn, bs); err != nil {
+			log.Printf("Error reading shardId: %v (%d bytes read)\n", err, n)
+			continue
+		}
+		id := int32(binary.LittleEndian.Uint32(bs))
+		r.Shards[id] = conn
+		r.ShardReaders[id] = bufio.NewReader(conn)
+		r.ShardWriters[id] = bufio.NewWriter(conn)
+
+		go r.shardListener(int(id), r.ShardReaders[id])
+	}
+
+	done <- true
+}
+
 /* Client connections dispatcher */
 func (r *Replica) WaitForClientConnections() {
 	// NOTE: all peers must be connected before clients begin attempting to connect
@@ -401,6 +476,7 @@ func (r *Replica) WaitForClientConnections() {
 	}
 }
 
+// Listen for replica traffic
 func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 	var msgType uint8
 	var err error = nil
@@ -453,10 +529,30 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 	}
 }
 
-func (r *Replica) NeedsWaitForExecute(cmd *state.Command) bool {
-	return r.Dreply && !cmd.CanReplyWithoutExecute()
+// Listen for shard traffic
+func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
+	var msgType uint8
+	var err error = nil
+
+	for err == nil && !r.Shutdown {
+		if msgType, err = reader.ReadByte(); err != nil { // received a SendMsg(code)
+			break
+		}
+		if rpair, present := r.rpcTable[msgType]; present {
+			obj := rpair.Obj.New()
+                        if err = obj.Unmarshal(reader); err != nil {
+				break
+                        }
+                        dlog.Printf("[%d] Done unmarshaling message with op %d from replica %d.\n", r.Id, msgType, rid)
+                        rpair.Chan <- obj
+                        r.Stats.Max(fmt.Sprintf("server_rpc_%d_chan_length", msgType), len(rpair.Chan))
+		} else {
+			log.Printf("Error: received unknown message type %d between shards (at shard %v).\n", msgType, r.ShardId)
+                }
+	}
 }
 
+// Listen for client traffic
 func (r *Replica) clientListener(conn net.Conn) {
 	var err error
 	reader := bufio.NewReader(conn)
@@ -555,6 +651,11 @@ func (r *Replica) clientListener(conn net.Conn) {
 	}
 }
 
+func (r *Replica) NeedsWaitForExecute(cmd *state.Command) bool {
+	return r.Dreply && !cmd.CanReplyWithoutExecute()
+}
+/* ============= */
+
 func (r *Replica) RegisterRPC(msgObj fastrpc.Serializable, notify chan fastrpc.Serializable) uint8 {
 	code := r.rpcCode
 	r.rpcCode++
@@ -564,6 +665,17 @@ func (r *Replica) RegisterRPC(msgObj fastrpc.Serializable, notify chan fastrpc.S
 
 func (r *Replica) RegisterClientRPC(msgObj fastrpc.Serializable, opCode uint8, notify chan *ClientRPC) {
 	r.clientRpcTable[opCode] = &ClientRPCPair{msgObj, notify}
+}
+
+func (r *Replica) SendISMsg(leaderId int32, code uint8, msg fastrpc.Serializable) {
+	if r.ShouldDelayNextRPC(int(leaderId), code) {
+		r.delayedRPC[leaderId][code] <- msg
+	} else {
+		w := r.ShardWriters[leaderId]
+		w.WriteByte(code)
+		msg.Marshal(w)
+		w.Flush()
+	}
 }
 
 func (r *Replica) SendMsg(peerId int32, code uint8, msg fastrpc.Serializable) {

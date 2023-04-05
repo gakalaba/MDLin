@@ -129,7 +129,8 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool,
 		dreply bool, beacon bool, durable bool, statsFile string,
 		noConflicts bool) *Replica {
 	r := &Replica{
-		genericsmr.NewReplica(id, peerAddrList, thrifty, exec, dreply, true,
+		// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
+		genericsmr.NewReplica(id, peerAddrList, 0, thrifty, exec, dreply, true,
 				statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),

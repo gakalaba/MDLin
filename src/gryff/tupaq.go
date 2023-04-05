@@ -96,7 +96,8 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool,
     dreply bool, beacon bool, durable bool, statsFile string, regular bool,
     proxy bool, noConflicts bool, epaxosMode bool, rmwHandler RMWHandlerType,
     shortcircuitTime int, fastOverwriteTime int, forceWritePeriod int, broadcastOptimizationEnabled bool) *Replica {
-  r := &Replica{genericsmr.NewReplica(id, peerAddrList, thrifty, exec, dreply,
+  // Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
+  r := &Replica{genericsmr.NewReplica(id, peerAddrList, 0, thrifty, exec, dreply,
       false, statsFile),
     nil,                                                // parti
     nil,                                                // coord

@@ -1,7 +1,6 @@
 package mdlin
 
 import (
-	"bufio"
 	"encoding/binary"
 	"fastrpc"
 	"fmt"
@@ -11,9 +10,7 @@ import (
 	"log"
 	"mdlinproto"
 	"mysort"
-	"net"
 	"state"
-	"sync"
 	"time"
   "container/list"
   	"masterproto"
@@ -73,13 +70,13 @@ type Replica struct {
   finalAcceptRPC        uint8
   finalAcceptReplyRPC   uint8
 	// Add these for multi-sharded multi-dispatch
-	shardId             int
-	shardAddrList       []string
-	shards              []net.Conn // cache of connections to all other replicas
-	shardReaders        []*bufio.Reader
-	shardWriters        []*bufio.Writer
-	shListener          net.Listener
-	buflock             *sync.Mutex
+	//shardId             int
+	//shardAddrList       []string
+	//shards              []net.Conn // cache of connections to all other replicas
+	//shardReaders        []*bufio.Reader
+	//shardWriters        []*bufio.Writer
+	//shListener          net.Listener
+	//buflock             *sync.Mutex new(sync.Mutex)
 
   bufferedLog         *list.List  // the unordered requests LINKED LIST
   coordReqReplyChan   chan fastrpc.Serializable
@@ -133,7 +130,7 @@ func tagtostring(t mdlinproto.Tag) string {
 func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int,
 	thrifty bool, exec bool, dreply bool, durable bool, batch bool, statsFile string, numShards int) *Replica {
 	r := &Replica{
-		genericsmr.NewReplica(id, peerAddrList, thrifty, exec, dreply, false, statsFile),
+		genericsmr.NewReplica(id, peerAddrList, numShards, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -156,14 +153,6 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
     make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
     make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
     0, 0,
-		-1,
-		make([]string, 0),
-		make([]net.Conn, numShards),
-		make([]*bufio.Reader, numShards),
-		make([]*bufio.Writer, numShards),
-		nil,
-		new(sync.Mutex),
-
     list.New(),
     make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
     0,
@@ -184,13 +173,10 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
   r.finalAcceptReplyRPC = r.RegisterRPC(new(mdlinproto.FinalAcceptReply), r.finalAcceptReplyChan)
   	r.coordResponseRPC = r.RegisterRPC(new(mdlinproto.CoordinationResponse), r.coordReqReplyChan)
 
-  	//go r.waitForShards(masterAddr, masterPort)
-
-	go r.run()
+	go r.run(masterAddr, masterPort)
 
 	return r
 }
-
 
 func (r *Replica) getShardsFromMaster(masterAddr string) []string {
 	var args masterproto.GetShardListArgs
@@ -206,130 +192,20 @@ func (r *Replica) getShardsFromMaster(masterAddr string) []string {
 			}
 		}
 	}
-	r.shardAddrList = reply.ShardList
-	r.shardId = reply.ShardId
+	r.ShardAddrList = reply.ShardList
+	r.ShardId = reply.ShardId
 	return reply.ShardList
 }
 
-func (r *Replica) waitForShards(masterAddr string, masterPort int) {
+func (r *Replica) setupShards(masterAddr string, masterPort int) {
+	if !r.IsLeader {
+		return
+	}
 	// Get the shards for multi-sharded MD-Lin
 	r.getShardsFromMaster(fmt.Sprintf("%s:%d", masterAddr, masterPort))
 
-	log.Printf("-->Shard %d leader is ready!", r.shardId)
-	r.connectToShards()
-}
-
-// TODO remove this
-func (r *Replica) connectToShards() {
-	var b [4]byte
-	bs := b[:4]
-	done := make(chan bool)
-
-	go r.waitForShardConnections(done)
-
-	//connect to peers
-	for i := 0; i < r.shardId; i++ {
-		for done := false; !done; {
-			if conn, err := net.Dial("tcp", r.shardAddrList[i]); err == nil {
-				r.shards[i] = conn
-				done = true
-			} else {
-				time.Sleep(1e9)
-			}
-		}
-		binary.LittleEndian.PutUint32(bs, uint32(r.shardId))
-		if _, err := r.shards[i].Write(bs); err != nil {
-			NewPrintf(LEVEL0, "Write id error: %v", err)
-			continue
-		}
-		r.shardReaders[i] = bufio.NewReader(r.shards[i])
-		r.shardWriters[i] = bufio.NewWriter(r.shards[i])
-
-		go r.shardListener(i, r.shardReaders[i])
-	}
-	<-done
-	NewPrintf(LEVEL0, "Shard Leader %d: Done connecting to all shard leaders\n", r.shardId)
-}
-
-/* Peer (replica) connections dispatcher */
-func (r *Replica) waitForShardConnections(done chan bool) {
-	var b [4]byte
-	bs := b[:4]
-
-	var sherr error
-  if len(r.shardAddrList) == 0 {
-    done <- true
-    return
-  }
-	r.shListener, sherr = net.Listen("tcp", r.shardAddrList[r.shardId])
-	if sherr != nil {
-		panic(sherr)
-	}
-	for i := r.shardId + 1; i < len(r.shardAddrList); i++ {
-		conn, err := r.shListener.Accept()
-		if err != nil {
-			NewPrintf(LEVEL0, "Accept error: %v", err)
-			continue
-		}
-		if _, err := io.ReadFull(conn, bs); err != nil {
-			NewPrintf(LEVEL0, "Connection establish error: %v", err)
-			continue
-		}
-		id := int32(binary.LittleEndian.Uint32(bs))
-		r.shards[id] = conn
-		r.shardReaders[id] = bufio.NewReader(conn)
-		r.shardWriters[id] = bufio.NewWriter(conn)
-
-		go r.shardListener(int(id), r.shardReaders[id])
-	}
-
-	done <- true
-}
-
-func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
-	var msgType uint8
-	var err error = nil
-
-	for err == nil && !r.Shutdown {
-
-		if msgType, err = reader.ReadByte(); err != nil { // received a SendMsg(code)
-			break
-		}
-
-		switch uint8(msgType) {
-
-		case mdlinproto.COORDREQ_REPLY:
-			CRR := new(mdlinproto.CoordinationResponse)
-			if err = CRR.Unmarshal(reader); err != nil {
-				break
-			}
-			// r.interShardChan <- &genericsmr.RPCMessage{intershard, 0, int64(rid)}
-			r.coordReqReplyChan <- fastrpc.Serializable(CRR)
-			break
-
-		default:
-			panic("mdlin ERROR: received unknown message type")
-		}
-	}
-}
-
-// leaderId is the ID of the leader this message is being sent TO. it's an index
-// msg is the actual message being sent of mdlinproto.InterShard* type
-func (r *Replica) sendCoordResp(leaderId int32, msg fastrpc.Serializable) {
-	r.buflock.Lock()
-	defer r.buflock.Unlock()
-
-  NewPrintf(LEVEL0, "sending to %v, we are r.shardId = %v and r.Id = %v", leaderId, r.shardId, r.Id)
-	if leaderId != int32(r.shardId) {
-		w := r.shardWriters[leaderId]
-		w.WriteByte(mdlinproto.COORDREQ_REPLY) // to tell what kind of message this is
-		msg.Marshal(w) // marshall the message and send it into the w bufio object
-		w.Flush()
-	} else {
-		NewPrintf(LEVELALL, "SENDING MESSAGE TO SELF!!!!")
-		// r.interShardChan <- &genericsmr.RPCMessage{msg, 0, int64(leaderId)}
-		r.coordReqReplyChan <- msg
-	}
+	log.Printf("-->Shard %d leader is ready!", r.ShardId)
+	r.ConnectToShards()
 }
 
 // append a log entry to stable storage
@@ -386,11 +262,13 @@ func (r *Replica) replyAccept(replicaId int32, reply *mdlinproto.AcceptReply) {
 	r.SendMsg(replicaId, r.acceptReplyRPC, reply)
 }
 
+// leaderId is the ID of the leader this message is being sent TO. it's an index
+// msg is the actual message being sent of mdlinproto.InterShard* type
 func (r *Replica) replyCoord(replicaId int32, reply *mdlinproto.CoordinationResponse) {
-	if replicaId == int32(r.shardId) {
+	if replicaId == int32(r.ShardId) {
 		r.coordReqReplyChan <- reply
 	} else {
-		r.SendMsg(replicaId, r.coordResponseRPC, reply)
+		r.SendISMsg(replicaId, r.coordResponseRPC, reply)
 	}
 }
 
@@ -407,22 +285,16 @@ func (r *Replica) clock() {
 
 /* Main event processing loop */
 
-func (r *Replica) run() {
-
-	r.ConnectToPeers()
-
-	go r.WaitForClientConnections()
-
-	go r.executeCommands()
-
+func (r *Replica) run(masterAddr string, masterPort int) {
 	if r.Id == 0 {
 		r.IsLeader = true
 		NewPrintf(LEVEL0, "I'm the leader")
 	}
+	r.ConnectToPeers()
+	r.setupShards(masterAddr, masterPort)
+	go r.WaitForClientConnections()
 
-	//if (r.shardId > -1) && (r.shards != nil) && r.IsLeader {
-	//	r.connectToShards()
-	//}
+	go r.executeCommands()
 
 	clockChan = make(chan bool, 1)
 	if r.batchingEnabled {
@@ -1010,7 +882,7 @@ func copyMap(map1 map[int64]int64, map2 map[int64]int64) {
 
 func (r *Replica) resolveShardFromKey(k state.Key) int32 {
 	// Return the shardId of the shard that is responsible for this key
-	return int32(state.KeyModulo(k, len(r.shards)))
+	return int32(state.KeyModulo(k, len(r.Shards)))
 }
 
 func (r *Replica) findEntry(tag mdlinproto.Tag) (*Instance, int, int32) {
@@ -1046,7 +918,7 @@ func (r *Replica) findEntry(tag mdlinproto.Tag) (*Instance, int, int32) {
 //
 // If it is not both, then we should indicate that it will be waiting for those
 // flags to get set, in either the handleAcceptReply or handleCoordinationRReply
-// methods, both of which can then issue the sendCoordResp messages to the asker shard.
+// methods, both of which can then issue the replyCoord messages to the asker shard.
 func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
   NewPrintf(LEVEL0, "##########Received coord req for %v", cr.AskeeTag)
   e, _, _ := r.findEntry(cr.AskeeTag)
@@ -1066,14 +938,13 @@ func (r *Replica) checkCoordination(e *Instance) {
   committed := (e.lb.acceptOKs+1) > (r.N>>1)
   shardTo := e.cr.From
   if (coord == 1 && committed) {
-    msg := &mdlinproto.CoordinationResponse{e.cr.AskerTag, e.cr.AskeeTag, int32(r.shardId), 1}
-    r.sendCoordResp(shardTo, msg)
+    msg := &mdlinproto.CoordinationResponse{e.cr.AskerTag, e.cr.AskeeTag, int32(r.ShardId), 1}
+    r.replyCoord(shardTo, msg)
   } else if (coord == 0) {
     // Fail the remaining chain of outstanding requests from this client
     NewPrintf(LEVEL0, "     FAILING THIS INSTANCE COORD")
-    msg := &mdlinproto.CoordinationResponse{e.cr.AskerTag, e.cr.AskeeTag, int32(r.shardId), 0}
+    msg := &mdlinproto.CoordinationResponse{e.cr.AskerTag, e.cr.AskeeTag, int32(r.ShardId), 0}
     r.replyCoord(shardTo, msg)
-    r.sendCoordResp(shardTo, msg)
   }
 }
 

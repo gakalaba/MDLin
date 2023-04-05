@@ -30,7 +30,8 @@ type Replica struct {
 }
 
 func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool, durable bool, statsFile string) *Replica {
-  r := &Replica{genericsmr.NewReplica(id, peerAddrList, thrifty, exec, dreply, false, statsFile),
+	// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
+  r := &Replica{genericsmr.NewReplica(id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
     make(map[state.Key]abdproto.Timestamp), 
     make(chan *genericsmr.ClientRPC, genericsmr.CHAN_BUFFER_SIZE),
     make(chan *genericsmr.ClientRPC, genericsmr.CHAN_BUFFER_SIZE),
