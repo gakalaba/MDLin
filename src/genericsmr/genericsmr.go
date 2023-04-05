@@ -342,8 +342,8 @@ func (r *Replica) ConnectToShards() {
 				time.Sleep(1e9)
 			}
 		}
-		r.ShardReaders[i] = bufio.NewReader(conn)
-		r.ShardWriters[i] = bufio.NewWriter(conn)
+		r.ShardReaders[i] = bufio.NewReader(r.Shards[i])
+		r.ShardWriters[i] = bufio.NewWriter(r.Shards[i])
 
 		log.Printf("Sending my id %d to shardLeader %d\n", r.ShardId, i)
 		binary.LittleEndian.PutUint32(bs, 69)
