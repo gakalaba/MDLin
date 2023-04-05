@@ -601,6 +601,8 @@ def run_experiment(config_file, client_config_idx, executor):
             if not servers_alive:
                 sys.stderr.write('Failed to start all servers.\n')
                 raise
+            print("Waiting {} seconds for servers to finish setup".format(5))
+            time.sleep(5)
             client_threads = start_clients(config, local_exp_directory,
                                            remote_exp_directory, i)
             wait_for_clients_to_terminate(config, client_threads)
