@@ -326,8 +326,8 @@ func (r *Replica) ConnectToShards() {
 	bs := b[:4]
 	done := make(chan bool)
 
-	log.Printf("Shard %v sees shardAddrList as %v", r.ShardId, r.ShardAddrList)
-	//go r.waitForShardConnections(done)
+	//log.Printf("Shard %v sees shardAddrList as %v", r.ShardId, r.ShardAddrList)
+	go r.waitForShardConnections(done)
 
 	log.Printf("Beginning to connect to shardLeaders...\n")
 	//connect to shardLeaders
@@ -346,16 +346,14 @@ func (r *Replica) ConnectToShards() {
 		r.ShardWriters[i] = bufio.NewWriter(r.Shards[i])
 
 		log.Printf("Sending my id %d to shardLeader %d\n", r.ShardId, i)
-		binary.LittleEndian.PutUint32(bs, 69)
-		//binary.LittleEndian.PutUint32(bs, uint32(r.ShardId))
+		binary.LittleEndian.PutUint32(bs, uint32(r.ShardId))
 		if _, err := r.ShardWriters[i].Write(bs); err != nil {
 			log.Printf("Write id error: %v\n", err)
 			continue
 		}
 		r.ShardWriters[i].Flush()
 	}
-	//<-done
-	r.waitForShardConnections(done)
+	<-done
 	log.Printf("Shard Leader %d: Done connecting to all shard leaders\n", r.ShardId)
 	for shid, reader := range r.ShardReaders {
 		if int32(shid) == r.ShardId {
@@ -447,29 +445,28 @@ func (r *Replica) waitForShardConnections(done chan bool) {
 	for i := r.ShardId + 1; i < int32(len(r.ShardAddrList)); i++ {
 		conn, err := r.Listener.Accept()
 		if err != nil {
-			log.Printf("^Error accepting shardLeader connection: %v\n", err)
+			log.Printf("Error accepting shardLeader connection: %v\n", err)
 			continue
 		}
-		log.Printf("^Accepted connection from shardLeader %s.\n", conn.RemoteAddr().String())
+		log.Printf("Accepted connection from shardLeader %s.\n", conn.RemoteAddr().String())
 		br := bufio.NewReader(conn)
 		bw := bufio.NewWriter(conn)
 
 		if n, err := io.ReadFull(br, bs); err != nil {
-			log.Printf("^Error reading shardId: %v (%d bytes read)\n", err, n)
+			log.Printf("Error reading shardId: %v (%d bytes read)\n", err, n)
 			continue
 		}
 		id := int32(binary.LittleEndian.Uint32(bs))
 		if id <= int32(r.ShardId) || id >= int32(len(r.ShardAddrList)) {
-			log.Printf("^Read incorrect shardId %d from connecting shards\n", id)
+			log.Fatalf("Read incorrect shardId %d from connecting shards\n", id)
 		}
-		log.Printf("^ShardLeader sent %d as shardid (%d total shards).\n", id, len(r.Peers))
 		r.Shards[id] = conn
 		r.ShardReaders[id] = br
 		r.ShardWriters[id] = bw
-		log.Printf("^Successfully established connection with shardLeader %d\n", id)
+		log.Printf("Successfully established connection with shardLeader %d\n", id)
 	}
 
-	//done <- true
+	done <- true
 }
 
 /* Client connections dispatcher */

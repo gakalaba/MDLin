@@ -27,3 +27,9 @@ type GetShardLeaderListReply struct {
 
 type RegisterKeyspaceReply struct {
 }
+
+type ThisShardConnectedArgs struct {
+}
+
+type ThisShardConnectedReply struct {
+}

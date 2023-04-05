@@ -206,6 +206,24 @@ func (r *Replica) setupShards(masterAddr string, masterPort int) {
 
 	log.Printf("-->Shard %d leader is ready!", r.ShardId)
 	r.ConnectToShards()
+
+	var args masterproto.ShardReadyArgs
+	var reply masterproto.ShardReadyReply
+
+	for done := false; !done; {
+                mcli, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", masterAddr, masterPort))
+                if err == nil {
+                        err = mcli.Call("Master.ShardReady", &args, &reply)
+                        if err == nil {
+                                done = true
+                                break
+                        } else {
+				log.Printf("%v", err)
+			}
+                } else {
+			log.Printf("%v", err)
+		}
+        }
 }
 
 // append a log entry to stable storage

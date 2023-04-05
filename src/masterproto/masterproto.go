@@ -42,3 +42,9 @@ type GetShardListReply struct {
 	ShardId   int32
 	ShardList []string
 }
+
+type ShardReadyArgs struct {
+}
+
+type ShardReadyReply struct {
+}

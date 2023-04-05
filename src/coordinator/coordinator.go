@@ -30,6 +30,7 @@ type Coordinator struct {
 	connected        []bool
 	nConnected       int
 	leadersConnected int
+	shardsConnected int
 }
 
 func main() {
@@ -58,6 +59,7 @@ func main() {
 		make([]string, *nShards),
 		ips,
 		make([]bool, *nShards),
+		0,
 		0,
 		0,
 	}
@@ -204,7 +206,8 @@ func (coordinator *Coordinator) sendShardsToMasters() error {
 func (coordinator *Coordinator) GetShardLeaderList(args *coordinatorproto.GetShardLeaderListArgs, reply *coordinatorproto.GetShardLeaderListReply) error {
 	for true {
 		coordinator.lock.Lock()
-		if coordinator.leadersConnected == coordinator.numShards {
+		ready := coordinator.shardsConnected == coordinator.numShards
+		if coordinator.leadersConnected == coordinator.numShards && ready {
 			coordinator.lock.Unlock()
 			break
 		}
@@ -213,5 +216,14 @@ func (coordinator *Coordinator) GetShardLeaderList(args *coordinatorproto.GetSha
 	}
 
 	reply.LeaderList = coordinator.shardLeaders
+	return nil
+}
+
+// Master --> Coordinator
+func (coordinator *Coordinator) ThisShardConnected(args *coordinatorproto.ThisShardConnectedArgs, reply *coordinatorproto.ThisShardConnectedReply) error {
+	log.Println("Coordinator got notified of shard connection made!")
+	coordinator.lock.Lock()
+	coordinator.shardsConnected++
+	coordinator.lock.Unlock()
 	return nil
 }

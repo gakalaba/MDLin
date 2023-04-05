@@ -307,3 +307,14 @@ func (master *Master) GetShardList(args *masterproto.GetShardListArgs, reply *ma
 	reply.ShardId = master.shardId
 	return nil
 }
+
+// Servers --> Master: notifying they've connnected to all shards
+func (master *Master) ShardReady(args *masterproto.ShardReadyArgs, reply *masterproto.ShardReadyReply) error {
+	log.Printf("Master got notified by leader it's ready!")
+	margs := &coordinatorproto.ThisShardConnectedArgs{}
+        var mreply coordinatorproto.ThisShardConnectedReply
+
+        ccli, _ := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", *coordAddr, *coordPort))
+        ccli.Call("Coordinator.ThisShardConnected", margs, &mreply)
+	return nil
+}
