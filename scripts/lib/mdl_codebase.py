@@ -185,7 +185,8 @@ class MDLCodebase(ExperimentCodebase):
             '-maddr', master_host,
             '-mport', master_port,
             '-statsFile', stats_file,
-            '-nshards', config['num_shards']
+            '-nshards', config['num_shards'],
+            '-epoch', config['server_epoch']
             ]])
         replica_command += self.get_replication_protocol_arg_from_name(config['replication_protocol'])
         if 'proxy_operations' in config['replication_protocol_settings'] and config['replication_protocol_settings']['proxy_operations']:

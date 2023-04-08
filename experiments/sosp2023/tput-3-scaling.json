@@ -1,6 +1,7 @@
 {
   "experiment_independent_vars": [
     ["replication_protocol", "replication_protocol_settings", "plot_cdf_series_title", "plot_tput_lat_series_title"],
+    ["client_fanout"],
     ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol": [
@@ -83,7 +84,8 @@
   "client_write_percentage": 500,
   "client_read_percentage": 500,
   "client_rmw_percentage": 0,
-  "client_fanout": 2,
+  "client_fanout": [1, 2, 4, 8, 16],
+  "server_epoch": 500,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,
