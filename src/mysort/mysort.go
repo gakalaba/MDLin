@@ -81,7 +81,7 @@ func MergeSort(a []*genericsmr.MDLPropose) {
 	}
 }
 
-func mergeSecond(a []int32, b []state.Command, start1 int, start2 int, end int) {
+func mergeSecond(a []int64, b []state.Command, start1 int, start2 int, end int) {
 	index1 := start1
 	index2 := start2
 	length := end - start1
@@ -100,7 +100,7 @@ func mergeSecond(a []int32, b []state.Command, start1 int, start2 int, end int) 
 	}
 }
 
-func PredSort(a []int32, b []state.Command) {
+func EpochSort(a []int64, b []state.Command) {
   if (len(a) != len(b)) {
     panic("Cannot sort command list based on predecessor list of different length")
   }

@@ -23,7 +23,6 @@ type Propose struct {
 	SeqNo     int64 // Add these for multidispatch
 	PID       int64
   Predecessor Tag
-  PredSize  int32
 }
 
 type ProposeReply struct {
@@ -53,9 +52,8 @@ type Accept struct {
 	Command      []state.Command
   PIDs         int64
 	SeqNos       int64
-  PredSize     int32
 	ExpectedSeqs map[int64]int64
-  Epoch        int32
+  Epoch        int64
 }
 
 type AcceptReply struct {
@@ -70,7 +68,7 @@ type FinalAccept struct {
   Ballot    int32
   CmdTags   []Tag
   ExpectedSeqs  map[int64]int64
-  Epoch     int32
+  EpochSize []int64
 }
 
 type FinalAcceptReply struct {
@@ -87,7 +85,7 @@ type Commit struct {
 	PIDs      int64
 	SeqNos    int64
 	Status    uint8
-  PredSize  []int32
+  EpochSize []int64
 }
 
 type CommitShort struct {
@@ -108,6 +106,7 @@ type CoordinationRequest struct {
 type CoordinationResponse struct {
 	AskerTag        Tag
 	AskeeTag        Tag
+  AskeeEpoch      int64
 	From            int32
   OK              uint8
 }

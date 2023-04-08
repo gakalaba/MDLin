@@ -55,7 +55,6 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		}
 		// Assign the sequence number and batch dependencies for this request
 		c.setSeqno(c.seqnos[l])
-    c.setPredSize(int32(i))
     if (i == 0) {
       c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
     } else {
@@ -64,7 +63,6 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		if opType == state.GET {
       if (readPrefix) {
         c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
-        c.setPredSize(0) // reads should just be sorted based on arrival order in the epoch
       }
 			c.Read(k)
 		} else if opType == state.PUT {
@@ -105,7 +103,7 @@ func (c *MDLClient) Write(key int64, value int64) bool {
 	c.opCount++
 	c.preparePropose(commandId, key, value)
 	c.propose.Command.Op = state.PUT
-  dlog.Println(fmt.Sprintf("Propose{CommandId %v, Command %v, Timestamp %v, SeqNo %v, PID %v, Predecessor %v, PredSize %v}", c.propose.CommandId, c.propose.Command, c.propose.Timestamp, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, c.propose.PredSize))
+  dlog.Println(fmt.Sprintf("Propose{CommandId %v, Command %v, Timestamp %v, SeqNo %v, PID %v, Predecessor %v, PredSize %v}", c.propose.CommandId, c.propose.Command, c.propose.Timestamp, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor))
 	c.sendPropose()
 	return true
 }
@@ -131,13 +129,9 @@ func (c *MDLClient) setSeqno(seqno int64) {
 	c.propose.SeqNo = seqno
 }
 
-func (c *MDLClient) setPredSize(n int32) {
-  c.propose.PredSize = n
-}
-
 func (c *MDLClient) sendPropose() {
 	shard := c.GetShardFromKey(c.propose.Command.K)
-  dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, Command %v, Timestamp %v, SeqNo %v, PID %v, Predecessor %v, PredSize %v}", shard, c.propose.CommandId, c.propose.Command, c.propose.Timestamp, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, c.propose.PredSize))
+  dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, Command %v, Timestamp %v, SeqNo %v, PID %v, Predecessor %v, PredSize %v}", shard, c.propose.CommandId, c.propose.Command, c.propose.Timestamp, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor))
 
 	c.writers[shard].WriteByte(clientproto.MDL_PROPOSE)
 	c.propose.Marshal(c.writers[shard])
