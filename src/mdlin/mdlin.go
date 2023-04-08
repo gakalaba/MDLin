@@ -30,7 +30,6 @@ const DEBUG_LEVEL = 0
 const LEVEL0 = 0
 const LEVELALL = 1
 
-const EPOCH = 1000
 const MAX_EPOCHS = 3
 
 func NewPrintf(level int, str ...interface{}) {
@@ -86,6 +85,7 @@ type Replica struct {
   outstandingCRR      map[mdlinproto.Tag]*mdlinproto.CoordinationResponse
 
   timer               *time.Timer
+  epochlen            int
   epoch               int64
 }
 
@@ -127,8 +127,8 @@ func tagtostring(t mdlinproto.Tag) string {
 	return fmt.Sprintf("Tag = K(%d).PID(%d).SeqNo(%d)", t.K, t.PID, t.SeqNo)
 }
 
-func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int,
-	thrifty bool, exec bool, dreply bool, durable bool, batch bool, statsFile string, numShards int) *Replica {
+func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
+	exec bool, dreply bool, durable bool, batch bool, statsFile string, numShards int, epochLength int) *Replica {
 	r := &Replica{
 		genericsmr.NewReplica(id, peerAddrList, numShards, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -158,7 +158,8 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
     0,
     make(map[mdlinproto.Tag]*genericsmr.MDLCoordReq),
     make(map[mdlinproto.Tag]*mdlinproto.CoordinationResponse),
-    time.NewTimer(EPOCH * time.Millisecond),
+    time.NewTimer(time.Duration(epochLength) * time.Millisecond),
+    epochLength,
     0}
 
 	r.Durable = durable
@@ -333,7 +334,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
       // The epoch has completed, so now we need to do processing
       NewPrintf(LEVEL0, "---------END OF EPOCH-------")
       r.processEpoch()
-      r.timer.Reset(EPOCH * time.Second)
+      r.timer.Reset(time.Duration(r.epochlen) * time.Millisecond)
       break
 
 		case <-clockChan:

@@ -44,6 +44,7 @@ var rpcPort = flag.Int("rpcport", 8070, "Port # for RPC requests. Defaults to 80
 var proxy = flag.Bool("proxy", false, "Proxy client requests at nearest replica.")
 var epaxosMode = flag.Bool("epaxosMode", false, "Run Gryff with same message pattern as EPaxos.")
 var numShards = flag.Int("nshards", 1, "Number of shards.")
+var epochLength = flag.Int("epoch", 500, "Length between epochs")
 
 var statsFile = flag.String("statsFile", "", "Name of file to which stats should be written.")
 var memProfile = flag.String("memProfile", "", "Name of file to which a memory profile should be written.")
@@ -96,7 +97,7 @@ func main() {
 	var rep Finishable
 	if *doMDLin {
 		log.Println("Starting MD Linearizability replica...")
-		rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *batch, *statsFile, *numShards)
+		rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *batch, *statsFile, *numShards, *epochLength)
 	} else if *doGryff {
 		log.Println("Starting Gryff replica...")
 		var rmwHandlerType gryff.RMWHandlerType
