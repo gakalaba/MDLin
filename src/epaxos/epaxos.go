@@ -14,6 +14,9 @@ import (
 	"state"
 	"sync"
 	"time"
+  "net/rpc"
+  "fmt"
+  "masterproto"
 )
 
 const MAX_DEPTH_DEP = 10
@@ -125,8 +128,8 @@ type LeaderBookkeeping struct {
 	depReadTime       []time.Time
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool,
-		dreply bool, beacon bool, durable bool, statsFile string,
+func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
+		exec bool, dreply bool, beacon bool, durable bool, statsFile string,
 		noConflicts bool) *Replica {
 	r := &Replica{
 		// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
@@ -193,7 +196,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool,
 	r.tryPreAcceptRPC = r.RegisterRPC(new(epaxosproto.TryPreAccept), r.tryPreAcceptChan)
 	r.tryPreAcceptReplyRPC = r.RegisterRPC(new(epaxosproto.TryPreAcceptReply), r.tryPreAcceptReplyChan)
 
-	go r.run()
+	go r.run(masterAddr, masterPort)
 
 	return r
 }
@@ -258,24 +261,24 @@ var conflicted, weird, slow, happy int
    Main event processing loop      *
 ************************************/
 
-func (r *Replica) run() {
+func (r *Replica) run(masterAddr string, masterPort int) {
 	r.ConnectToPeers()
-
-	dlog.Println("Waiting for client connections")
-
-	go r.WaitForClientConnections()
-
-	if r.Exec {
-		go r.executeCommands()
-	}
-
-	if r.Id == 0 {
+  if r.Id == 0 {
 		//init quorum read lease
 		quorum := make([]int32, r.N/2+1)
 		for i := 0; i <= r.N/2; i++ {
 			quorum[i] = int32(i)
 		}
 		r.UpdatePreferredPeerOrder(quorum)
+	}
+
+  r.setupShards(masterAddr, masterPort)
+	dlog.Println("Waiting for client connections")
+
+	go r.WaitForClientConnections()
+
+	if r.Exec {
+		go r.executeCommands()
 	}
 
 	slowClockChan = make(chan bool, 1)
@@ -410,6 +413,30 @@ func (r *Replica) run() {
 			r.startRecoveryForInstance(iid.replica, iid.instance)
 		}
 	}
+}
+
+func (r *Replica) setupShards(masterAddr string, masterPort int) {
+  if r.Id != 0 {
+    return
+  }
+  // Epaxos doesn't require intershard communication
+  var args masterproto.ShardReadyArgs
+  var reply masterproto.ShardReadyReply
+
+  for done := false; !done; {
+    mcli, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", masterAddr, masterPort))
+    if err == nil {
+      err = mcli.Call("Master.ShardReady", &args, &reply)
+      if err == nil {
+        done = true
+        break
+      } else {
+        log.Printf("%v", err)
+      }
+    } else {
+      log.Printf("%v", err)
+    }
+  }
 }
 
 /***********************************

@@ -11,6 +11,9 @@ import (
 	"paxosproto"
 	"state"
 	"time"
+  "net/rpc"
+  "fmt"
+  "masterproto"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -67,7 +70,8 @@ type LeaderBookkeeping struct {
 	nacks           int
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool, beacon bool, durable bool, statsFile string) *Replica {
+func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
+    exec bool, dreply bool, beacon bool, durable bool, statsFile string) *Replica {
 	// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
 	r := &Replica{genericsmr.NewReplica(id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -97,7 +101,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
 	r.prepareReplyRPC = r.RegisterRPC(new(paxosproto.PrepareReply), r.prepareReplyChan)
 	r.acceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.acceptReplyChan)
 
-	go r.run()
+	go r.run(masterAddr, masterPort)
 
 	return r
 }
@@ -165,20 +169,19 @@ func (r *Replica) clock() {
 
 /* Main event processing loop */
 
-func (r *Replica) run() {
+func (r *Replica) run(masterAddr string, masterPort int) {
 
 	r.ConnectToPeers()
-
+  if r.Id == 0 {
+		r.IsLeader = true
+	}
+  r.setupShards(masterAddr, masterPort)
 	dlog.Println("Waiting for client connections")
 
 	go r.WaitForClientConnections()
 
 	if r.Exec {
 		go r.executeCommands()
-	}
-
-	if r.Id == 0 {
-		r.IsLeader = true
 	}
 
 	clockChan = make(chan bool, 1)
@@ -273,6 +276,31 @@ func (r *Replica) run() {
 
 		}
 	}
+}
+
+func (r *Replica) setupShards(masterAddr string, masterPort int) {
+  if r.Id != 0 {
+    return
+  }
+  // Multi-paxos doesn't need intershard communication
+  var args masterproto.ShardReadyArgs
+  var reply masterproto.ShardReadyReply
+
+  done := false
+  for !done {
+    mcli, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", masterAddr, masterPort))
+    if err == nil {
+      err = mcli.Call("Master.ShardReady", &args, &reply)
+      if err == nil {
+        done = true
+        break
+      } else {
+        log.Printf("%v", err)
+      }
+    } else {
+      log.Printf("%v", err)
+    }
+  }
 }
 
 func (r *Replica) makeUniqueBallot(ballot int32) int32 {

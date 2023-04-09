@@ -118,23 +118,23 @@ func main() {
 			*forceWritePeriod, *broadcastOptimizationEnabled)
 	} else if *doAbd {
 		log.Println("Starting ABD replica...")
-		rep = abd.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
+		rep = abd.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
 			*durable, *statsFile)
 	} else if *doEpaxos {
 		log.Println("Starting Egalitarian Paxos replica...")
-		rep = epaxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
+		rep = epaxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
 			*beacon, *durable, *statsFile, *noConflicts)
 	} else if *doMencius {
 		log.Println("Starting Mencius replica...")
-		rep = mencius.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
+		rep = mencius.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
 			*durable, *statsFile)
 	} else if *doGpaxos {
 		log.Println("Starting Generalized Paxos replica...")
-		rep = gpaxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
+		rep = gpaxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
 			*statsFile)
 	} else {
 		log.Println("Starting classic Paxos replica...")
-		rep = paxos.NewReplica(replicaId, nodeList, *thrifty, *exec, *dreply,
+		rep = paxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
 			*beacon, *durable, *statsFile)
 	}
 

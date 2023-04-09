@@ -11,6 +11,9 @@ import (
 	"menciusproto"
 	"state"
 	"time"
+  "fmt"
+  "net/rpc"
+  "masterproto"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -80,7 +83,8 @@ type LeaderBookkeeping struct {
 	nacks          int
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool, durable bool, statsFile string) *Replica {
+func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
+  exec bool, dreply bool, durable bool, statsFile string) *Replica {
 	skippedTo := make([]int32, len(peerAddrList))
 	for i := 0; i < len(skippedTo); i++ {
 		skippedTo[i] = -1
@@ -117,7 +121,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
 	r.prepareReplyRPC = r.RegisterRPC(new(menciusproto.PrepareReply), r.prepareReplyChan)
 	r.acceptReplyRPC = r.RegisterRPC(new(menciusproto.AcceptReply), r.acceptReplyChan)
 
-	go r.run()
+	go r.run(masterAddr, masterPort)
 
 	return r
 }
@@ -174,8 +178,9 @@ func (r *Replica) replyAccept(replicaId int32, reply *menciusproto.AcceptReply) 
 /* Main event processing loop */
 var lastSeenInstance int32
 
-func (r *Replica) run() {
+func (r *Replica) run(masterAddr string, masterPort int) {
 	r.ConnectToPeers()
+  r.setupShards(masterAddr, masterPort)
 
 	dlog.Println("Waiting for client connections")
 
@@ -257,6 +262,30 @@ func (r *Replica) run() {
 			break
 		}
 	}
+}
+
+func (r *Replica) setupShards(masterAddr string, masterPort int) {
+  if r.Id != 0 {
+    return
+  }
+  // abd doesn't require intershard communication
+  var args masterproto.ShardReadyArgs
+  var reply masterproto.ShardReadyReply
+
+  for done := false; !done; {
+    mcli, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", masterAddr, masterPort))
+    if err == nil {
+      err = mcli.Call("Master.ShardReady", &args, &reply)
+      if err == nil {
+        done = true
+        break
+      } else {
+        log.Printf("%v", err)
+      }
+    } else {
+      log.Printf("%v", err)
+    }
+  }
 }
 
 func (r *Replica) clock() {

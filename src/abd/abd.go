@@ -7,6 +7,10 @@ import (
   "bufio"
   "clientproto"
   "state"
+  "net/rpc"
+  "fmt"
+  "masterproto"
+  "log"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -29,7 +33,8 @@ type Replica struct {
   flush       bool
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool, durable bool, statsFile string) *Replica {
+func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
+  exec bool, dreply bool, durable bool, statsFile string) *Replica {
 	// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
   r := &Replica{genericsmr.NewReplica(id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
     make(map[state.Key]abdproto.Timestamp), 
@@ -42,7 +47,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
   r.RegisterClientRPC(new(abdproto.Read), clientproto.ABD_READ, r.readChan)
   r.RegisterClientRPC(new(abdproto.Write), clientproto.ABD_WRITE, r.writeChan)
 
-  go r.run()
+  go r.run(masterAddr, masterPort)
 
   return r
 }
@@ -74,8 +79,9 @@ func (r *Replica) replyWrite(w *bufio.Writer, reply *abdproto.WriteReply) {
 
 /* Main event processing loop */
 
-func (r *Replica) run() {
+func (r *Replica) run(masterAddr string, masterPort int) {
   r.ConnectToPeers()
+  r.setupShards(masterAddr, masterPort)
 
   dlog.Println("Waiting for client connections")
 
@@ -94,6 +100,30 @@ func (r *Replica) run() {
         //got a Write  message
         r.handleWrite(write, writeS.Reply)
         break
+    }
+  }
+}
+
+func (r *Replica) setupShards(masterAddr string, masterPort int) {
+  if r.Id != 0 {
+    return
+  }
+  // abd doesn't require intershard communication
+  var args masterproto.ShardReadyArgs
+  var reply masterproto.ShardReadyReply
+
+  for done := false; !done; {
+    mcli, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", masterAddr, masterPort))
+    if err == nil {
+      err = mcli.Call("Master.ShardReady", &args, &reply)
+      if err == nil {
+        done = true
+        break
+      } else {
+        log.Printf("%v", err)
+      }
+    } else {
+      log.Printf("%v", err)
     }
   }
 }

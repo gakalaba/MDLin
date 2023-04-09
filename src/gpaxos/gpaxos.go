@@ -10,6 +10,9 @@ import (
 	"state"
 	"sync"
 	"time"
+  "net/rpc"
+  "fmt"
+  "masterproto"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -74,7 +77,8 @@ type LeaderBookkeeping struct {
 	cstructs      [][]int32
 }
 
-func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply bool, statsFile string) *Replica {
+func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
+    exec bool, dreply bool, statsFile string) *Replica {
 	// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
 	r := &Replica{genericsmr.NewReplica(id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
 		make(chan *gpaxosproto.Prepare, CHAN_BUFFER_SIZE),
@@ -102,7 +106,7 @@ func NewReplica(id int, peerAddrList []string, thrifty bool, exec bool, dreply b
 		r.fastQSize++
 	}
 
-	go r.run()
+	go r.run(masterAddr, masterPort)
 
 	return r
 }
@@ -274,12 +278,13 @@ func (r *Replica) clock() {
 
 /* Main event processing loop */
 
-func (r *Replica) run() {
+func (r *Replica) run(masterAddr string, masterPort int) {
 	if r.Id == 0 {
 		r.isLeader = true
 	}
 
 	r.ConnectToPeersNoListeners()
+  r.setupShards(masterAddr, masterPort)
 
 	for rid, peerReader := range r.PeerReaders {
 		if int32(rid) == r.Id {
@@ -416,6 +421,30 @@ func (r *Replica) run() {
 			}
 		}
 	}
+}
+
+func (r *Replica) setupShards(masterAddr string, masterPort int) {
+  if r.Id != 0 {
+    return
+  }
+  // gpaxos doesn't require intershard communication
+  var args masterproto.ShardReadyArgs
+  var reply masterproto.ShardReadyReply
+
+  for done := false; !done; {
+    mcli, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", masterAddr, masterPort))
+    if err == nil {
+      err = mcli.Call("Master.ShardReady", &args, &reply)
+      if err == nil {
+        done = true
+        break
+      } else {
+        log.Printf("%v", err)
+      }
+    } else {
+      log.Printf("%v", err)
+    }
+  }
 }
 
 func (r *Replica) makeUniqueBallot(ballot int32) int32 {
