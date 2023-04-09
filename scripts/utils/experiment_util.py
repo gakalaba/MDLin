@@ -160,7 +160,6 @@ def start_clients(config, local_exp_directory, remote_exp_directory, run):
         else:
             scale = 1
         for k in range(config["client_processes_per_client_node"]*scale):
-        for k in range(config["client_processes_per_client_node"]):
             appended_client_commands += get_client_cmd(
                 config, i, k, run, local_exp_directory, remote_exp_directory)
 
