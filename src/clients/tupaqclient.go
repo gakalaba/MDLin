@@ -323,11 +323,12 @@ func (c *GryffClient) Read(key int64) (bool, int64) {
 func (c *GryffClient) sendReadToNearest(requestId int32, key state.Key) {
 	read := &gryffproto.Read{requestId, c.id, state.Key(key), *c.dep}
 
-	var leader int32
+  leader := c.GetShardFromKey(key)
 	if c.forceLeader >= 0 {
-		leader = int32(c.forceLeader)
+		leader = c.forceLeader
 	} else {
-		leader = c.replicasByPingRank[0]
+    panic("shouldn't be here, PingRank isn't implemented")
+		leader = int(c.replicasByPingRank[0])
 	}
 	dlog.Printf("Sending Read to replica %d out of %d.\n", leader,
 		len(c.replicasByPingRank))
@@ -391,10 +392,11 @@ func (c *GryffClient) sendWriteToNearest(requestId int32, key state.Key,
 	write := &gryffproto.Write{requestId, c.id, state.Key(key),
 		state.Value(value), *c.dep}
 
-	var leader int32
+  leader := int32(c.GetShardFromKey(key))
 	if c.forceLeader >= 0 {
 		leader = int32(c.forceLeader)
 	} else {
+    panic("shouldn't be here, PingRank isn't implemneted")
 		leader = c.replicasByPingRank[0]
 	}
 	dlog.Printf("Sending Write to replica %d out of %d.\n", leader,
@@ -460,10 +462,11 @@ func (c *GryffClient) handleRMW(rmw *RMWOp) {
 }
 
 func (c *GryffClient) sendRMWToNearest() {
-	var leader int32
+  leader := int32(c.GetShardFromKey(c.rmw.K))
 	if c.forceLeader >= 0 {
 		leader = int32(c.forceLeader)
 	} else {
+    panic("shouldn't be here, pingRank not implmeneted")
 		leader = c.replicasByPingRank[0]
 	}
 	c.writers[leader].WriteByte(clientproto.Gryff_RMW)

@@ -94,12 +94,13 @@ func (c *ProposeClient) sendProposeAndReadReply() (bool, int64) {
 
 func (c *ProposeClient) sendPropose() {
 	if !c.fast {
-		replica := int32(c.leader)
+    replica := c.GetShardFromKey(c.propose.Command.K)
 		if c.noLeader {
 			if c.forceLeader >= 0 {
-				replica = int32(c.forceLeader)
+				replica = c.forceLeader
 			} else {
-				replica = c.replicasByPingRank[0]
+        panic("shouldn't be here...PingRank isn't implemented")
+				replica = int(c.replicasByPingRank[0])
 			}
 		}
 		dlog.Printf("Sending request to %d\n", replica)
