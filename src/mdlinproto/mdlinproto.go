@@ -34,15 +34,15 @@ type ProposeReply struct {
 
 type Prepare struct {
 	LeaderId   int32
-	Instance   int32
 	Ballot     int32
 	ToInfinity uint8
+	Instance   Tag
 }
 
 type PrepareReply struct {
-	Instance int32
+	Instance Tag
+  Ballot   int32
 	OK       uint8
-	Ballot   int32
 	Command  []state.Command
 }
 
