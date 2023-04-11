@@ -681,14 +681,10 @@ func (r *Replica) RegisterClientRPC(msgObj fastrpc.Serializable, opCode uint8, n
 }
 
 func (r *Replica) SendISMsg(leaderId int32, code uint8, msg fastrpc.Serializable) {
-	if r.ShouldDelayNextRPC(int(leaderId), code) {
-		r.delayedRPC[leaderId][code] <- msg
-	} else {
-		w := r.ShardWriters[leaderId]
-		w.WriteByte(code)
-		msg.Marshal(w)
-		w.Flush()
-	}
+  w := r.ShardWriters[leaderId]
+	w.WriteByte(code)
+	msg.Marshal(w)
+	w.Flush()
 }
 
 func (r *Replica) SendMsg(peerId int32, code uint8, msg fastrpc.Serializable) {
