@@ -7,7 +7,6 @@ import (
 	"genericsmr"
 	"mdlinproto"
 	"state"
-  "fmt"
 )
 
 type MDLClient struct {
@@ -80,9 +79,9 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
     }
     prevTag = mdlinproto.Tag{K: state.Key(k), PID: int64(c.id), SeqNo: c.seqnos[l]}
 	}
-	success, e := c.readReplies(start, fanout)
+	success, _ := c.readReplies(start, fanout)
 	if !success {
-		dlog.Printf("ProposeReply for PID %d - CommandId %d return OK=False\n", c.id, e)
+		//dlog.Printf("ProposeReply for PID %d - CommandId %d return OK=False\n", c.id, e)
 		return false, -1
 	}
 
@@ -103,7 +102,6 @@ func (c *MDLClient) Write(key int64, value int64) bool {
 	c.opCount++
 	c.preparePropose(commandId, key, value)
 	c.propose.Command.Op = state.PUT
-  dlog.Println(fmt.Sprintf("Propose{CommandId %v, Command %v, Timestamp %v, SeqNo %v, PID %v, Predecessor %v, PredSize %v}", c.propose.CommandId, c.propose.Command, c.propose.Timestamp, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor))
 	c.sendPropose()
 	return true
 }
@@ -131,7 +129,7 @@ func (c *MDLClient) setSeqno(seqno int64) {
 
 func (c *MDLClient) sendPropose() {
 	shard := c.GetShardFromKey(c.propose.Command.K)
-  dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, Command %v, Timestamp %v, SeqNo %v, PID %v, Predecessor %v, PredSize %v}", shard, c.propose.CommandId, c.propose.Command, c.propose.Timestamp, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor))
+  //dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, Command %v, Timestamp %v, SeqNo %v, PID %v, Predecessor %v}", shard, c.propose.CommandId, c.propose.Command, c.propose.Timestamp, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor))
 
 	c.writers[shard].WriteByte(clientproto.MDL_PROPOSE)
 	c.propose.Marshal(c.writers[shard])
@@ -140,7 +138,7 @@ func (c *MDLClient) sendPropose() {
 
 func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, myShard int) {
 	shard := c.GetShardFromKey(predecessorTag.K)
-	dlog.Printf("Sending CoordinationRequest to shard %d\n", shard)
+	//dlog.Printf("Sending CoordinationRequest to shard %d\n", shard)
 
   // Prepare the coordination request object
   c.coordinationReq.AskerTag = mdlinproto.Tag{K: c.propose.Command.K, PID: int64(c.id), SeqNo: c.propose.SeqNo}
@@ -166,7 +164,7 @@ func (c *MDLClient) readReplies(start int32, fanout int) (bool, int64) {
       dlog.Println("Client received FAIL response for request")
 			return false, int64(reply.CommandId)
 		} else {
-			dlog.Printf("Received ProposeReply for %d\n", reply.CommandId)
+			//dlog.Printf("Received ProposeReply for %d\n", reply.CommandId)
 			rarray[reply.CommandId-start] = 1
 
 			// Check if we have all replies
