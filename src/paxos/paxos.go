@@ -44,6 +44,8 @@ type Replica struct {
 	counter             int
 	flush               bool
 	committedUpTo       int32
+	before		    time.Time
+	after		    time.Time
 }
 
 type InstanceStatus int
@@ -88,7 +90,9 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		false,
 		0,
 		true,
-		-1}
+		-1,
+		time.Now(),
+		time.Now()}
 
 
 	r.Beacon = beacon
@@ -176,7 +180,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		r.IsLeader = true
 	}
   r.setupShards(masterAddr, masterPort)
-	dlog.Println("Waiting for client connections")
+	log.Println("Waiting for client connections")
 
 	go r.WaitForClientConnections()
 
@@ -348,6 +352,7 @@ func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 var pa paxosproto.Accept
 
 func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Command) {
+	r.before = time.Now()
 	defer func() {
 		if err := recover(); err != nil {
 			log.Println("Accept bcast failed:", err)
@@ -683,6 +688,8 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 	if areply.OK == TRUE {
 		inst.lb.acceptOKs++
 		if inst.lb.acceptOKs+1 > r.N>>1 {
+			r.after = time.Now()
+			log.Printf("Paxos Accept Round trip took %d microseconds\n", int64(r.after.Sub(r.before).Microseconds()))
 			inst = r.instanceSpace[areply.Instance]
 			inst.status = COMMITTED
 			if inst.lb.clientProposals != nil {

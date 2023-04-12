@@ -235,7 +235,7 @@ func main() {
 	client := createClient()
 
 	r := rand.New(rand.NewSource(int64(*clientId)))
-	zipf := rand.NewZipf(r, *zipfS, *zipfV, uint64(*numKeys))
+	//zipf := rand.NewZipf(r, *zipfS, *zipfV, uint64(*numKeys))
 
 	var count int32
 	count = 0
@@ -275,7 +275,8 @@ func main() {
 					k = (int64(count) << 32) | int64(*clientId)
 				}
 			} else {
-				k = int64(zipf.Uint64())
+				//k = int64(zipf.Uint64())
+				k = int64(r.Intn(int(*numKeys)))
 			}
 			keys = append(keys, k)
 		}
@@ -285,6 +286,7 @@ func main() {
 		before := time.Now()
 		success, _ = client.AppRequest(opTypes, keys)
 		after := time.Now()
+                dlog.Printf("!!!!Paxos APP level write took %d microseconds\n", int64(after.Sub(before).Microseconds()))
 
 		opString := "app"
 		if !success {

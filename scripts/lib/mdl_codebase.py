@@ -78,7 +78,7 @@ class MDLCodebase(ExperimentCodebase):
             client_command += ' -randSleep %d' % config['client_rand_sleep']
         if config['client_conflict_percentage'] < 0:
             client_command += ' -zipfS %f' % config['client_zipfian_s']
-            client_command += ' -zipfV %f', config['client_zipfian_v'],
+            client_command += ' -zipfV %f' % config['client_zipfian_v']
         else:
             client_command += ' -conflicts %s' % config['client_conflict_percentage']
         # TODO need logic for how to determine leader for various protocols
