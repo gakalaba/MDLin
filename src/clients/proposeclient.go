@@ -2,12 +2,10 @@ package clients
 
 import (
 	"clientproto"
-	"dlog"
 	"fastrpc"
 	"genericsmr"
 	"genericsmrproto"
 	"state"
-	"time"
 )
 
 type ProposeClient struct {
@@ -42,11 +40,11 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (boo
 		if opType == state.GET {
 			success, _ = c.Read(k)
 		} else if opType == state.PUT {
-			before := time.Now()
+			//before := time.Now()
 			success = c.Write(k, int64(k))
-			after := time.Now()
-			lat := int64(after.Sub(before).Microseconds())
-			dlog.Printf("#######Paxos system level write took %d microseconds\n", lat)
+			//after := time.Now()
+			//lat := int64(after.Sub(before).Microseconds())
+			//dlog.Printf("#######Paxos system level write took %d microseconds\n", lat)
 		} else {
 			success, _ = c.CompareAndSwap(k, int64(k-1), int64(k))
 		}
@@ -108,12 +106,12 @@ func (c *ProposeClient) sendPropose() {
 				replica = int(c.replicasByPingRank[0])
 			}
 		}
-		dlog.Printf("@Sending request to %d\n", replica)
+		//dlog.Printf("@Sending request to %d\n", replica)
 		c.writers[replica].WriteByte(clientproto.GEN_PROPOSE)
 		c.propose.Marshal(c.writers[replica])
 		c.writers[replica].Flush()
 	} else {
-		dlog.Printf("Sending request to all replicas\n")
+		//dlog.Printf("Sending request to all replicas\n")
 		for i := 0; i < c.numLeaders; i++ {
 			c.writers[i].WriteByte(clientproto.GEN_PROPOSE)
 			c.propose.Marshal(c.writers[i])
@@ -128,7 +126,7 @@ func (c *ProposeClient) readProposeReply(commandId int32) (bool, int64) {
 		if reply.OK == 0 {
 			return false, 0
 		} else {
-			dlog.Printf("Received ProposeReply for %d\n", reply.CommandId)
+			//dlog.Printf("Received ProposeReply for %d\n", reply.CommandId)
 			if commandId == reply.CommandId {
 				return true, int64(reply.Value)
 			}

@@ -129,7 +129,7 @@ func (c *MDLClient) setSeqno(seqno int64) {
 
 func (c *MDLClient) sendPropose() {
 	shard := c.GetShardFromKey(c.propose.Command.K)
-  //dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, Command %v, Timestamp %v, SeqNo %v, PID %v, Predecessor %v}", shard, c.propose.CommandId, c.propose.Command, c.propose.Timestamp, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor))
+  	//dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, SeqNo %v, PID %v, Predecessor %v at time %v}", shard, c.propose.CommandId, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, time.Now().UnixMilli()))
 
 	c.writers[shard].WriteByte(clientproto.MDL_PROPOSE)
 	c.propose.Marshal(c.writers[shard])
@@ -138,7 +138,7 @@ func (c *MDLClient) sendPropose() {
 
 func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, myShard int) {
 	shard := c.GetShardFromKey(predecessorTag.K)
-	//dlog.Printf("Sending CoordinationRequest to shard %d\n", shard)
+	//dlog.Printf("Sending CoordinationRequest to shard %d on behalf of CommandId %v at time %v\n", shard, c.propose.CommandId, time.Now().UnixMilli())
 
   // Prepare the coordination request object
   c.coordinationReq.AskerTag = mdlinproto.Tag{K: c.propose.Command.K, PID: int64(c.id), SeqNo: c.propose.SeqNo}

@@ -3,7 +3,6 @@ package genericsmr
 import (
 	"bufio"
 	"clientproto"
-	"dlog"
 	"encoding/binary"
 	"fastrpc"
 	"fmt"
@@ -380,7 +379,7 @@ func (r *Replica) ConnectToPeersNoListeners() {
 				time.Sleep(1e9)
 			}
 		}
-		dlog.Printf("Writing my id %d to peer %d.\n", uint32(r.Id), i)
+		//dlog.Printf("Writing my id %d to peer %d.\n", uint32(r.Id), i)
 		binary.LittleEndian.PutUint32(bs, uint32(r.Id))
 		if _, err := r.Peers[i].Write(bs); err != nil {
 			log.Println("Write id error:", err)
@@ -532,7 +531,7 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 				if err = obj.Unmarshal(reader); err != nil {
 					break
 				}
-				dlog.Printf("[%d] Done unmarshaling message with op %d from replica %d.\n", r.Id, msgType, rid)
+				//dlog.Printf("[%d] Done unmarshaling message with op %d from replica %d.\n", r.Id, msgType, rid)
 				rpair.Chan <- obj
 				r.Stats.Max(fmt.Sprintf("server_rpc_%d_chan_length", msgType), len(rpair.Chan))
 			} else {
@@ -556,7 +555,7 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
                         if err = obj.Unmarshal(reader); err != nil {
 				break
                         }
-                        dlog.Printf("[%d] Done unmarshaling message with op %d from replica %d.\n", r.Id, msgType, rid)
+                        //dlog.Printf("[%d] Done unmarshaling message with op %d from replica %d.\n", r.Id, msgType, rid)
                         rpair.Chan <- obj
                         r.Stats.Max(fmt.Sprintf("server_rpc_%d_chan_length", msgType), len(rpair.Chan))
 		} else {
@@ -613,6 +612,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 				errS = "reading MDL_PROPOSE"
 				break
 			}
+			//log.Printf("Proposal with CommandId %v arrived on WIRE at %v\n", prop.CommandId, time.Now().UnixMilli())
 			r.MDLProposeChan <- &MDLPropose{prop, writer}
 			break
 
@@ -650,8 +650,8 @@ func (r *Replica) clientListener(conn net.Conn) {
 					errS = "unmarshaling message"
 					break
 				}
-				dlog.Printf("[%d] Done unmarshaling message with op %d from client %s.\n", r.Id,
-					msgType, conn.RemoteAddr().String())
+				//dlog.Printf("[%d] Done unmarshaling message with op %d from client %s.\n", r.Id,
+				//	msgType, conn.RemoteAddr().String())
 				rpair.Chan <- &ClientRPC{obj, writer}
 				r.Stats.Max(fmt.Sprintf("client_rpc_%d_chan_length", msgType), len(rpair.Chan))
 			} else {
@@ -691,7 +691,7 @@ func (r *Replica) SendMsg(peerId int32, code uint8, msg fastrpc.Serializable) {
 	if r.ShouldDelayNextRPC(int(peerId), code) {
 		r.delayedRPC[peerId][code] <- msg
 	} else {
-		dlog.Printf("[%d] Sending message with op %d to replica %d.\n", r.Id, code, peerId)
+		//dlog.Printf("[%d] Sending message with op %d to replica %d.\n", r.Id, code, peerId)
 		w := r.PeerWriters[peerId]
 		w.WriteByte(code)
 		msg.Marshal(w)

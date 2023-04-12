@@ -286,7 +286,7 @@ func main() {
 		before := time.Now()
 		success, _ = client.AppRequest(opTypes, keys)
 		after := time.Now()
-                dlog.Printf("!!!!Paxos APP level write took %d microseconds\n", int64(after.Sub(before).Microseconds()))
+                //dlog.Printf("!!!!Paxos APP level write took %d microseconds\n", int64(after.Sub(before).Microseconds()))
 
 		opString := "app"
 		if !success {

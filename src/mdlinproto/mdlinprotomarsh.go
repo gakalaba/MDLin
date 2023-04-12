@@ -448,6 +448,13 @@ func (t *Accept) Marshal(wire io.Writer) {
 	bs[6] = byte(tmp64 >> 48)
 	bs[7] = byte(tmp64 >> 56)
   wire.Write(bs)
+  bs = b[:4]
+        tmp32 = t.CommandId
+        bs[0] = byte(tmp32)
+        bs[1] = byte(tmp32 >> 8)
+        bs[2] = byte(tmp32 >> 16)
+        bs[3] = byte(tmp32 >> 24)
+	wire.Write(bs)
 }
 
 func (t *Accept) Unmarshal(rr io.Reader) error {
@@ -519,6 +526,13 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
     return err
   }
   t.Epoch = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+
+  bs = b[:4]
+        if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+                return err
+        }
+        t.CommandId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
+
   return nil
 }
 

@@ -54,6 +54,7 @@ type Accept struct {
 	SeqNos       int64
 	ExpectedSeqs map[int64]int64
   Epoch        int64
+  CommandId    int32
 }
 
 type AcceptReply struct {
