@@ -76,7 +76,7 @@ type Replica struct {
 	//shardReaders        []*bufio.Reader
 	//shardWriters        []*bufio.Writer
 	//shListener          net.Listener
-	//buflock             *sync.Mutex new(sync.Mutex)
+	//buflock             *sync.Mutex // new(sync.Mutex)
 
   bufferedLog         map[mdlinproto.Tag]*Instance  // the unordered requests LINKED LIST
   readyBuff           *list.List
@@ -88,6 +88,7 @@ type Replica struct {
   timer               *time.Timer
   epochlen            int
   epoch               int64
+  seen                map[mdlinproto.Tag]*Instance
 }
 
 type InstanceStatus int
@@ -159,7 +160,8 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
     make(map[mdlinproto.Tag]*mdlinproto.CoordinationResponse),
     time.NewTimer(time.Duration(epochLength) * time.Millisecond),
     epochLength,
-    0}
+    0,
+    make(map[mdlinproto.Tag]*Instance)}
 
 	r.Durable = durable
 
@@ -359,7 +361,6 @@ func (r *Replica) run(masterAddr string, masterPort int) {
       CRR := coordinationRReply.(*mdlinproto.CoordinationResponse)
       r.handleCoordinationRReply(CRR)
       break
-
 		case prepareS := <-r.prepareChan:
 			prepare := prepareS.(*mdlinproto.Prepare)
 			//got a Prepare message
@@ -726,20 +727,26 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
       // Check if coordination request from successor arrived
       // before the request arrived, if so add it
       t := mdlinproto.Tag{K: prop.Command.K, PID: pid, SeqNo: seqno}
-      if v, ok := r.outstandingCR[t]; ok {
+      recvCoordReq := false
+      if v, ok1 := r.outstandingCR[t]; ok1 {
         NewPrintf(LEVEL0, "^^^^^^^^^^^^found an awaiting CR for %v", t)
         thisCr = v
         delete(r.outstandingCR, t)
+        recvCoordReq = true
       }
       // Check if response from this request's coordination req
       // arrived from predecessor before this req arrived.
-      if v, ok := r.outstandingCRR[t]; ok {
+      if v, ok2 := r.outstandingCRR[t]; ok2 {
         NewPrintf(LEVEL0, "!!!!!!!!!!!!!!found an awaiting CRR for %v", t)
         coord = int8(v.OK)
         delete(r.outstandingCRR, t)
       }
 
-      currInst.PushBack(r.addEntryToBuffLog(cmds, proposals, pid, seqno, coord, thisCr, &prop.Predecessor, r.epoch)) //This seems like a bad idea TODO... the address of a message that's gonna disapear?
+      newEntry := r.addEntryToBuffLog(cmds, proposals, pid, seqno, coord, thisCr, &prop.Predecessor, r.epoch) //This seems like a bad idea TODO... the address of a message that's gonna disapear?
+      currInst.PushBack(newEntry)
+      if !recvCoordReq {
+        r.seen[t] = newEntry
+      }
 			// Check if any others are ready
 			for true {
 				NewPrintf(LEVELALL, "looking for any others that might be ready from this PID %d", pid)
@@ -887,6 +894,7 @@ func (r *Replica) findEntryInBuffLog(tag mdlinproto.Tag) *Instance {
   }
   return nil
 }
+/*
 func (r *Replica) findEntryInOrderedLog(tag mdlinproto.Tag) *Instance {
   // Search the ordered log
 	for i := r.crtInstance - 1; i >= 0; i-- {
@@ -902,7 +910,7 @@ func (r *Replica) findEntryInOrderedLog(tag mdlinproto.Tag) *Instance {
 		}
 	}
 	return nil
-}
+}*/
 
 // Client sends a CR to the predecessor request (askee), we need to check
 // if it's coordinated and committed before responding to the successor (asker)
@@ -916,8 +924,9 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
   var CC uint8
   e := r.findEntryInBuffLog(cr.AskeeTag)
   if (e == nil) {
-    e = r.findEntryInOrderedLog(cr.AskeeTag)
-    if (e == nil) {
+    var in bool
+    e, in = r.seen[cr.AskeeTag]
+    if (!in) {
       NewPrintf(LEVEL0, "Coordination Request arrived before the predecessor did")
       r.outstandingCR[cr.AskeeTag] = cr //This seems like a bad idea TODO... the address of a message that's gonna disapear?
       return
@@ -927,6 +936,7 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
   } else {
     OK, CC = r.checkCoordination(e)
   }
+  delete(r.seen, cr.AskeeTag)
   e.cr = cr // won't be nil anymore, signals acceptReply() and coordReply()
   if OK {
     shardTo := e.cr.From
