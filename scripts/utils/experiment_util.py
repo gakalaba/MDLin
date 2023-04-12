@@ -798,9 +798,6 @@ def run_multiple_protocols_experiment(config_file, executor=None):
             config_new['plot_cdf_series_title'] = config['plot_cdf_series_title'][i]
             config_new['plot_tput_lat_series_title'] = config['plot_tput_lat_series_title'][i]
             config_new['replication_protocol_settings'] = config['replication_protocol_settings'][i]
-            #if (config['replication_protocol'][i] != "mdl"):
-                #config_new['client_processes_per_client_node'] = config['client_processes_per_client_node'] * config['client_fanout']
-                #config_new['client_total'] = config['client_total'] * config['client_fanout']
             config_file_new = os.path.join(exp_dir,
                                            '%s-%s-%d.json' % (config_name, server_replication_protocol.replace('_', '-'), i))
             with open(config_file_new, 'w+') as f_new:

@@ -352,7 +352,6 @@ func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 var pa paxosproto.Accept
 
 func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Command) {
-	r.before = time.Now()
 	defer func() {
 		if err := recover(); err != nil {
 			log.Println("Accept bcast failed:", err)
@@ -688,8 +687,6 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 	if areply.OK == TRUE {
 		inst.lb.acceptOKs++
 		if inst.lb.acceptOKs+1 > r.N>>1 {
-			r.after = time.Now()
-			log.Printf("Paxos Accept Round trip took %d microseconds\n", int64(r.after.Sub(r.before).Microseconds()))
 			inst = r.instanceSpace[areply.Instance]
 			inst.status = COMMITTED
 			if inst.lb.clientProposals != nil {
@@ -728,7 +725,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 func (r *Replica) executeCommands() {
 	i := int32(0)
 	for !r.Shutdown {
-		executed := false
+		//executed := false
 
 		for i <= r.committedUpTo {
 			if r.instanceSpace[i].cmds != nil {
@@ -745,15 +742,15 @@ func (r *Replica) executeCommands() {
 					}
 				}
 				i++
-				executed = true
+				//executed = true
 			} else {
 				break
 			}
 		}
 
-		if !executed {
-			time.Sleep(1000 * 1000)
-		}
+		//if !executed {
+		//	time.Sleep(1000 * 1000)
+		//}
 	}
 
 }
