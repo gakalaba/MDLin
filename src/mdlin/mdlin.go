@@ -85,7 +85,8 @@ type Replica struct {
   outstandingCR       map[mdlinproto.Tag]*genericsmr.MDLCoordReq
   outstandingCRR      map[mdlinproto.Tag]*mdlinproto.CoordinationResponse
 
-  timer               *time.Timer
+  ticker               *time.Ticker
+  //timer               *time.Timer
   epochlen            int
   epoch               int64
   seen                map[mdlinproto.Tag]*Instance
@@ -161,7 +162,8 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
     0,
     make(map[mdlinproto.Tag]*genericsmr.MDLCoordReq),
     make(map[mdlinproto.Tag]*mdlinproto.CoordinationResponse),
-    time.NewTimer(time.Duration(epochLength) * time.Microsecond),
+    time.NewTicker(time.Duration(epochLength) * time.Microsecond),
+    //time.NewTimer(time.Duration(epochLength) * time.Microsecond),
     epochLength,
     0,
     make(map[mdlinproto.Tag]*Instance),
@@ -317,7 +319,8 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	}
   if (!r.IsLeader) {
     // non leaders don't need to run epochs
-    r.timer.Stop()
+    r.ticker.Stop()
+    //r.timer.Stop()
   }
 	r.ConnectToPeers()
 	r.setupShards(masterAddr, masterPort)
@@ -336,11 +339,12 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 		select {
 
-    case <-r.timer.C:
+    case <-r.ticker.C:
+    //case <-r.timer.C:
       // The epoch has completed, so now we need to do processing
       NewPrintf(LEVEL0, "---------END OF EPOCH-------")
       r.processEpoch()
-      r.timer.Reset(time.Duration(r.epochlen) * time.Microsecond)
+      //r.timer.Reset(time.Duration(r.epochlen) * time.Microsecond)
       break
 
 		case <-clockChan:
