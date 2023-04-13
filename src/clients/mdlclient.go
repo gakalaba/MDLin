@@ -4,16 +4,18 @@ import (
 	"clientproto"
 	"dlog"
 	"fastrpc"
+	"fmt"
 	"genericsmr"
 	"mdlinproto"
 	"state"
+	"time"
 )
 
 type MDLClient struct {
 	*AbstractClient
 	proposeReplyChan chan fastrpc.Serializable
 	propose          *mdlinproto.Propose
-  coordinationReq  *mdlinproto.CoordinationRequest
+	coordinationReq  *mdlinproto.CoordinationRequest
 	opCount          int32
 	fast             bool
 	noLeader         bool
@@ -25,11 +27,11 @@ func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 	pc := &MDLClient{
 		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE), // proposeReplyChan
-		new(mdlinproto.Propose), // propose
-    new(mdlinproto.CoordinationRequest), // coordinationReq
-		0,                       // opCount
-		fast,                    // fast
-		noLeader,                // noLeader
+		new(mdlinproto.Propose),             // propose
+		new(mdlinproto.CoordinationRequest), // coordinationReq
+		0,                                   // opCount
+		fast,                                // fast
+		noLeader,                            // noLeader
 		make(map[int]int64),
 	}
 	pc.propose.PID = int64(id) // only need to set this once per client
@@ -40,9 +42,10 @@ func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 
 func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
 	fanout := len(keys)
-	start := c.opCount
-  var prevTag mdlinproto.Tag
-  readPrefix := true // track the contiguous prefix of reads
+	startTimes := make([]time.Time, fanout)
+	startIdx := c.opCount
+	var prevTag mdlinproto.Tag
+	readPrefix := true // track the contiguous prefix of reads
 	for i, opType := range opTypes {
 		k := keys[i]
 		l := c.GetShardFromKey(state.Key(k))
@@ -54,32 +57,35 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		}
 		// Assign the sequence number and batch dependencies for this request
 		c.setSeqno(c.seqnos[l])
-    if (i == 0) {
-      c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
-    } else {
-      c.propose.Predecessor = prevTag
-    }
+		if i == 0 {
+			c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
+		} else {
+			c.propose.Predecessor = prevTag
+		}
+
+		startTimes[i] = time.Now()
+
 		if opType == state.GET {
-      if (readPrefix) {
-        c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
-      }
+			if readPrefix {
+				c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
+			}
 			c.Read(k)
 		} else if opType == state.PUT {
 			c.Write(k, int64(k))
-      readPrefix = false
+			readPrefix = false
 		} else {
 			c.CompareAndSwap(k, int64(k-1), int64(k))
-      readPrefix = false
+			readPrefix = false
 		}
-    if (i > 0 && !readPrefix) {
-      // Send the coordination request
-      // (Keep this after sending the request for now, since 
-      // logic in the send function assumes request was send)
-      c.sendCoordinationRequest(prevTag, l)
-    }
-    prevTag = mdlinproto.Tag{K: state.Key(k), PID: int64(c.id), SeqNo: c.seqnos[l]}
+		if i > 0 && !readPrefix {
+			// Send the coordination request
+			// (Keep this after sending the request for now, since
+			// logic in the send function assumes request was send)
+			c.sendCoordinationRequest(prevTag, l)
+		}
+		prevTag = mdlinproto.Tag{K: state.Key(k), PID: int64(c.id), SeqNo: c.seqnos[l]}
 	}
-	success, _ := c.readReplies(start, fanout)
+	success, _ := c.readReplies(startIdx, fanout, opTypes, keys, startTimes)
 	if !success {
 		//dlog.Printf("ProposeReply for PID %d - CommandId %d return OK=False\n", c.id, e)
 		return false, -1
@@ -129,7 +135,7 @@ func (c *MDLClient) setSeqno(seqno int64) {
 
 func (c *MDLClient) sendPropose() {
 	shard := c.GetShardFromKey(c.propose.Command.K)
-  	//dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, SeqNo %v, PID %v, Predecessor %v at time %v}", shard, c.propose.CommandId, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, time.Now().UnixMilli()))
+	//dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, SeqNo %v, PID %v, Predecessor %v at time %v}", shard, c.propose.CommandId, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, time.Now().UnixMilli()))
 
 	c.writers[shard].WriteByte(clientproto.MDL_PROPOSE)
 	c.propose.Marshal(c.writers[shard])
@@ -140,10 +146,10 @@ func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, mySha
 	shard := c.GetShardFromKey(predecessorTag.K)
 	//dlog.Printf("Sending CoordinationRequest to shard %d on behalf of CommandId %v at time %v\n", shard, c.propose.CommandId, time.Now().UnixMilli())
 
-  // Prepare the coordination request object
-  c.coordinationReq.AskerTag = mdlinproto.Tag{K: c.propose.Command.K, PID: int64(c.id), SeqNo: c.propose.SeqNo}
-  c.coordinationReq.AskeeTag = predecessorTag
-  c.coordinationReq.From = int32(c.GetShardFromKey(c.propose.Command.K))
+	// Prepare the coordination request object
+	c.coordinationReq.AskerTag = mdlinproto.Tag{K: c.propose.Command.K, PID: int64(c.id), SeqNo: c.propose.SeqNo}
+	c.coordinationReq.AskeeTag = predecessorTag
+	c.coordinationReq.From = int32(c.GetShardFromKey(c.propose.Command.K))
 
 	c.writers[shard].WriteByte(clientproto.MDL_COORDREQ)
 	c.coordinationReq.Marshal(c.writers[shard])
@@ -155,17 +161,38 @@ func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, mySha
 // 	return c.readProposeReply(c.propose.CommandId)
 // }
 
-func (c *MDLClient) readReplies(start int32, fanout int) (bool, int64) {
+func (c *MDLClient) readReplies(startId int32, fanout int, opTypes []state.Operation,
+	keys []int64, startTimes []time.Time) (bool, int64) {
 	rarray := make([]int, fanout)
 	done := false
 	for !done {
 		reply := (<-c.proposeReplyChan).(*mdlinproto.ProposeReply)
 		if reply.OK == 0 {
-      dlog.Println("Client received FAIL response for request")
+			dlog.Println("Client received FAIL response for request")
 			return false, int64(reply.CommandId)
 		} else {
 			//dlog.Printf("Received ProposeReply for %d\n", reply.CommandId)
-			rarray[reply.CommandId-start] = 1
+			idx := reply.CommandId - startId
+
+			// Print op latency
+			k := keys[idx]
+			lat := time.Now().Sub(startTimes[idx]).Nanoseconds()
+			opType := ""
+			switch opTypes[idx] {
+			case state.GET:
+				opType = "read"
+			case state.PUT:
+				opType = "write"
+			case state.CAS:
+				opType = "rmw"
+			default:
+				panic(fmt.Sprintf("Unexpected op type: %v", opTypes[idx]))
+			}
+
+			fmt.Printf("%s,%d,%d,%d\n", opType, lat, k, idx)
+
+			// Mark op as complete
+			rarray[idx] = 1
 
 			// Check if we have all replies
 			done = true
