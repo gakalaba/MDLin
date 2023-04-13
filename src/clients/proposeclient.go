@@ -3,9 +3,11 @@ package clients
 import (
 	"clientproto"
 	"fastrpc"
+	"fmt"
 	"genericsmr"
 	"genericsmrproto"
 	"state"
+	"time"
 )
 
 type ProposeClient struct {
@@ -36,20 +38,25 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (boo
 	for i, opType := range opTypes {
 		k := keys[i]
 
+		before := time.Now()
+		var opTypeStr string
 		var success bool
 		if opType == state.GET {
+			opTypeStr = "read"
 			success, _ = c.Read(k)
 		} else if opType == state.PUT {
-			//before := time.Now()
+			opTypeStr = "write"
 			success = c.Write(k, int64(k))
-			//after := time.Now()
-			//lat := int64(after.Sub(before).Microseconds())
-			//dlog.Printf("#######Paxos system level write took %d microseconds\n", lat)
 		} else {
+			opTypeStr = "rmw"
 			success, _ = c.CompareAndSwap(k, int64(k-1), int64(k))
 		}
+		after := time.Now()
 
-		if !success {
+		if success {
+			lat := after.Sub(before).Nanoseconds()
+			fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
+		} else {
 			return false, -1
 		}
 	}
@@ -97,12 +104,12 @@ func (c *ProposeClient) sendProposeAndReadReply() (bool, int64) {
 
 func (c *ProposeClient) sendPropose() {
 	if !c.fast {
-    replica := c.GetShardFromKey(c.propose.Command.K)
+		replica := c.GetShardFromKey(c.propose.Command.K)
 		if c.noLeader {
 			if c.forceLeader >= 0 {
 				replica = c.forceLeader
 			} else {
-        panic("shouldn't be here...PingRank isn't implemented")
+				panic("shouldn't be here...PingRank isn't implemented")
 				replica = int(c.replicasByPingRank[0])
 			}
 		}
