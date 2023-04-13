@@ -1,13 +1,13 @@
 {
   "experiment_independent_vars": [
 	  ["replication_protocol", "replication_protocol_settings", "plot_cdf_series_title", "plot_tput_lat_series_title", "client_total", "client_processes_per_client_node"],
-    ["client_total", "client_processes_per_client_node"]
+	  ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol":[
 	  "mdl", "multi_paxos"
   ],
   "replication_protocol_settings": [
-          {
+	 {
             "server_delay_reply": true,
       "server_execute_commands": true,
       "server_thrifty": true
@@ -25,14 +25,27 @@
       "us-east-1-2",
       "eu-west-1-0",
       "eu-west-1-1",
-      "eu-west-1-2"
+      "eu-west-1-2",
+      "us-west-1-0",
+      "us-west-1-1",
+      "us-west-1-2"
   ],
-  "num_shards": 1,
+  "num_shards": 3,
   "shards": [
         [
       "eu-west-1-0",
       "eu-west-1-1",
       "eu-west-1-2"
+    ],
+    [
+	    "us-east-1-0",
+	    "us-east-1-1",
+	    "us-east-1-2"
+    ],
+    [
+	    "us-west-1-0",
+	    "us-west-1-1",
+	    "us-west-1-2"
     ]
 
   ],
@@ -77,20 +90,20 @@
       }
   },
   "client_total": [
-	  [2],
-	  [2]
+	  [8],
+	  [8]
   ],
   "client_processes_per_client_node": [
-	  [1],
-	  [1]
+	  [4],
+	  [4]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
   "client_write_percentage": 1000,
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
-  "client_fanout": 1,
-  "server_epoch": 400,
+  "client_fanout": 25,
+  "server_epoch": 1000,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,
@@ -107,11 +120,11 @@
       "series_indep_vars_idx": 0,
       "series_titles": ["MDL", "Multi-Paxos"],
       "x_var_is_config": false,
-      "x_var": ["run_stats", "combined", "tput", "p50"],
+      "x_var": ["run_stats", "app", "tput", "p50"],
       "x_label": "Throughput (ops/s)",
       "y_label": "p50 Latency",
       "x_indep_vars_idx": 1,
-      "y_var": ["aggregate", "combined", "mean"]
+      "y_var": ["aggregate", "app", "mean"]
     },
     {
       "name": "tput-lat-p50",
@@ -121,11 +134,11 @@
       "series_indep_vars_idx": 0,
       "series_titles": ["MDL", "Multi-Paxos"],
       "x_var_is_config": false,
-      "x_var": ["run_stats", "combined", "tput", "p50"],
+      "x_var": ["run_stats", "app", "tput", "p50"],
       "x_label": "Throughput (ops/s)",
       "y_label": "p50 Latency",
       "x_indep_vars_idx": 1,
-      "y_var": ["aggregate", "combined", "p50"]
+      "y_var": ["aggregate", "app", "p50"]
     },
     {
       "name": "tput-lat-p99",
@@ -135,11 +148,11 @@
       "series_indep_vars_idx": 0,
       "series_titles": ["MDL", "Multi-Paxos"],
       "x_var_is_config": false,
-      "x_var": ["run_stats", "combined", "tput", "p50"],
+      "x_var": ["run_stats", "app", "tput", "p50"],
       "x_label": "Throughput (ops/s)",
       "y_label": "p99 Latency",
       "x_indep_vars_idx": 1,
-      "y_var": ["aggregate", "combined", "p99"]
+      "y_var": ["aggregate", "app", "p99"]
     }
   ],
   "plot_cdf_png_font": "DejaVu Sans,12",
@@ -162,11 +175,11 @@
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
   "client_debug_output": false,
-  "client_experiment_length": 50,
+  "client_experiment_length": 120,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 2,
-  "client_num_keys": 10000,
+  "client_num_keys": 1000000,
   "client_ramp_down": 10,
   "client_ramp_up": 10,
   "client_random_coordinator": false,
