@@ -45,7 +45,6 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 	startTimes := make([]time.Time, fanout)
 	startIdx := c.opCount
 	var prevTag mdlinproto.Tag
-	readPrefix := true // track the contiguous prefix of reads
 	for i, opType := range opTypes {
 		k := keys[i]
 		l := c.GetShardFromKey(state.Key(k))
@@ -66,18 +65,13 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		startTimes[i] = time.Now()
 
 		if opType == state.GET {
-			if readPrefix {
-				c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
-			}
 			c.Read(k)
 		} else if opType == state.PUT {
 			c.Write(k, int64(k))
-			readPrefix = false
 		} else {
 			c.CompareAndSwap(k, int64(k-1), int64(k))
-			readPrefix = false
 		}
-		if i > 0 && !readPrefix {
+		if i > 0 {
 			// Send the coordination request
 			// (Keep this after sending the request for now, since
 			// logic in the send function assumes request was send)
