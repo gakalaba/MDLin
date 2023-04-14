@@ -13,6 +13,7 @@ import (
 	"runtime/pprof"
 	"state"
 	"time"
+  "zipfgenerator"
 )
 
 var clientId *int = flag.Int(
@@ -235,8 +236,10 @@ func main() {
 	client := createClient()
 
 	r := rand.New(rand.NewSource(int64(*clientId)))
-	//zipf := rand.NewZipf(r, *zipfS, *zipfV, uint64(*numKeys))
-
+  zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
+  if err != nil {
+    panic("problem making the zipfian generator :0")
+  }
 	var count int32
 	count = 0
 
@@ -275,8 +278,8 @@ func main() {
 					k = (int64(count) << 32) | int64(*clientId)
 				}
 			} else {
-				//k = int64(zipf.Uint64())
-				k = int64(r.Intn(int(*numKeys)))
+				k = int64(zipf.Uint64())
+				//k = int64(r.Intn(int(*numKeys)))
 			}
 			keys = append(keys, k)
 		}
