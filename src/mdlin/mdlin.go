@@ -335,17 +335,18 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 	//onOffProposeChan := r.MDLProposeChan
 
+  lastEpoch := time.Now()
+	epochLength := time.Duration(r.epochlen) * time.Microsecond
+
 	for !r.Shutdown {
-
-		select {
-
-    case <-r.ticker.C:
-    //case <-r.timer.C:
+		if time.Since(lastEpoch) >= epochLength {
       // The epoch has completed, so now we need to do processing
       NewPrintf(LEVEL0, "---------END OF EPOCH-------")
       r.processEpoch()
-      //r.timer.Reset(time.Duration(r.epochlen) * time.Microsecond)
-      break
+			lastEpoch = time.Now()
+		}
+
+		select {
 
 		case <-clockChan:
 			//activate the new proposals channel
@@ -424,6 +425,8 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			// 	reply.Marshal(metricsRequest.Reply)
 			// 	metricsRequest.Reply.Flush()
 			// 	break
+		default:
+			break
 		}
 	}
 }
