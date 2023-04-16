@@ -176,10 +176,10 @@ func (r *Replica) clock() {
 func (r *Replica) run(masterAddr string, masterPort int) {
 
 	r.ConnectToPeers()
-  if r.Id == 0 {
+	if r.Id == 0 {
 		r.IsLeader = true
 	}
-  r.setupShards(masterAddr, masterPort)
+	r.setupShards(masterAddr, masterPort)
 	log.Println("Waiting for client connections")
 
 	go r.WaitForClientConnections()
@@ -191,32 +191,31 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	clockChan = make(chan bool, 1)
 	go r.clock()
 
-	slowClockChan := make(chan bool, 1)
-	go r.SlowClock(slowClockChan)
+	//slowClockChan := make(chan bool, 1)
+	//go r.SlowClock(slowClockChan)
 
-	if r.Beacon {
-		go r.StopAdapting()
-	}
+	//if r.Beacon {
+	//	go r.StopAdapting()
+	//}
 
 	onOffProposeChan := r.ProposeChan
 
 	for !r.Shutdown {
-
 		select {
 
-		case <-clockChan:
-			//activate the new proposals channel
-			onOffProposeChan = r.ProposeChan
-			break
+		//case <-clockChan:
+		//	//activate the new proposals channel
+		//	onOffProposeChan = r.ProposeChan
+		//	break
 
 		case propose := <-onOffProposeChan:
 			//got a Propose from a client
 			dlog.Printf("Proposal with op %d\n", propose.Command.Op)
 			r.handlePropose(propose)
 			//deactivate the new proposals channel to prioritize the handling of protocol messages
-			if MAX_BATCH > 100 {
-				onOffProposeChan = nil
-			}
+			//if MAX_BATCH > 100 {
+			//	onOffProposeChan = nil
+			//}
 			break
 
 		case prepareS := <-r.prepareChan:
@@ -261,23 +260,23 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			r.handleAcceptReply(acceptReply)
 			break
 
-		case beacon := <-r.BeaconChan:
-			dlog.Printf("Received Beacon from replica %d with timestamp %d\n", beacon.Rid, beacon.Timestamp)
-			r.ReplyBeacon(beacon)
-			break
+		//case beacon := <-r.BeaconChan:
+		//	dlog.Printf("Received Beacon from replica %d with timestamp %d\n", beacon.Rid, beacon.Timestamp)
+		//	r.ReplyBeacon(beacon)
+		//	break
 
-		case <-slowClockChan:
-			if r.Beacon {
-				for q := int32(0); q < int32(r.N); q++ {
-					if q == r.Id {
-						continue
-					}
-					r.SendBeacon(q)
-				}
-			}
-			break
-
-
+		//case <-slowClockChan:
+		//	if r.Beacon {
+		//		for q := int32(0); q < int32(r.N); q++ {
+		//			if q == r.Id {
+		//				continue
+		//			}
+		//			r.SendBeacon(q)
+		//		}
+		//	}
+		//	break
+		//default:
+		//	break
 		}
 	}
 }
