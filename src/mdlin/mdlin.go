@@ -336,17 +336,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 	//onOffProposeChan := r.MDLProposeChan
 
-	lastEpoch := time.Now()
-	epochLength := time.Duration(500) * time.Microsecond
-
 	for !r.Shutdown {
-		if r.IsLeader && time.Since(lastEpoch) >= epochLength {
-			// The epoch has completed, so now we need to do processing
-			//NewPrintf(LEVEL0, "---------END OF EPOCH-------")
-			r.processEpoch()
-			lastEpoch = time.Now()
-		}
-
 		select {
 
 		//case <-clockChan:
@@ -423,8 +413,6 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			// 	reply.Marshal(metricsRequest.Reply)
 			// 	metricsRequest.Reply.Flush()
 			// 	break
-		default:
-			break
 		}
 	}
 }
@@ -438,54 +426,29 @@ func (r *Replica) processEpoch() {
   // TODO garbage collection :)
   // create an entry from the readyBuff
   dlog.Printf("------------Epoch Beginning---------%v\n", time.Now().UnixMilli())
-  start := time.Now()
-  p := r.readyBuff.Front()
-  next := p
-  n := r.readyBuff.Len()
-  if (n <= 0) {
-	  return
+  p := r.readyBuff.Back()
+  r.readyBuff.Remove(p)
+  if (r.readyBuff.Len() != 0) {
+    panic("Should only be adding one thing at a time")
   }
-  b := make([]state.Command, n) // Command to execute
-  bi := make([]int64, n) // Epoch to sort by
-  bp := make([]*genericsmr.MDLPropose, n) // Client we are responding to
-  cmdids := make([]mdlinproto.Tag, n)
+
+  b := make([]state.Command, 1) // Command to execute
+  bi := make([]int64, 1) // Epoch to sort by
+  bp := make([]*genericsmr.MDLPropose, 1) // Client we are responding to
+  cmdids := make([]mdlinproto.Tag, 1)
   j := 0
   //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
-  oldLen := len(r.bufferedLog)
-  for p != nil {
-    next = p.Next()
-    // remove ordered entries from the buffer log
-    r.readyBuff.Remove(p)
-    r.epoch = int64(math.Max(float64(r.epoch), float64(p.Value.(*Instance).epoch[0])))
-    b[j] = p.Value.(*Instance).cmds[0]
-    bi[j] = p.Value.(*Instance).epoch[0]
-    bp[j] = p.Value.(*Instance).lb.clientProposals[0]
-    cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
-    delete(r.bufferedLog, cmdids[j])
-    j++
-    //NewPrintf(LEVEL0, "ProcessEpoch: adding entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
-    dlog.Printf("Ordering CommandID %v PID %v\n", p.Value.(*Instance).seqno, p.Value.(*Instance).pid)
-    p = next
-  }
-  // increment the epoch
-  // add all ordered entries to the ordered log
+  b[j] = p.Value.(*Instance).cmds[0]
+  bi[j] = p.Value.(*Instance).epoch[0]
+  bp[j] = p.Value.(*Instance).lb.clientProposals[0]
+  cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
+  delete(r.bufferedLog, cmdids[j])
   instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED)
   r.crtInstance++
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
   dlog.Printf("BCASTFinal!!Accept for instNo %v at %v\n", instNo, time.Now().UnixMilli())
   r.bcastFinalAccept(instNo, r.defaultBallot, cmdids, bi)
-
-  r.epoch++
-  r.totalEpochs++
-  if (r.readyBuff.Len() != 0) {
-    panic("readyBuff should be empty after end of processing epoch!")
-  }
-  end := time.Now()
-  dlog.Printf("------------Epoch End---------%v, it took %v nano\n", time.Now().UnixMilli(), end.Sub(start).Nanoseconds())
-  if (len(r.bufferedLog) != oldLen-n) {
-	  panic ("didn't take out the right amount of elements in buffLog")
-  }
 }
 
 func (r *Replica) updateCommittedUpTo() {
@@ -1019,12 +982,14 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
     panic("Received CR Response for request with no predecessor")
   }
   e.lb.coordinated = int8(crr.OK)
+  e.epoch[0] = crr.AskeeEpoch // we do this so that if you're coordinated before being accepted, the accept logic works out
   OK, CC := r.checkCoordination(e)
   if (OK && CC==1) {
     // Set my epoch to the max of sender and mine
-    e.epoch[0] = int64(math.Max(float64(e.epoch[0]), float64(crr.AskeeEpoch))) + 1
+    pred_epoch := e.epoch[0]
+    e.epoch[0] = int64(math.Max(float64(r.epoch), float64(pred_epoch + 1)))
     // So that incoming reqs in real time are ordered after you
-    r.epoch = int64(math.Max(float64(r.epoch), float64(e.epoch[0])))
+    r.epoch = int64(math.Max(float64(r.epoch), float64(e.epoch[0]))) + 1
     // Now Add me to the orderedLog
     //NewPrintf(LEVEL0, "Pushingback seqno %v", e.seqno)
     r.readyBuff.PushBack(e)
@@ -1036,6 +1001,9 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
     shardTo := e.cr.From
     msg := &mdlinproto.CoordinationResponse{e.cr.AskerTag, e.cr.AskeeTag, e.epoch[0], int32(r.ShardId), CC}
     r.replyCoord(shardTo, msg)
+  }
+  if (OK && CC==1) {
+    r.processEpoch()
   }
 }
 
@@ -1316,7 +1284,9 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
     OK, CC := r.checkCoordination(inst)
     if OK && (CC==1) {
       // So that incoming reqs in real time are ordered after you
-      r.epoch = int64(math.Max(float64(r.epoch), float64(inst.epoch[0])))
+      pred_epoch := inst.epoch[0]
+      inst.epoch[0] = int64(math.Max(float64(r.epoch), float64(pred_epoch+1)))
+      r.epoch = int64(math.Max(float64(r.epoch), float64(inst.epoch[0]))) + 1
       // Now add me to the orderedLog and remove from buffLog
       //NewPrintf(LEVEL0, "Pushingback Seqno %v", inst.seqno)
       r.readyBuff.PushBack(inst)
@@ -1324,9 +1294,13 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
     }
     if (OK && inst.cr != nil) {
       shardTo := inst.cr.From
-      // Send this req's epoch+1 to the successor
+      // Send this req's epoch to the successor
       msg := &mdlinproto.CoordinationResponse{inst.cr.AskerTag, inst.cr.AskeeTag, inst.epoch[0], int32(r.ShardId), CC}
       r.replyCoord(shardTo, msg)
+    }
+    // I know this is ugly, i just did this so that we send the coord message first!
+    if OK && (CC==1) {
+      r.processEpoch()
     }
   }
 }
