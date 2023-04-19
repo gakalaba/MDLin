@@ -1,0 +1,17 @@
+#!/bin/bash
+python3 ./scripts/run_multiple_experiments.py ./experiments/sosp2023/9sh_fanout1_paxos.json
+wait
+python3 ./scripts/run_multiple_experiments.py ./experiments/sosp2023/9sh_fanout10_paxos.json
+wait
+python3 ./scripts/run_multiple_experiments.py ./experiments/sosp2023/9sh_fanout100_paxos.json
+wait
+python3 ./scripts/run_multiple_experiments.py ./experiments/sosp2023/9sh_fanout1000_paxos.json
+wait
+python3 ./scripts/run_multiple_experiments.py ./experiments/sosp2023/3sh_fanout1_paxos.json
+wait
+python3 ./scripts/run_multiple_experiments.py ./experiments/sosp2023/3sh_fanout10_paxos.json
+wait
+python3 ./scripts/run_multiple_experiments.py ./experiments/sosp2023/3sh_fanout100_paxos.json
+wait
+python3 ./scripts/run_multiple_experiments.py ./experiments/sosp2023/3sh_fanout1000_paxos.json
+wait
