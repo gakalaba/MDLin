@@ -39,7 +39,8 @@ var exec = flag.Bool("exec", false, "Execute commands.")
 var dreply = flag.Bool("dreply", false, "Reply to client only after command has been executed.")
 var beacon = flag.Bool("beacon", false, "Send beacons to other replicas to compare their relative speeds.")
 var durable = flag.Bool("durable", false, "Log to a stable store (i.e., a file in the current dir).")
-var batch = flag.Bool("batch", false, "Enables batching of inter-server messages")
+var batch = flag.Bool("batch", false, "Enables batching of first round inter-server messages")
+var epBatch = flag.Bool("epbatch", false, "Enables batching of second round inter-server messages")
 var rpcPort = flag.Int("rpcport", 8070, "Port # for RPC requests. Defaults to 8070")
 var proxy = flag.Bool("proxy", false, "Proxy client requests at nearest replica.")
 var epaxosMode = flag.Bool("epaxosMode", false, "Run Gryff with same message pattern as EPaxos.")
@@ -97,7 +98,7 @@ func main() {
 	var rep Finishable
 	if *doMDLin {
 		log.Println("Starting MD Linearizability replica...")
-		rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *batch, *statsFile, *numShards, *epochLength)
+		rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *batch, *epBatch, *statsFile, *numShards, *epochLength)
 	} else if *doGryff {
 		log.Println("Starting Gryff replica...")
 		var rmwHandlerType gryff.RMWHandlerType
@@ -135,7 +136,7 @@ func main() {
 	} else {
 		log.Println("Starting classic Paxos replica...")
 		rep = paxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
-			*beacon, *durable, *statsFile)
+			*beacon, *durable, *statsFile, *batch)
 	}
 
 	rpc.Register(rep)

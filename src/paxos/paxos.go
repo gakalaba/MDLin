@@ -20,7 +20,7 @@ const CHAN_BUFFER_SIZE = 200000
 const TRUE = uint8(1)
 const FALSE = uint8(0)
 
-const MAX_BATCH = 1
+const MAX_BATCH = 5000
 
 type Replica struct {
 	*genericsmr.Replica // extends a generic Paxos replica
@@ -46,6 +46,7 @@ type Replica struct {
 	committedUpTo       int32
 	before		    time.Time
 	after		    time.Time
+  batchingEnabled     bool
 }
 
 type InstanceStatus int
@@ -73,7 +74,7 @@ type LeaderBookkeeping struct {
 }
 
 func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
-    exec bool, dreply bool, beacon bool, durable bool, statsFile string) *Replica {
+    exec bool, dreply bool, beacon bool, durable bool, statsFile string, batch bool) *Replica {
 	// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
 	r := &Replica{genericsmr.NewReplica(id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -92,7 +93,8 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		true,
 		-1,
 		time.Now(),
-		time.Now()}
+		time.Now(),
+    batch}
 
 
 	r.Beacon = beacon
@@ -450,7 +452,10 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	instNo := r.crtInstance
 	r.crtInstance++
 
-	batchSize := len(r.ProposeChan) + 1
+  batchSize := 1
+  if r.batchingEnabled {
+	  batchSize = len(r.ProposeChan) + 1
+  }
 
 	if batchSize > MAX_BATCH {
 		batchSize = MAX_BATCH

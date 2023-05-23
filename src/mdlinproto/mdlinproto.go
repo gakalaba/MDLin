@@ -36,11 +36,11 @@ type Prepare struct {
 	LeaderId   int32
 	Ballot     int32
 	ToInfinity uint8
-	Instance   Tag
+	Instance   []Tag
 }
 
 type PrepareReply struct {
-	Instance Tag
+	Instance []Tag
   Ballot   int32
 	OK       uint8
 	Command  []state.Command
@@ -50,17 +50,17 @@ type Accept struct {
 	LeaderId     int32
 	Ballot       int32
 	Command      []state.Command
-  PIDs         int64
-	SeqNos       int64
+  PIDs         []int64
+	SeqNos       []int64
 	ExpectedSeqs map[int64]int64
   Epoch        int64
-  CommandId    int32
+  CommandId    []int32
 }
 
 type AcceptReply struct {
 	OK         uint8
 	Ballot     int32
-  IdTag      Tag
+  IdTag      []Tag
 }
 
 type FinalAccept struct {
