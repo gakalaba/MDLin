@@ -186,9 +186,9 @@ func createClient() clients.Client {
 	case "mdl":
 		return clients.NewMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true)
-	//case "naive":
-		//return clients.NewNaiveClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-		//	*statsFile, false, false)
+	case "ss-mdl":
+		return clients.NewSSMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+			*statsFile, false, false)
 	default:
 		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, false)

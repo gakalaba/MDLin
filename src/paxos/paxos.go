@@ -21,6 +21,7 @@ const TRUE = uint8(1)
 const FALSE = uint8(0)
 
 const MAX_BATCH = 5000
+const EPOCH_LENGTH = 500
 
 type Replica struct {
 	*genericsmr.Replica // extends a generic Paxos replica
@@ -163,17 +164,16 @@ func (r *Replica) replyAccept(replicaId int32, reply *paxosproto.AcceptReply) {
 }
 
 /* ============= */
+/* Main event processing loop */
 
-var clockChan chan bool
-
-func (r *Replica) clock() {
-	for !r.Shutdown {
-		time.Sleep(1000 * 1000 * 5)
-		clockChan <- true
-	}
+func (r *Replica) batchClock(proposeChan *(chan *genericsmr.Propose), proposeDone *(chan bool)) {
+  for !r.Shutdown {
+    time.Sleep(EPOCH_LENGTH / 2 * time.Microsecond)
+    *proposeChan = r.ProposeChan
+    <-(*proposeDone)
+  }
 }
 
-/* Main event processing loop */
 
 func (r *Replica) run(masterAddr string, masterPort int) {
 
@@ -190,36 +190,30 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		go r.executeCommands()
 	}
 
-	clockChan = make(chan bool, 1)
-	go r.clock()
-
 	//slowClockChan := make(chan bool, 1)
 	//go r.SlowClock(slowClockChan)
 
 	//if r.Beacon {
 	//	go r.StopAdapting()
 	//}
+  proposeChan := r.ProposeChan
+  proposeDone := make(chan bool, 1)
+  if r.batchingEnabled {
+    proposeChan = nil
+    go r.batchClock(&proposeChan, &proposeDone)
+  }
 
-	onOffProposeChan := r.ProposeChan
-
-	for !r.Shutdown {
+  for !r.Shutdown {
 		select {
 
-		//case <-clockChan:
-		//	//activate the new proposals channel
-		//	onOffProposeChan = r.ProposeChan
-		//	break
-
-		case propose := <-onOffProposeChan:
-			//got a Propose from a client
-			dlog.Printf("Proposal with op %d\n", propose.Command.Op)
-			r.handlePropose(propose)
-			//deactivate the new proposals channel to prioritize the handling of protocol messages
-			//if MAX_BATCH > 100 {
-			//	onOffProposeChan = nil
-			//}
-			break
-
+    case proposal := <-proposeChan:
+      //got a Propose from a client
+      r.handlePropose(proposal)
+      if r.batchingEnabled {
+        proposeChan = nil
+        proposeDone <- true
+      }
+      break
 		case prepareS := <-r.prepareChan:
 			prepare := prepareS.(*paxosproto.Prepare)
 			//got a Prepare message
@@ -439,6 +433,8 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 }
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
+
+	dlog.Printf("Proposal with op %d\n", propose.Command.Op)
 	if !r.IsLeader {
 		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL, 0}
 		r.ReplyProposeTS(preply, propose.Reply)

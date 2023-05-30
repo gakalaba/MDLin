@@ -78,6 +78,16 @@ type FinalAcceptReply struct {
   Ballot    int32
 }
 
+type OldAccept struct {
+  LeaderId     int32
+  Instance     int32
+  Ballot       int32
+  Command      []state.Command
+  PIDs         []int64
+  SeqNos       []int64
+  ExpectedSeqs map[int64]int64
+}
+
 type Commit struct {
 	LeaderId  int32
 	Instance  int32
