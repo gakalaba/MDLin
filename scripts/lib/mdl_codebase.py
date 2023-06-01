@@ -224,6 +224,10 @@ class MDLCodebase(ExperimentCodebase):
             replica_command += ' -fastOverwriteTime %d' % config['replication_protocol_settings']['server_fast_overwrite_timeout']
         if 'server_force_write_period' in config['replication_protocol_settings']:
             replica_command += ' -forceWritePeriod %d' % config['replication_protocol_settings']['server_force_write_period']
+        if 'first_round_batching' in config['replication_protocol_settings'] and config['replication_protocol_settings']['first_round_batching']:
+            replica_command += ' -batching'
+        if 'second_round_batching' in config['replication_protocol_settings'] and config['replication_protocol_settings']['second_round_batching']:
+            replica_command += ' -epochBatching'
 
         if 'server_gc_debug_trace' in config and config['server_gc_debug_trace']:
             if is_exp_local(config) or not is_using_tcsh(config):
