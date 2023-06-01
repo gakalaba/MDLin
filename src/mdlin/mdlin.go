@@ -351,7 +351,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		select {
 
     case proposal := <-proposeChan:
-			  //NewPrintf(LEVELALL, "---------ProposalChan---------")
+			  NewPrintf(LEVELALL, "---------ProposalChan---------")
 			  r.handlePropose(proposal)
         if r.batchingEnabled {
           proposeChan = nil
@@ -456,7 +456,7 @@ func (r *Replica) processEpoch() {
   r.crtInstance++
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
-  dlog.Printf("BCASTFinal!!Accept for instNo %v at %v\n", instNo, time.Now().UnixMilli())
+  dlog.Printf("|-------------|BCASTFinal!!Accept for instNo %v at %v\n", instNo, time.Now().UnixMilli())
   r.bcastFinalAccept(instNo, r.defaultBallot, cmdids, bi)
 }
 
@@ -667,8 +667,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		r.MDReplyPropose(preply, propose.Reply)
 		return
 	}
-	//r.printMap[propose.CommandId] = int(time.Now().UnixMilli())
-	//dlog.Printf("Proposal with CommandId = %d PID %v arrived at %v\n", propose.CommandId, propose.PID, r.printMap[propose.CommandId])
+	r.printMap[propose.CommandId] = int(time.Now().UnixMilli())
+	dlog.Printf("Calling handlePropose at time %v\n", r.printMap[propose.CommandId])
 
 	// Get batch size
   batchSize := 1
@@ -824,9 +824,10 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
   pid = append([]int64(nil), pid[:found]...)
   seqno = append([]int64(nil), seqno[:found]...)
   cmdIds = append([]int32(nil), cmdIds[:found]...)
+  dlog.Printf("ended up finding %d entries for this batch", found)
 	//NewPrintf(LEVEL0, "handlePropose: CurrInst Pushed back entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
 	if r.defaultBallot == -1 {
-		//dlog.Printf("BCASTPrepare for CommandId = %d PID %v at %v\n", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).pid, time.Now().UnixMilli())
+		dlog.Printf("BCASTPrepare at time %v\n", time.Now().UnixMilli())
 		//NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting prepares....")
 		r.bcastPrepare(prepareTags, r.makeUniqueBallot(0), true)
 	} else {
@@ -838,7 +839,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
       r.recordCommands(cmdRecord)
       r.sync()
     }
-		//dlog.Printf("BCASTAccept for CommandId = %d PID %v at %v\n", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).pid, time.Now().UnixMilli())
+		dlog.Printf("BCASTAccept for at time %v\n", time.Now().UnixMilli())
 		r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
 	}
 }
@@ -1078,7 +1079,7 @@ func (r *Replica) handlePrepare(prepare *mdlinproto.Prepare) {
 }
 
 func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
-	//dlog.Printf("Start of handleAccept for CommandId %v PID %v at %v\n", accept.CommandId, accept.PIDs, time.Now().UnixMilli())
+	dlog.Printf("Start of handleAccept for with %v requests from PID %v at %v\n", len(accept.Command), accept.PIDs, time.Now().UnixMilli())
   var areply *mdlinproto.AcceptReply
   if (accept.Ballot < r.defaultBallot) {
     //t := mdlinproto.Tag{K: -1, PID: -1, SeqNo: -1}
@@ -1098,7 +1099,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
     copyMap(r.nextSeqNo, accept.ExpectedSeqs)
   }
 	r.replyAccept(accept.LeaderId, areply)
-	dlog.Printf("END of handleAccept for CommandId %v PID %v at %v\n", accept.CommandId, accept.PIDs, time.Now().UnixMilli())
+	dlog.Printf("|------>END of handleAccept at time %v\n", time.Now().UnixMilli())
 }
 
 func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
@@ -1322,6 +1323,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
   }
   inst.lb.acceptOKs++
   if inst.lb.acceptOKs+1 > r.N>>1 {
+    dlog.Printf("Quorum reached at time %v for commandID %v which has batchsize = %v\n", time.Now().UnixMilli(), areply.IdTag[0], len(areply.IdTag))
     numacks := inst.lb.acceptOKs
     for i := 0; i < len(areply.IdTag); i++ {
       inst = r.bufferedLog[areply.IdTag[i]]
@@ -1346,6 +1348,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
       }
       // I know this is ugly, i just did this so that we send the coord message first!
       if !r.epochBatching && OK && (CC==1) {
+        dlog.Printf("Anjd issueing finalAccept round for that request\n")
         r.processEpoch()
       }
     }
