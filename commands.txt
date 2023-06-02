@@ -1,0 +1,15 @@
+----------------------------
+----------setup-------------
+sudo -s
+apt-get update
+apt-get install -y feh
+apt-get install -y gnuplot
+apt-get install -y python3-pip
+pip3 install numpy
+
+----- to run ---------------
+----------------------------
+sudo -s
+export PATH="$PATH:/usr/local/go/bin"
+python3 ./scripts/run_multiple_experiments.py ./experiments/sosp2023/tput-3.json
+make
