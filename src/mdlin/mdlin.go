@@ -173,6 +173,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
     make(map[mdlinproto.Tag]*Instance),
     make(map[int32]int),
     0}
+        dlog.Printf("first round batching = %v, 2nd round = %v\n", batch, epBatch)
 
 	r.Durable = durable
 
@@ -307,9 +308,12 @@ func (r *Replica) replyCoord(replicaId int32, reply *mdlinproto.CoordinationResp
 
 func (r *Replica) batchClock(proposeChan *(chan *genericsmr.MDLPropose), proposeDone *(chan bool)) {
   for !r.Shutdown {
-    time.Sleep(EPOCH_LENGTH / 2 * time.Microsecond)
+    dlog.Printf("batchClock sleeping... %v\n", time.Now().UnixMilli())
+    time.Sleep(1 * time.Millisecond)
     *proposeChan = r.MDLProposeChan
+    dlog.Printf("ProposeChan = VAL, length = %v... trying to pull off ProposeDone\n", len(*proposeChan))
     <-(*proposeDone)
+    dlog.Printf("!!!Pulled of proposeDone\n")
   }
 }
 func (r *Replica) epochClock(proposeChan *(chan bool), proposeDone *(chan bool)) {
@@ -337,6 +341,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
   proposeDone := make(chan bool, 1)
   if r.batchingEnabled {
     proposeChan = nil
+    dlog.Printf("proposeChan = nil\n");
     go r.batchClock(&proposeChan, &proposeDone)
   }
 
@@ -348,69 +353,89 @@ func (r *Replica) run(masterAddr string, masterPort int) {
   }
 
 	for !r.Shutdown {
+		dlog.Printf("A\n")
+		if proposeChan == nil {
+			dlog.Printf("propose han = nil\n")
+		} else {
+			dlog.Printf("ProposeChan has length = %v\n", len(proposeChan))
+		}
 		select {
 
     case proposal := <-proposeChan:
 			  NewPrintf(LEVELALL, "---------ProposalChan---------")
+			  dlog.Printf("1\n")
 			  r.handlePropose(proposal)
         if r.batchingEnabled {
           proposeChan = nil
+	  dlog.Printf("main thread set propose=nil, proposeDone <- true.... %v\n", time.Now().UnixMilli())
           proposeDone <- true
+	  dlog.Printf("--->Done<-true %v\n", time.Now().UnixMilli())
         }
 			  break
     case <-epochChan:
+	    dlog.Printf("2\n")
         r.processEpoch()
         epochDone <- true
         break
 		case prepareS := <-r.prepareChan:
+			dlog.Printf("3\n")
 			prepare := prepareS.(*mdlinproto.Prepare)
 			//got a Prepare message
 			r.handlePrepare(prepare)
 			break
 
 		case acceptS := <-r.acceptChan:
+			dlog.Printf("4\n")
 			accept := acceptS.(*mdlinproto.Accept)
 			//got an Accept message
 			r.handleAccept(accept)
 			break
 
 		case commitS := <-r.commitChan:
+			dlog.Printf("5\n")
 			commit := commitS.(*mdlinproto.Commit)
 			//got a Commit message
 			r.handleCommit(commit)
 			break
 
 		case commitS := <-r.commitShortChan:
+			dlog.Printf("6\n")
 			commit := commitS.(*mdlinproto.CommitShort)
 			//got a Commit message
 			r.handleCommitShort(commit)
 			break
 
 		case prepareReplyS := <-r.prepareReplyChan:
+			dlog.Printf("7\n")
 			prepareReply := prepareReplyS.(*mdlinproto.PrepareReply)
 			//got a Prepare reply
 			r.handlePrepareReply(prepareReply)
 			break
 		case acceptReplyS := <-r.acceptReplyChan:
+			dlog.Printf("8\n")
 			acceptReply := acceptReplyS.(*mdlinproto.AcceptReply)
 			//got an Accept reply
 			r.handleAcceptReply(acceptReply)
 			break
 		case finalAcceptS := <-r.finalAcceptChan:
+			dlog.Printf("9\n")
 			finalAccept := finalAcceptS.(*mdlinproto.FinalAccept)
 			//got a FinalAccept message
 			r.handleFinalAccept(finalAccept)
 			break
 		case coordinationRequest := <-r.MDLCoordReqChan:
+			dlog.Printf("10\n")
 			//NewPrintf(LEVELALL, "-----------CoordReq Chan-----------")
 			r.handleCoordinationRequest(coordinationRequest)
 			break
 		case coordinationRReply := <-r.coordReqReplyChan:
+			dlog.Printf("11\n")
 			//NewPrintf(LEVELALL, "----------CoordReqReply Chan--------")
 			CRR := coordinationRReply.(*mdlinproto.CoordinationResponse)
 			r.handleCoordinationRReply(CRR)
 			break
 		case finalAcceptReplyS := <-r.finalAcceptReplyChan:
+			dlog.Printf("12\n")
 			finalAcceptReply := finalAcceptReplyS.(*mdlinproto.FinalAcceptReply)
 			// got a FinalAccept reply
 			r.handleFinalAcceptReply(finalAcceptReply)
@@ -422,6 +447,8 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			// 	reply.Marshal(metricsRequest.Reply)
 			// 	metricsRequest.Reply.Flush()
 			// 	break
+		default:
+			break
 		}
 	}
 }
@@ -434,7 +461,7 @@ func (r *Replica) makeUniqueBallot(ballot int32) int32 {
 func (r *Replica) processEpoch() {
   // TODO garbage collection :)
   // create an entry from the readyBuff
-  dlog.Printf("------------Epoch Beginning---------%v\n", time.Now().UnixMilli())
+  //dlog.Printf("------------Epoch Beginning---------%v\n", time.Now().UnixMilli())
   p := r.readyBuff.Back()
   r.readyBuff.Remove(p)
   if (r.readyBuff.Len() != 0) {
@@ -461,12 +488,12 @@ func (r *Replica) processEpoch() {
 }
 
 func (r *Replica) updateCommittedUpTo() {
-	ini := r.committedUpTo
+	//ini := r.committedUpTo
 	for r.instanceSpace[r.committedUpTo+1] != nil &&
 		(r.instanceSpace[r.committedUpTo+1].status == COMMITTED) {
 		r.committedUpTo++
 	}
-	dlog.Printf("updated index from %v to %v at %v\n", ini, r.committedUpTo, time.Now().UnixMilli())
+	//dlog.Printf("updated index from %v to %v at %v\n", ini, r.committedUpTo, time.Now().UnixMilli())
 	//NewPrintf(LEVEL0, "Updating commit index from %d to %d", ini, r.committedUpTo)
 }
 
@@ -673,12 +700,14 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	// Get batch size
   batchSize := 1
 	numProposals := len(r.MDLProposeChan) + 1
+	dlog.Printf("length of the MDLProposeChan = %v\n", len(r.MDLProposeChan)+1)
 	if r.batchingEnabled {
-		batchSize := numProposals //TODO +1?
+		batchSize = numProposals //TODO +1?
 		if batchSize > MAX_BATCH {
 			batchSize = MAX_BATCH
 		}
 	}
+	dlog.Printf("batchsize = %v\n", batchSize)
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.MDLPropose, batchSize)
@@ -806,6 +835,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		}
 	}
 
+	dlog.Printf("found = %v\n", found)
 	// None of the proposals in the channel
 	// are ready to be added to the log
 	if found == 0 {
@@ -958,9 +988,11 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
     e, in = r.seen[cr.AskeeTag]
     if (!in) {
       //NewPrintf(LEVEL0, "Coordination Request arrived before the predecessor did")
+      dlog.Printf("handleCoordinationRequest from client for req not yet here\n")
       r.outstandingCR[cr.AskeeTag] = cr //This seems like a bad idea TODO... the address of a message that's gonna disapear?
       return
     }
+    dlog.Printf("handleCoordinationRequest from client for that was already COMMITTED\n")
     OK = true
     CC = 1
   } else {
@@ -996,6 +1028,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
   //NewPrintf(LEVEL0, "@@@@@@@@@@@Received coord ReSPONSE for %v with OK = %v", crr.AskerTag, crr.OK)
   e := r.findEntryInBuffLog(crr.AskerTag) // only need to search buffLog, since it's not in orderedLog yet
   if (e == nil) {
+    dlog.Printf("Getting coord resp from predecessor to sucessor that hasn't arrived yet! crr = %v\n", crr)
     //NewPrintf(LEVEL0, "Coordination Response arrived before the request did")
     r.outstandingCRR[crr.AskerTag] = crr //This seems like a bad idea TODO... the address of a message that's gonna disapear?
     return
@@ -1371,7 +1404,7 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
       // Check if the successor already sent a CR for this req,
       // but before it was committed itself
       //NewPrintf(LEVELALL, "FINAL ROUND Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
-      dlog.Printf("--->Committing instNo %v at time %v\n", fareply.Instance, time.Now().UnixMilli())
+      //dlog.Printf("--->Committing instNo %v at time %v\n", fareply.Instance, time.Now().UnixMilli())
       r.readyToCommit(fareply.Instance)
 		}
 	} else {

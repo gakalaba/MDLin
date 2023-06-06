@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"dlog"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -588,6 +589,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 	var errS string
 	for !r.Shutdown && err == nil {
 		//dlog.Printf("[%d] Waiting for message from client...\n", r.Id)
+		//dlog.Printf("Tryna read a message from client %v.....\n", r.Id)
 		if msgType, err = reader.ReadByte(); err != nil {
 			errS = "reading opcode"
 			break
@@ -612,7 +614,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 				errS = "reading MDL_PROPOSE"
 				break
 			}
-			//log.Printf("Proposal with CommandId %v arrived on WIRE at %v\n", prop.CommandId, time.Now().UnixMilli())
+			dlog.Printf("Proposal with CommandId %v arrived on WIRE at %v,,, len(MDLProposeChan) = %v\n", prop.CommandId, time.Now().UnixMilli(), len(r.MDLProposeChan))
 			r.MDLProposeChan <- &MDLPropose{prop, writer}
 			break
 
@@ -722,6 +724,7 @@ func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio
 }
 
 func (r *Replica) MDReplyPropose(reply *mdlinproto.ProposeReply, w *bufio.Writer) {
+	//dlog.Printf("THE Leader %v sending this reply %v at time %v\n", r.Id, reply, time.Now().UnixMilli())
 	w.WriteByte(clientproto.MDL_PROPOSE_REPLY)
 	reply.Marshal(w)
 	w.Flush()
