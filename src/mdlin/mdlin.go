@@ -306,13 +306,11 @@ func (r *Replica) replyCoord(replicaId int32, reply *mdlinproto.CoordinationResp
 
 /* ============= */
 
-func (r *Replica) batchClock(proposeChan *(chan *genericsmr.MDLPropose), proposeDone *(chan bool)) {
+func (r *Replica) batchClock(proposeDone *(chan bool)) {
   for !r.Shutdown {
     dlog.Printf("batchClock sleeping... %v\n", time.Now().UnixMilli())
     time.Sleep(1 * time.Millisecond)
-    *proposeChan = r.MDLProposeChan
-    dlog.Printf("ProposeChan = VAL, length = %v... trying to pull off ProposeDone\n", len(*proposeChan))
-    <-(*proposeDone)
+    (*proposeDone) <- true
     dlog.Printf("!!!Pulled of proposeDone\n")
   }
 }
@@ -336,21 +334,20 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	go r.WaitForClientConnections()
 
 	go r.executeCommands()
+	proposeChan := r.MDLProposeChan
+	proposeDone := make(chan bool, 1)
+	if r.batchingEnabled {
+		proposeChan = nil
+		dlog.Printf("proposeChan = nil\n");
+		go r.batchClock(&proposeDone)
+	}
 
-  proposeChan := r.MDLProposeChan
-  proposeDone := make(chan bool, 1)
-  if r.batchingEnabled {
-    proposeChan = nil
-    dlog.Printf("proposeChan = nil\n");
-    go r.batchClock(&proposeChan, &proposeDone)
-  }
-
-  var epochChan chan bool = nil
-  epochDone := make(chan bool, 1)
-  if r.epochBatching {
-    epochChan := make(chan bool)
-    go r.epochClock(&epochChan, &epochDone)
-  }
+	var epochChan chan bool = nil
+	epochDone := make(chan bool, 1)
+	if r.epochBatching {
+		epochChan := make(chan bool)
+		go r.epochClock(&epochChan, &epochDone)
+	}
 
 	for !r.Shutdown {
 		dlog.Printf("A\n")
@@ -360,23 +357,23 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			dlog.Printf("ProposeChan has length = %v\n", len(proposeChan))
 		}
 		select {
-
-    case proposal := <-proposeChan:
-			  NewPrintf(LEVELALL, "---------ProposalChan---------")
-			  dlog.Printf("1\n")
-			  r.handlePropose(proposal)
-        if r.batchingEnabled {
-          proposeChan = nil
-	  dlog.Printf("main thread set propose=nil, proposeDone <- true.... %v\n", time.Now().UnixMilli())
-          proposeDone <- true
-	  dlog.Printf("--->Done<-true %v\n", time.Now().UnixMilli())
-        }
-			  break
-    case <-epochChan:
-	    dlog.Printf("2\n")
-        r.processEpoch()
-        epochDone <- true
-        break
+		case <-proposeDone:
+			proposeChan = r.MDLProposeChan
+			break
+		case proposal := <-proposeChan:
+			NewPrintf(LEVELALL, "---------ProposalChan---------")
+			dlog.Printf("1\n")
+			r.handlePropose(proposal)
+			if r.batchingEnabled {
+				proposeChan = nil
+				dlog.Printf("main thread set propose=nil, proposeDone <- true.... %v\n", time.Now().UnixMilli())
+			}
+			break
+		case <-epochChan:
+			dlog.Printf("2\n")
+			r.processEpoch()
+			epochDone <- true
+			break
 		case prepareS := <-r.prepareChan:
 			dlog.Printf("3\n")
 			prepare := prepareS.(*mdlinproto.Prepare)
@@ -447,8 +444,8 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			// 	reply.Marshal(metricsRequest.Reply)
 			// 	metricsRequest.Reply.Flush()
 			// 	break
-		default:
-			break
+		//default:
+		//	break
 		}
 	}
 }
