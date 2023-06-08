@@ -289,7 +289,7 @@ func main() {
 
 		var success bool
 
-		dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
+		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
 		before := time.Now()
 		success, _ = client.AppRequest(opTypes, keys)
 		after := time.Now()
@@ -300,7 +300,8 @@ func main() {
 			log.Printf("Failed %s(%d).\n", opString, count)
 		}
 		count++
-		dlog.Printf("AppRequests attempted: %d at time %d\n", count, time.Now().UnixMilli())
+		dlog.Printf("AppRequests attempted: %d\n", count)
+		//dlog.Printf("AppRequests attempted: %d at time %d\n", count, time.Now().UnixMilli())
 
 		currInt := int(currRuntime.Seconds())
 		if *rampUp <= currInt && currInt < *expLength-*rampDown {

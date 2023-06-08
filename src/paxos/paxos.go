@@ -47,7 +47,7 @@ type Replica struct {
 	committedUpTo       int32
 	before		    time.Time
 	after		    time.Time
-  batchingEnabled     bool
+	batchingEnabled     bool
 }
 
 type InstanceStatus int
@@ -95,9 +95,10 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		-1,
 		time.Now(),
 		time.Now(),
-    batch}
+		batch}
 
 
+	log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
 	r.Beacon = beacon
 	r.Durable = durable
 
@@ -166,11 +167,10 @@ func (r *Replica) replyAccept(replicaId int32, reply *paxosproto.AcceptReply) {
 /* ============= */
 /* Main event processing loop */
 
-func (r *Replica) batchClock(proposeChan *(chan *genericsmr.Propose), proposeDone *(chan bool)) {
+func (r *Replica) batchClock(proposeDone *(chan bool)) {
   for !r.Shutdown {
-    time.Sleep(EPOCH_LENGTH / 2 * time.Microsecond)
-    *proposeChan = r.ProposeChan
-    <-(*proposeDone)
+    time.Sleep(1 * time.Millisecond)
+    (*proposeDone) <- true
   }
 }
 
@@ -196,24 +196,26 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	//if r.Beacon {
 	//	go r.StopAdapting()
 	//}
-  proposeChan := r.ProposeChan
-  proposeDone := make(chan bool, 1)
-  if r.batchingEnabled {
-    proposeChan = nil
-    go r.batchClock(&proposeChan, &proposeDone)
-  }
+	proposeChan := r.ProposeChan
+	proposeDone := make(chan bool, 1)
+	if r.batchingEnabled {
+		log.Printf("batching neabledddddddddddddddddddddddddddddn\n")
+		proposeChan = nil
+		go r.batchClock(&proposeDone)
+	}
 
-  for !r.Shutdown {
+	for !r.Shutdown {
 		select {
-
-    case proposal := <-proposeChan:
-      //got a Propose from a client
-      r.handlePropose(proposal)
-      if r.batchingEnabled {
-        proposeChan = nil
-        proposeDone <- true
-      }
-      break
+		case <-proposeDone:
+			proposeChan = r.ProposeChan
+			break
+		case proposal := <-proposeChan:
+			//got a Propose from a client
+			r.handlePropose(proposal)
+			if r.batchingEnabled {
+				proposeChan = nil
+			}
+			break
 		case prepareS := <-r.prepareChan:
 			prepare := prepareS.(*paxosproto.Prepare)
 			//got a Prepare message
@@ -434,7 +436,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
-	dlog.Printf("Proposal with op %d\n", propose.Command.Op)
+	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)
 	if !r.IsLeader {
 		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL, 0}
 		r.ReplyProposeTS(preply, propose.Reply)
@@ -448,16 +450,16 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	instNo := r.crtInstance
 	r.crtInstance++
 
-  batchSize := 1
-  if r.batchingEnabled {
-	  batchSize = len(r.ProposeChan) + 1
-  }
+	batchSize := 1
+	if r.batchingEnabled {
+		batchSize = len(r.ProposeChan) + 1
+	}
 
 	if batchSize > MAX_BATCH {
 		batchSize = MAX_BATCH
 	}
 
-	dlog.Printf("Batched %d\n", batchSize)
+	//dlog.Printf("Batched %d\n", batchSize)
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.Propose, batchSize)
@@ -477,7 +479,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 			PREPARING,
 			&LeaderBookkeeping{proposals, 0, 0, 0, 0}}
 		r.bcastPrepare(instNo, r.makeUniqueBallot(0), true)
-		dlog.Printf("Classic round for instance %d\n", instNo)
+		//dlog.Printf("Classic round for instance %d\n", instNo)
 	} else {
 		r.instanceSpace[instNo] = &Instance{
 			cmds,
@@ -490,7 +492,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		r.sync()
 
 		r.bcastAccept(instNo, r.defaultBallot, cmds)
-		dlog.Printf("Fast round for instance %d\n", instNo)
+		//dlog.Printf("Fast round for instance %d\n", instNo)
 	}
 }
 
@@ -570,7 +572,7 @@ func (r *Replica) handleAccept(accept *paxosproto.Accept) {
 func (r *Replica) handleCommit(commit *paxosproto.Commit) {
 	inst := r.instanceSpace[commit.Instance]
 
-	dlog.Printf("Committing instance %d\n", commit.Instance)
+	//dlog.Printf("Committing instance %d\n", commit.Instance)
 
 	if inst == nil {
 		r.instanceSpace[commit.Instance] = &Instance{
@@ -599,7 +601,7 @@ func (r *Replica) handleCommit(commit *paxosproto.Commit) {
 func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
 	inst := r.instanceSpace[commit.Instance]
 
-	dlog.Printf("Committing instance %d\n", commit.Instance)
+	//dlog.Printf("Committing instance %d\n", commit.Instance)
 
 	if inst == nil {
 		r.instanceSpace[commit.Instance] = &Instance{nil,

@@ -159,6 +159,7 @@ func NewReplica(id int, peerAddrList []string, numShards int, thrifty bool, exec
 		make([]map[uint8]chan fastrpc.Serializable, 0), // delayedRPC
 	}
 
+	dlog.Printf("hi\n")
 	var err error
 
 	if r.StableStore, err = os.Create(fmt.Sprintf("stable-store-replica%d", r.Id)); err != nil {
@@ -614,7 +615,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 				errS = "reading MDL_PROPOSE"
 				break
 			}
-			dlog.Printf("Proposal with CommandId %v arrived on WIRE at %v,,, len(MDLProposeChan) = %v\n", prop.CommandId, time.Now().UnixMilli(), len(r.MDLProposeChan))
+			//dlog.Printf("Proposal with CommandId %v arrived on WIRE at %v,,, len(MDLProposeChan) = %v\n", prop.CommandId, time.Now().UnixMilli(), len(r.MDLProposeChan))
 			r.MDLProposeChan <- &MDLPropose{prop, writer}
 			break
 
