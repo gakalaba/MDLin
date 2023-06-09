@@ -169,7 +169,7 @@ func (r *Replica) replyAccept(replicaId int32, reply *paxosproto.AcceptReply) {
 
 func (r *Replica) batchClock(proposeDone *(chan bool)) {
   for !r.Shutdown {
-    time.Sleep(1 * time.Millisecond)
+    time.Sleep(100 * time.Millisecond)
     (*proposeDone) <- true
   }
 }
