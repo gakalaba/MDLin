@@ -616,6 +616,10 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
   return nil
 }
 
+func (t *OldAccept) New() fastrpc.Serializable {
+        return new(OldAccept)
+}
+
 func (t *OldAccept) Marshal(wire io.Writer) {
 	// LeaderId       int32
   // Instance       int32

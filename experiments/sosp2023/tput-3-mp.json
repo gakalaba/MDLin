@@ -10,6 +10,7 @@
     {
 	    "first_round_batching": true,
 	    "second_round_batching": true,
+	    "single_shard_aware": true,
             "server_delay_reply": true,
       "server_execute_commands": true,
       "server_thrifty": true
@@ -27,52 +28,12 @@
       "us-west-1-1",
       "us-west-1-2"
   ],
-  "num_shards": 9,
+  "num_shards": 1,
   "shards": [
     [
       "eu-west-1-0",
       "eu-west-1-1",
       "eu-west-1-2"
-    ],
-    [
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-    [
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-    [
-      "us-east-1-0",
-      "us-east-1-1",
-      "us-east-1-2"
-    ],
-    [
-      "us-east-1-2",
-      "us-east-1-0",
-      "us-east-1-1"
-    ],
-    [
-      "us-east-1-1",
-      "us-east-1-2",
-      "us-east-1-0"
-    ],
-    [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
-    ],
-    [
-      "us-west-1-2",
-      "us-west-1-0",
-      "us-west-1-1"
-    ],
-    [
-      "us-west-1-1",
-      "us-west-1-2",
-      "us-west-1-0"
     ]
   ],
   "clients": [

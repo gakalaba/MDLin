@@ -10,6 +10,7 @@ import (
 	"gryff"
 	"log"
 	"mdlin"
+	"ssmdlin"
 	"mencius"
 	"net/rpc"
 	"os"
@@ -41,6 +42,7 @@ var beacon = flag.Bool("beacon", false, "Send beacons to other replicas to compa
 var durable = flag.Bool("durable", false, "Log to a stable store (i.e., a file in the current dir).")
 var doBatch = flag.Bool("batching", false, "Enables batching of first round inter-server messages")
 var epBatch = flag.Bool("epochBatching", false, "Enables batching of second round inter-server messages")
+var doSSAware = flag.Bool("singleShardAware", false, "Enables single-shard optimizations")
 var rpcPort = flag.Int("rpcport", 8070, "Port # for RPC requests. Defaults to 8070")
 var proxy = flag.Bool("proxy", false, "Proxy client requests at nearest replica.")
 var epaxosMode = flag.Bool("epaxosMode", false, "Run Gryff with same message pattern as EPaxos.")
@@ -97,8 +99,13 @@ func main() {
 
 	var rep Finishable
 	if *doMDLin {
-		log.Println("Starting MD Linearizability replica...")
-		rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *epBatch, *statsFile, *numShards, *epochLength)
+		if (*doSSAware) {
+			log.Println("Starting SS-MD Linearizability replica...")
+			rep = ssmdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *statsFile, *numShards)
+		} else {
+			log.Println("Starting MD Linearizability replica...")
+			rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *epBatch, *statsFile, *numShards, *epochLength)
+		}
 	} else if *doGryff {
 		log.Println("Starting Gryff replica...")
 		var rmwHandlerType gryff.RMWHandlerType

@@ -228,6 +228,8 @@ class MDLCodebase(ExperimentCodebase):
             replica_command += ' -batching'
         if 'second_round_batching' in config['replication_protocol_settings'] and config['replication_protocol_settings']['second_round_batching']:
             replica_command += ' -epochBatching'
+        if 'single_shard_aware' in config['replication_protocol_settings'] and config['replication_protocol_settings']['single_shard_aware']:
+            replica_command += ' -singleShardAware'
 
         if 'server_gc_debug_trace' in config and config['server_gc_debug_trace']:
             if is_exp_local(config) or not is_using_tcsh(config):

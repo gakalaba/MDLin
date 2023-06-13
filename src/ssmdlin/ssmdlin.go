@@ -1,7 +1,6 @@
-package ss-mdlin
+package ssmdlin
 
 import (
-  "math"
 	"encoding/binary"
 	"fastrpc"
 	"fmt"
@@ -14,7 +13,6 @@ import (
 	"mysort"
 	"state"
 	"time"
-  "container/list"
   "masterproto"
 	"net/rpc"
 )
@@ -63,7 +61,6 @@ type Replica struct {
 	flush               bool
 	committedUpTo       int32 //This is inclusive!
 	batchingEnabled     bool
-  epochBatching       bool
 	// Add these for single-sharded multidispatch
 	nextSeqNo        map[int64]int64                    // Mapping client PID to next expected sequence number
 	outstandingInst  map[int64][]*genericsmr.MDLPropose // Mapping client PID to `sorted` list of outstanding proposals received
@@ -93,8 +90,6 @@ type Instance struct {
   ballot     int32
 	status     InstanceStatus
 	lb         *LeaderBookkeeping
-	pid        int64
-	seqno      int64
 }
 
 type LeaderBookkeeping struct {
@@ -110,7 +105,7 @@ func tagtostring(t mdlinproto.Tag) string {
 }
 
 func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
-	exec bool, dreply bool, durable bool, batch bool, epBatch bool, statsFile string, numShards int, epochLength int) *Replica {
+	exec bool, dreply bool, durable bool, batch bool, statsFile string, numShards int) *Replica {
 	r := &Replica{
 		genericsmr.NewReplica(id, peerAddrList, numShards, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -129,15 +124,17 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		true,
 		-1,
 		batch,
-    epBatch,
 		make(map[int64]int64),
 		make(map[int64][]*genericsmr.MDLPropose),
 		true}
+	if numShards != 1 {
+		panic("Can only do single-shard aware optimization when configuration is 1 shard!")
+	}
 
 	r.Durable = durable
 
 	r.prepareRPC = r.RegisterRPC(new(mdlinproto.Prepare), r.prepareChan)
-	r.acceptRPC = r.RegisterRPC(new(mdlinproto.Accept), r.acceptChan)
+	r.acceptRPC = r.RegisterRPC(new(mdlinproto.OldAccept), r.acceptChan)
 	r.commitRPC = r.RegisterRPC(new(mdlinproto.Commit), r.commitChan)
 	r.commitShortRPC = r.RegisterRPC(new(mdlinproto.CommitShort), r.commitShortChan)
 	r.prepareReplyRPC = r.RegisterRPC(new(mdlinproto.PrepareReply), r.prepareReplyChan)
@@ -246,23 +243,12 @@ func (r *Replica) replyAccept(replicaId int32, reply *mdlinproto.FinalAcceptRepl
 	r.SendMsg(replicaId, r.oldAcceptReplyRPC, reply)
 }
 
-// leaderId is the ID of the leader this message is being sent TO. it's an index
-// msg is the actual message being sent of mdlinproto.InterShard* type
-func (r *Replica) replyCoord(replicaId int32, reply *mdlinproto.CoordinationResponse) {
-	if replicaId == int32(r.ShardId) {
-		r.coordReqReplyChan <- reply
-	} else {
-		r.SendISMsg(replicaId, r.coordResponseRPC, reply)
-	}
-}
-
 /* ============= */
 
-func (r *Replica) batchClock(proposeChan *(chan *genericsmr.MDLPropose), proposeDone *(chan bool)) {
+func (r *Replica) batchClock(proposeDone *(chan bool)) {
   for !r.Shutdown {
-    time.Sleep(EPOCH_LENGTH / 2 * time.Microsecond)
-    *proposeChan = r.MDLProposeChan
-    <-(*proposeDone)
+	  time.Sleep(2 * time.Millisecond)
+	  (*proposeDone) <- true
   }
 }
 
@@ -279,24 +265,24 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 	go r.executeCommands()
 
-  proposeChan := r.MDLProposeChan
-  proposeDone := make(chan bool, 1)
-  if r.batchingEnabled {
-    proposeChan = nil
-    go r.batchClock(&proposeChan, &proposeDone)
-  }
+	proposeChan := r.MDLProposeChan
+	proposeDone := make(chan bool, 1)
+	if r.batchingEnabled && r.IsLeader {
+		proposeChan = nil
+		go r.batchClock(&proposeDone)
+	}
 
 	for !r.Shutdown {
 		select {
-
-    case proposal := <-proposeChan:
-			  //NewPrintf(LEVELALL, "---------ProposalChan---------")
-			  r.handlePropose(proposal)
-        if r.batchingEnabled {
-          proposeChan = nil
-          proposeDone <- true
-        }
-			  break
+		case <-proposeDone:
+			proposeChan = r.MDLProposeChan
+			break
+		case proposal := <-proposeChan:
+			r.handlePropose(proposal)
+			if r.batchingEnabled {
+				proposeChan = nil
+			}
+			break
 		case prepareS := <-r.prepareChan:
 			prepare := prepareS.(*mdlinproto.Prepare)
 			//got a Prepare message
@@ -304,7 +290,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			break
 
 		case acceptS := <-r.acceptChan:
-			accept := acceptS.(*mdlinproto.Accept)
+			accept := acceptS.(*mdlinproto.OldAccept)
 			//got an Accept message
 			r.handleAccept(accept)
 			break
@@ -327,7 +313,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			r.handlePrepareReply(prepareReply)
 			break
 		case acceptReplyS := <-r.acceptReplyChan:
-			acceptReply := acceptReplyS.(*mdlinproto.AcceptReply)
+			acceptReply := acceptReplyS.(*mdlinproto.FinalAcceptReply)
 			//got an Accept reply
 			r.handleAcceptReply(acceptReply)
 			break
@@ -615,8 +601,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
     r.addEntryToOrderedLog(instNo, cmds, proposals, PREPARING, pid, seqno)
 		//dlog.Printf("BCASTPrepare for CommandId = %d PID %v at %v\n", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).pid, time.Now().UnixMilli())
 		//NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting prepares....")
-    index := make( mdlinproto.Tag, 1)
-    index[0] = mdlinproto.Tag{0, instNo, 0}
+    index := make([]mdlinproto.Tag, 1)
+    index[0] = mdlinproto.Tag{0, int64(instNo), 0}
 		r.bcastPrepare(index, r.makeUniqueBallot(0), true)
 	} else {
 		//NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting accepts!....")
@@ -638,9 +624,8 @@ func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, cPs []
 		cmds,
 		r.defaultBallot,
 		status,
-    &LeaderBookkeeping{cPs, 0, 0, 0, 0, int8(TRUE)}, // Need this to track acceptOKs
-		pid,
-    seqno}
+    &LeaderBookkeeping{cPs, 0, 0, 0, 0}} // Need this to track acceptOKs
+    //TODO maybe should add back in list of pids and seqnos?
   return index
 }
 
@@ -656,13 +641,6 @@ func (r *Replica) resolveShardFromKey(k state.Key) int32 {
 	return int32(state.KeyModulo(k, len(r.Shards)))
 }
 
-func (r *Replica) findEntryInBuffLog(tag mdlinproto.Tag) *Instance {
-  if e, ok := r.bufferedLog[tag]; ok {
-    return e
-  }
-  return nil
-}
-
 func (r *Replica) readyToCommit(instance int32) {
 	inst := r.instanceSpace[instance]
 	inst.status = COMMITTED
@@ -672,7 +650,8 @@ func (r *Replica) readyToCommit(instance int32) {
 
 	r.updateCommittedUpTo()
 
-	r.bcastCommit(instance, inst.ballot, inst.cmds, inst.pid, inst.seqno, COMMITTED, inst.epoch)
+	// TODO gotta add back in inst.pid and inst.seqno
+	r.bcastCommit(instance, inst.ballot, inst.cmds, 0,0, COMMITTED)
 }
 
 //func (r *Replica) printLog(level int) {
@@ -755,7 +734,7 @@ func (r *Replica) handleAccept(oaccept *mdlinproto.OldAccept) {
     if oaccept.Ballot < r.defaultBallot {
       oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, FALSE, r.defaultBallot}
     } else {
-      r.addEntryToOrderedLog(oaccept.Instance, oaccept.Command, nil, oaccept.PIDs, oaccept.SeqNos)
+      r.addEntryToOrderedLog(oaccept.Instance, oaccept.Command, nil, ACCEPTED, oaccept.PIDs, oaccept.SeqNos)
       oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, TRUE, r.defaultBallot}
     }
   }
@@ -769,7 +748,7 @@ func (r *Replica) handleAccept(oaccept *mdlinproto.OldAccept) {
 		copyMap(r.nextSeqNo, oaccept.ExpectedSeqs)
 	}
 
-	r.replyFinalAccept(oaccept.LeaderId, oareply)
+	r.replyAccept(oaccept.LeaderId, oareply)
   dlog.Printf("END of handleAccept for CommandId %v PID %v at %v\n", -1, oaccept.PIDs, time.Now().UnixMilli())
 
 }
@@ -858,7 +837,8 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 			}
 			r.recordInstanceMetadata(r.instanceSpace[instNo])
 			r.sync()
-			r.bcastAccept(b, cmds, pids, seqnos)
+			// TODO fix the nil here for seqno and pid
+			r.bcastAccept(inst.ballot, inst.cmds, nil, nil)
 		}
 	} else {
 		// TODO: there is probably another active leader
