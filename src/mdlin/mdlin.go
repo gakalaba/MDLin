@@ -212,9 +212,11 @@ func (r *Replica) getShardsFromMaster(masterAddr string) []string {
 }
 
 func (r *Replica) setupShards(masterAddr string, masterPort int) {
+	dlog.Printf("H\n")
 	if !r.IsLeader {
 		return
 	}
+	dlog.Printf("HH\n")
 	// Get the shards for multi-sharded MD-Lin
 	r.getShardsFromMaster(fmt.Sprintf("%s:%d", masterAddr, masterPort))
 
@@ -309,16 +311,18 @@ func (r *Replica) replyCoord(replicaId int32, reply *mdlinproto.CoordinationResp
 func (r *Replica) batchClock(proposeDone *(chan bool)) {
   for !r.Shutdown {
     dlog.Printf("batchClock sleeping... %v\n", time.Now().UnixMilli())
-    time.Sleep(1 * time.Millisecond)
+    time.Sleep(2 * time.Millisecond)
     (*proposeDone) <- true
-    dlog.Printf("!!!Pulled of proposeDone\n")
+    //dlog.Printf("!!!Pulled of proposeDone\n")
   }
 }
 func (r *Replica) epochClock(proposeChan *(chan bool), proposeDone *(chan bool)) {
   for !r.Shutdown {
-    time.Sleep(EPOCH_LENGTH * time.Microsecond)
+	  dlog.Printf("batchClock sleeping... %v\n", time.Now().UnixMilli())
+    time.Sleep(100 * time.Microsecond)
     (*proposeChan) <- true
     <-(*proposeDone)
+    dlog.Printf("!!!Pulled of epochDone\n")
   }
 }
 
@@ -330,13 +334,15 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		//NewPrintf(LEVEL0, "I'm the leader")
 	}
 	r.ConnectToPeers()
+	dlog.Printf("about to call setupshards\n")
 	r.setupShards(masterAddr, masterPort)
+	dlog.Printf("ANJA\n")
 	go r.WaitForClientConnections()
 
 	go r.executeCommands()
 	proposeChan := r.MDLProposeChan
 	proposeDone := make(chan bool, 1)
-	if r.batchingEnabled {
+	if r.batchingEnabled && r.IsLeader {
 		proposeChan = nil
 		dlog.Printf("proposeChan = nil\n");
 		go r.batchClock(&proposeDone)
@@ -344,24 +350,26 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 	var epochChan chan bool = nil
 	epochDone := make(chan bool, 1)
-	if r.epochBatching {
-		epochChan := make(chan bool)
+	if r.epochBatching && r.IsLeader {
+		epochChan = make(chan bool, 1)
+		dlog.Printf("IS THIS THING ON????\n")
 		go r.epochClock(&epochChan, &epochDone)
 	}
 
 	for !r.Shutdown {
-		dlog.Printf("A\n")
-		if proposeChan == nil {
-			dlog.Printf("propose han = nil\n")
-		} else {
-			dlog.Printf("ProposeChan has length = %v\n", len(proposeChan))
-		}
+		//dlog.Printf("A\n")
+		//if proposeChan == nil {
+		//	dlog.Printf("propose han = nil\n")
+		//} else {
+		//	dlog.Printf("ProposeChan has length = %v\n", len(proposeChan))
+		//}
 		select {
 		case <-proposeDone:
 			proposeChan = r.MDLProposeChan
 			break
 		case proposal := <-proposeChan:
 			NewPrintf(LEVELALL, "---------ProposalChan---------")
+			dlog.Printf("handling propose at time %v\n", time.Now().UnixMilli())
 			dlog.Printf("1\n")
 			r.handlePropose(proposal)
 			if r.batchingEnabled {
@@ -456,6 +464,61 @@ func (r *Replica) makeUniqueBallot(ballot int32) int32 {
 
 // indexOL, orderedLog, bufferedLog
 func (r *Replica) processEpoch() {
+  // TODO garbage collection :)
+  // create an entry from the readyBuff
+  dlog.Printf("------------Epoch Beginning---------%v\n", time.Now().UnixMilli())
+  start := time.Now()
+  p := r.readyBuff.Front()
+  next := p
+  n := r.readyBuff.Len()
+  if (n <= 0) {
+	  return
+  }
+  b := make([]state.Command, n) // Command to execute
+  bi := make([]int64, n) // Epoch to sort by
+  bp := make([]*genericsmr.MDLPropose, n) // Client we are responding to
+  cmdids := make([]mdlinproto.Tag, n)
+  j := 0
+  //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
+  oldLen := len(r.bufferedLog)
+  for p != nil {
+    next = p.Next()
+    // remove ordered entries from the buffer log
+    r.readyBuff.Remove(p)
+    r.epoch = int64(math.Max(float64(r.epoch), float64(p.Value.(*Instance).epoch[0])))
+    b[j] = p.Value.(*Instance).cmds[0]
+    bi[j] = p.Value.(*Instance).epoch[0]
+    bp[j] = p.Value.(*Instance).lb.clientProposals[0]
+    cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
+    delete(r.bufferedLog, cmdids[j])
+    j++
+    //NewPrintf(LEVEL0, "ProcessEpoch: adding entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
+    dlog.Printf("Ordering CommandID %v PID %v\n", p.Value.(*Instance).seqno, p.Value.(*Instance).pid)
+    p = next
+  }
+  // increment the epoch
+  // add all ordered entries to the ordered log
+  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED)
+  r.crtInstance++
+  // do last paxos roundtrip with this whole batch you just added
+  //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
+  dlog.Printf("BCASTFinal!!Accept for instNo %v at %v\n", instNo, time.Now().UnixMilli())
+  r.bcastFinalAccept(instNo, r.defaultBallot, cmdids, bi)
+
+  r.epoch++
+  r.totalEpochs++
+  if (r.readyBuff.Len() != 0) {
+    panic("readyBuff should be empty after end of processing epoch!")
+  }
+  end := time.Now()
+  dlog.Printf("------------Epoch End---------%v, it took %v nano\n", time.Now().UnixMilli(), end.Sub(start).Nanoseconds())
+  if (len(r.bufferedLog) != oldLen-n) {
+	  panic ("didn't take out the right amount of elements in buffLog")
+  }
+}
+
+// indexOL, orderedLog, bufferedLog
+func (r *Replica) processCCEntry() {
   // TODO garbage collection :)
   // create an entry from the readyBuff
   //dlog.Printf("------------Epoch Beginning---------%v\n", time.Now().UnixMilli())
@@ -1055,7 +1118,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
     r.replyCoord(shardTo, msg)
   }
   if (!r.epochBatching && OK && CC==1) {
-    r.processEpoch()
+    r.processCCEntry()
   }
 }
 
@@ -1309,7 +1372,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
         seqnos[i] = inst.seqno
         cmdIds[i] = inst.lb.clientProposals[0].CommandId
       }
-			dlog.Printf("BCASTAccept for CommandId = %d PID %v at %v\n", inst.seqno, inst.pid, time.Now().UnixMilli())
+			dlog.Printf("BCASTAccept for CommandId = %d of batchSize %v PID %v at %v\n", inst.seqno, len(preply.Instance), inst.pid, time.Now().UnixMilli())
 			r.bcastAccept(b, cmds, pids, seqnos, e, cmdIds)
 		}
 	} else {
@@ -1379,7 +1442,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
       // I know this is ugly, i just did this so that we send the coord message first!
       if !r.epochBatching && OK && (CC==1) {
         dlog.Printf("Anjd issueing finalAccept round for that request\n")
-        r.processEpoch()
+        r.processCCEntry()
       }
     }
   }
