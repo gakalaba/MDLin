@@ -1,4 +1,5 @@
 import os
+import sys
 
 from lib.experiment_codebase import ExperimentCodebase
 
@@ -230,6 +231,9 @@ class MDLCodebase(ExperimentCodebase):
             replica_command += ' -epochBatching'
         if 'single_shard_aware' in config['replication_protocol_settings'] and config['replication_protocol_settings']['single_shard_aware']:
             replica_command += ' -singleShardAware'
+            if config['num_shards'] != 1:
+                sys.stderr.write('!!Can only run Single-Shard-Aware mode with 1-shard configuration!!\n')
+                raise
 
         if 'server_gc_debug_trace' in config and config['server_gc_debug_trace']:
             if is_exp_local(config) or not is_using_tcsh(config):

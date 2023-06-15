@@ -268,6 +268,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	proposeChan := r.MDLProposeChan
 	proposeDone := make(chan bool, 1)
 	if r.batchingEnabled && r.IsLeader {
+		dlog.Printf("we're doing batching with SSA\n")
 		proposeChan = nil
 		go r.batchClock(&proposeDone)
 	}
@@ -275,44 +276,53 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	for !r.Shutdown {
 		select {
 		case <-proposeDone:
+			dlog.Printf("1\n")
 			proposeChan = r.MDLProposeChan
 			break
 		case proposal := <-proposeChan:
+			dlog.Printf("2\n")
+			dlog.Printf("Got a proposal\n")
 			r.handlePropose(proposal)
 			if r.batchingEnabled {
 				proposeChan = nil
 			}
 			break
 		case prepareS := <-r.prepareChan:
+			dlog.Printf("3\n")
 			prepare := prepareS.(*mdlinproto.Prepare)
 			//got a Prepare message
 			r.handlePrepare(prepare)
 			break
 
 		case acceptS := <-r.acceptChan:
+			dlog.Printf("4\n")
 			accept := acceptS.(*mdlinproto.OldAccept)
 			//got an Accept message
 			r.handleAccept(accept)
 			break
 
 		case commitS := <-r.commitChan:
+			dlog.Printf("5\n")
 			commit := commitS.(*mdlinproto.Commit)
 			//got a Commit message
 			r.handleCommit(commit)
 			break
 
 		case commitS := <-r.commitShortChan:
+			dlog.Printf("6\n")
 			commit := commitS.(*mdlinproto.CommitShort)
 			//got a Commit message
 			r.handleCommitShort(commit)
 			break
 
 		case prepareReplyS := <-r.prepareReplyChan:
+			dlog.Printf("7\n")
 			prepareReply := prepareReplyS.(*mdlinproto.PrepareReply)
 			//got a Prepare reply
 			r.handlePrepareReply(prepareReply)
 			break
 		case acceptReplyS := <-r.acceptReplyChan:
+			dlog.Printf("8\n")
 			acceptReply := acceptReplyS.(*mdlinproto.FinalAcceptReply)
 			//got an Accept reply
 			r.handleAcceptReply(acceptReply)
@@ -353,6 +363,7 @@ func (r *Replica) bcastPrepare(instance []mdlinproto.Tag, ballot int32, toInfini
 		ti = TRUE
 	}
   // LeaderId, Instance, Ballot, ToInfinitie
+  	dlog.Printf("leader bcastingPrepare with ballot %v\n", ballot)
 	args := &mdlinproto.Prepare{r.Id, ballot, ti, instance}
 
 	n := r.N - 1
@@ -376,7 +387,7 @@ func (r *Replica) bcastPrepare(instance []mdlinproto.Tag, ballot int32, toInfini
 
 var pa mdlinproto.OldAccept
 
-func (r *Replica) bcastAccept(ballot int32, command []state.Command, pids []int64, seqnos []int64) {
+func (r *Replica) bcastAccept(inst int32, ballot int32, command []state.Command, pids []int64, seqnos []int64) {
 	defer func() {
 		if err := recover(); err != nil {
 			//NewPrintf(LEVEL0, "Accept bcast failed: %v", err)
@@ -394,6 +405,7 @@ func (r *Replica) bcastAccept(ballot int32, command []state.Command, pids []int6
 	pa.Command = command
 	pa.PIDs = pids
 	pa.SeqNos = seqnos
+	pa.Instance = inst
 	// Make a copy of the nextSeqNo map
 	//expectedSeqs := make(map[int64]int64)
 	//copyMap(expectedSeqs, r.nextSeqNo)
@@ -491,17 +503,19 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		return
 	}
 	//r.printMap[propose.CommandId] = int(time.Now().UnixMilli())
+	dlog.Printf("Proposal with CommandId = %d PID %v arrived at %v\n", propose.CommandId, propose.PID, time.Now().UnixMilli())
 	//dlog.Printf("Proposal with CommandId = %d PID %v arrived at %v\n", propose.CommandId, propose.PID, r.printMap[propose.CommandId])
 
 	// Get batch size
   batchSize := 1
 	numProposals := len(r.MDLProposeChan) + 1
 	if r.batchingEnabled {
-		batchSize := numProposals //TODO +1?
+		batchSize = numProposals //TODO +1?
 		if batchSize > MAX_BATCH {
 			batchSize = MAX_BATCH
 		}
 	}
+	dlog.Printf("the batchSize effectivel is %v\n", batchSize)
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.MDLPropose, batchSize)
@@ -598,8 +612,13 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
   cmdIds = append([]int32(nil), cmdIds[:found]...)
 	//NewPrintf(LEVEL0, "handlePropose: CurrInst Pushed back entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
 	if r.defaultBallot == -1 {
-    r.addEntryToOrderedLog(instNo, cmds, proposals, PREPARING, pid, seqno)
-		//dlog.Printf("BCASTPrepare for CommandId = %d PID %v at %v\n", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).pid, time.Now().UnixMilli())
+		r.instanceSpace[instNo] = &Instance{
+                cmds,
+                r.makeUniqueBallot(0),
+                PREPARING,
+    &LeaderBookkeeping{proposals, 0, 0, 0, 0}}
+
+		dlog.Printf("BCASTPrepare for %v cmds,sewno = %d PID %v at %v\n",  len(cmds), seqno[0], pid[0], time.Now().UnixMilli())
 		//NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting prepares....")
     index := make([]mdlinproto.Tag, 1)
     index[0] = mdlinproto.Tag{0, int64(instNo), 0}
@@ -611,8 +630,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
     r.recordInstanceMetadata(r.instanceSpace[instNo])
     r.recordCommands(cmds)
     r.sync()
-		//dlog.Printf("BCASTAccept for CommandId = %d PID %v at %v\n", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).pid, time.Now().UnixMilli())
-		r.bcastAccept(r.defaultBallot, cmds, pid, seqno)
+		dlog.Printf("BCASTAccept for %v cmds,sewno = %d PID %v at %v\n",  len(cmds), seqno[0], pid[0], time.Now().UnixMilli())
+		r.bcastAccept(instNo, r.defaultBallot, cmds, pid, seqno)
 	}
 }
 
@@ -675,6 +694,7 @@ func commandToStr(c state.Command) string {
 }
 
 func (r *Replica) handlePrepare(prepare *mdlinproto.Prepare) {
+	dlog.Printf("Replica inside handlePrepare, Instance = replica defaultBallot= %v, prepare.Ballot = %v\n", prepare.Instance, r.defaultBallot, prepare.Ballot)
   instNo := prepare.Instance[0].PID /// super jank but oh well
   inst := r.instanceSpace[instNo]
   // Now searching in buffered log
@@ -732,8 +752,10 @@ func (r *Replica) handleAccept(oaccept *mdlinproto.OldAccept) {
     }
   } else {
     if oaccept.Ballot < r.defaultBallot {
+	    dlog.Printf("What is the ballot %v, what is my default ballot %v, i'm responding FALSE\n", oaccept.Ballot, r.defaultBallot)
       oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, FALSE, r.defaultBallot}
     } else {
+	    dlog.Printf("we are responding TRUE\n")
       r.addEntryToOrderedLog(oaccept.Instance, oaccept.Command, nil, ACCEPTED, oaccept.PIDs, oaccept.SeqNos)
       oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, TRUE, r.defaultBallot}
     }
@@ -832,13 +854,16 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 		if inst.lb.prepareOKs+1 > r.N>>1 {
 			inst.status = PREPARED
 			inst.lb.nacks = 0
+			dlog.Printf("instNo = %v, preply.Ballot = %v, inst.ballow = %v, leader's defaultBallot = %v\n", instNo, preply.Ballot, inst.ballot, r.defaultBallot)
 			if inst.ballot > r.defaultBallot {
+				dlog.Printf("setting new defualt ballot\n")
 				r.defaultBallot = inst.ballot
 			}
 			r.recordInstanceMetadata(r.instanceSpace[instNo])
 			r.sync()
 			// TODO fix the nil here for seqno and pid
-			r.bcastAccept(inst.ballot, inst.cmds, nil, nil)
+			dlog.Printf("After prepare, leader issueing BCASTACCEPT with inst.ballow = %v\n", inst.ballot)
+			r.bcastAccept(int32(instNo), inst.ballot, inst.cmds, nil, nil)
 		}
 	} else {
 		// TODO: there is probably another active leader
@@ -860,11 +885,13 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 
 func (r *Replica) handleAcceptReply(oareply *mdlinproto.FinalAcceptReply) {
   //NewPrintf(LEVELALL, "got RESPONSE to FINAL accept %v", fareply.OK)
+  dlog.Printf("got RESPONSE to FINAL accept %v\n", oareply.OK)
   inst := r.instanceSpace[oareply.Instance]
 
 	if inst.status != PREPARED && inst.status != ACCEPTED {
 		// The status is COMMITTED
 		// we've move on, these are delayed replies, so just ignore
+		dlog.Printf("The instance was already COMMITTED\n")
 		return
 	}
 
