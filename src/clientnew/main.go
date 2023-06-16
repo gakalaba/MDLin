@@ -149,6 +149,11 @@ var fanout *int = flag.Int(
 	1,
 	"Fanout. Defaults to 1.")
 
+var singleShardAware *bool = flag.Bool(
+	"SSA",
+	false,
+	"Single shard awareness optimization. Defaults to false.")
+
 var thrifty *bool = flag.Bool(
 	"thrifty",
 	false,
@@ -185,7 +190,7 @@ func createClient() clients.Client {
 			*statsFile, false, true)
 	case "mdl":
 		return clients.NewMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, true)
+			*statsFile, false, true, *singleShardAware)
 	case "ss-mdl":
 		return clients.NewSSMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, false)

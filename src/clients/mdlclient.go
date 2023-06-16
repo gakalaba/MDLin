@@ -20,10 +20,11 @@ type MDLClient struct {
 	fast             bool
 	noLeader         bool
 	seqnos           map[int]int64
+	SSA		 bool
 }
 
 func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
-	fast bool, noLeader bool) *MDLClient {
+	fast bool, noLeader bool, SSA bool) *MDLClient {
 	pc := &MDLClient{
 		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE), // proposeReplyChan
@@ -33,6 +34,7 @@ func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 		fast,                                // fast
 		noLeader,                            // noLeader
 		make(map[int]int64),
+		SSA,
 	}
 	pc.propose.PID = int64(id) // only need to set this once per client
 	pc.RegisterRPC(new(mdlinproto.ProposeReply), clientproto.MDL_PROPOSE_REPLY, pc.proposeReplyChan)
@@ -71,7 +73,7 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		} else {
 			c.CompareAndSwap(k, int64(k-1), int64(k))
 		}
-		if i > 0 {
+		if (i > 0 && !c.SSA) {
 			// Send the coordination request
 			// (Keep this after sending the request for now, since
 			// logic in the send function assumes request was send)

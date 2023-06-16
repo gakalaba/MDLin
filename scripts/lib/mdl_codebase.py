@@ -89,6 +89,8 @@ class MDLCodebase(ExperimentCodebase):
             client_command += ' -randomLeader'
         if config['client_debug_output']:
             client_command += ' -debug'
+        if 'single_shard_aware' in config['replication_protocol_settings'] and config['replication_protocol_settings']['single_shard_aware']:
+            client_command += ' -SSA'
         if 'server_epaxos_mode' in config['replication_protocol_settings'] and config['replication_protocol_settings']['server_epaxos_mode']:
             client_command += ' -epaxosMode'
 
