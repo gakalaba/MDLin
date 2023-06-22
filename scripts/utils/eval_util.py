@@ -423,7 +423,7 @@ def generate_plots(config, base_out_directory, out_dirs):
     csv_classes = set()
     csv_files = []
     subprocesses = []
-    
+    print("$$$$$$$$$$$$$$$$$$$$$$$$", base_out_directory, "^^^^^^^^^^^^^^^^^^", out_dirs, ")))))))))))))))))))))", out_dirs[0])
     ###
     # Generate aggregate cdf plots
     for i in range(len(out_dirs[0])):
@@ -434,6 +434,7 @@ def generate_plots(config, base_out_directory, out_dirs):
             # bfs flattening of independent vars
             if type(collecting[0]) is str:
                 sub_plot_directory = os.path.join(collecting[0], config['plot_directory_name'])
+                print("AAAAAAAAAAA", sub_plot_directory)
                 for f in os.listdir(sub_plot_directory):
                     if f.endswith('.csv') and (f.startswith('aggregate-') or f.startswith('lot-')):
                         csv_class = os.path.splitext(os.path.basename(f))[0]
@@ -446,7 +447,7 @@ def generate_plots(config, base_out_directory, out_dirs):
                     collecting.append(od)
             collecting.popleft()
 
-    for csv_class in csv_classes:
+    '''for csv_class in csv_classes:
         idx = -1
         for j in range(len(csv_files)):
             if csv_class in csv_files[j]:
@@ -512,12 +513,14 @@ def generate_plots(config, base_out_directory, out_dirs):
             subprocess.call(['gnuplot', plot_script_file])
     # End generate all aggregate cdf plots
     ###
-
+    '''
     ###
     # Generate specific plots
     #   for now we only support configurable plot generation with 1 indep var
     for plot in config['plots']:
-        if len(config['experiment_independent_vars']) - len(config['experiment_independent_vars_unused']) == 1:
+        if True:
+        #if len(config['experiment_independent_vars']) - len(config['experiment_independent_vars_unused']) == 1:
+            print("case 1")
             # generate csvs and single series plots
             x_vars = []
             y_vars = []
@@ -525,17 +528,20 @@ def generate_plots(config, base_out_directory, out_dirs):
                 assert type(out_dirs[0][i]) is str
                 # for each value of the independent variable
                 stats_file = os.path.join(out_dirs[0][i], config['stats_file_name'])
-                print(stats_file)
+                print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&", stats_file)
                 with open(stats_file) as f:
                     stats = json.load(f)
                     if plot['x_var_is_config']:
+                        print("CAE A")
                         x_var = config
                         for k in plot['x_var']:
                             x_var = x_var[k]
                         x_var = x_var[i]
                     else:
+                        print("CASE B")
                         x_var = stats
                         for k in plot['x_var']:
+                            print("k: ", k)
                             if k in x_var:
                                 x_var = x_var[k]
                             else:
@@ -554,6 +560,7 @@ def generate_plots(config, base_out_directory, out_dirs):
             print(plots_directory)
             generate_plot(plot, plots_directory, x_vars, y_vars)
         elif len(config['experiment_independent_vars']) == len(config['experiment_independent_vars_unused']):
+            print("case 2")
             csv_files = []
             for i in range(len(out_dirs[-1])):
                 # for series i

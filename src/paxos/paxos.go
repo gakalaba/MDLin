@@ -169,7 +169,7 @@ func (r *Replica) replyAccept(replicaId int32, reply *paxosproto.AcceptReply) {
 
 func (r *Replica) batchClock(proposeDone *(chan bool)) {
   for !r.Shutdown {
-    time.Sleep(10 * time.Microsecond)
+    time.Sleep(5 * time.Millisecond)
     (*proposeDone) <- true
   }
 }
@@ -455,11 +455,11 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		batchSize = len(r.ProposeChan) + 1
 	}
 
-	if batchSize > MAX_BATCH {
-		batchSize = MAX_BATCH
-	}
+	//if batchSize > MAX_BATCH {
+	//	batchSize = MAX_BATCH
+	//}
 
-	//dlog.Printf("Batched %d\n", batchSize)
+	dlog.Printf("Batched %d\n", batchSize)
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.Propose, batchSize)

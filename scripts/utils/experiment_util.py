@@ -644,7 +644,7 @@ def run_multiple_experiments(config_file, executor):
                             config['experiment_independent_vars_unused'][i][j],
                             config['experiment_independent_vars_unused'][i][k]))
                         sys.exit(1)
-
+        
         config_name = os.path.splitext(os.path.basename(config_file))[0]
 
         exp_futs = []
@@ -672,14 +672,35 @@ def run_multiple_experiments(config_file, executor):
                 json.dump(config_new, f_new, indent=2, sort_keys=True)
             config_files.append(config_file_new)
 
-            if len(config_new['experiment_independent_vars_unused']) == 0:
+
+            '''if len(config_new['experiment_independent_vars_unused']) == 0:
                 exp_futs.append(run_experiment(config_file_new, i, executor))
                 exp_futs_idxs.append(i)
             else:
+                print("howdy")
                 out_directory, sub_out_directories = run_multiple_experiments(
                     config_file_new, executor)
                 out_dirs.append(out_directory)
-                sub_out_dirs.append(sub_out_directories)
+                sub_out_dirs.append(sub_out_directories)'''
+        
+
+        L = []
+        dire = '/users/akalaba/MDLin/experiments/sosp2023/results/tput-3/f1_1sh_50ms_3/2023-06-21-10-31-38'
+        for filename in os.listdir(dire):
+            print(filename)
+            f = os.path.join(dire, filename)
+            if not os.path.isfile(f) and filename.startswith("2"):
+                f = f + "/out"
+                L.append(f)
+                print(f)
+        out = []
+        out.append(L)
+        out.append([])
+        print()
+        print(out)
+        generate_plots(config, dire, out)
+        return
+
 
         retries = 0
         while len(out_dirs) < len(config[config['experiment_independent_vars_unused'][0][0]]) and retries <= config['max_retries']:
