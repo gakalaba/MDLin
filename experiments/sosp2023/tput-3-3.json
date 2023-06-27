@@ -37,7 +37,8 @@
   ],
   "clients": [
 	  "client-0-0",
-	  "client-1-0"
+	  "client-1-0",
+	  "client-2-0"
   ],
   "server_regions": {
     "us-east-1": [
@@ -45,7 +46,8 @@
       "us-east-1-1",
       "us-east-1-2",
       "client-0-0",
-      "client-1-0"
+      "client-1-0",
+      "client-2-0"
     ],
     "eu-west-1": [
       "eu-west-1-0",
@@ -76,10 +78,10 @@
       }
   },
   "client_total": [
-	  [512, 800, 1024]
+	  [12999, 14997]
   ],
   "client_processes_per_client_node": [
-	  [256, 400, 512]
+	  [4333, 4999]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
