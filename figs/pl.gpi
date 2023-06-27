@@ -1,0 +1,19 @@
+set datafile separator ','
+set key top left
+set xlabel 'Throughput (ops/s)'
+set ylabel 'p99 Latency'
+set terminal pngcairo size 800,600 enhanced dashed font 'DejaVu Sans,12'
+set output '/users/akalaba/figs/1sh_f1/all.png'
+set style line 1 linetype 1 linewidth 2
+set style line 2 linetype 1 linecolor "green" linewidth 2
+set style line 3 linetype 1 linecolor "blue" linewidth 2
+set style line 4 linetype 4 linewidth 2
+set style line 5 linetype 5 linewidth 2
+set style line 6 linetype 8 linewidth 2
+plot '/users/akalaba/figs/1sh_f1/0.csv' title 'Multi-Paxos' ls 1 with linespoint, \
+'/users/akalaba/figs/1sh_f1/50us.csv' title 'Multi-Paxos Batched (0.05ms)' ls 2 with linespoint, \
+'/users/akalaba/figs/1sh_f1/500us.csv' title 'Multi-Paxos Batched (0.5ms)' ls 3 with linespoint, \
+'/users/akalaba/figs/1sh_f1/1ms.csv' title 'Multi-Paxos Batched (1ms)' ls 4 with linespoint, \
+'/users/akalaba/figs/1sh_f1/5ms.csv' title 'Multi-Paxos Batched (5ms)' ls 5 with linespoint, \
+'/users/akalaba/figs/1sh_f1/10ms.csv' title 'Multi-Paxos Batched (10ms)' ls 6 with linespoint, \
+'/users/akalaba/figs/1sh_f1/50ms.csv' title 'Multi-Paxos Batched (50ms)' ls 7 with linespoint
