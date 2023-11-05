@@ -1097,7 +1097,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
     panic("Received CR Response for request with no predecessor")
   }
   e.lb.coordinated = int8(crr.OK)
-  e.epoch[0] = crr.AskeeEpoch // we do this so that if you're coordinated before being accepted, the accept logic works out
+  e.epoch[0] = crr.AskeeEpoch // **we do this so that if you're coordinated before being accepted, the accept logic works out - this explains line 1428
   OK, CC := r.checkCoordination(e)
   if (OK && CC==1) {
     // Set my epoch to the max of sender and mine
