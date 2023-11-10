@@ -4,7 +4,7 @@
 	  ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol":[
-	  "multi_paxos"
+	  "mdl"
   ],
   "replication_protocol_settings": [
     {
