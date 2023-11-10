@@ -143,7 +143,7 @@ func main() {
 	} else {
 		log.Println("Starting classic Paxos replica...")
 		rep = paxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
-			*beacon, *durable, *statsFile, *doBatch)
+			*beacon, *durable, *statsFile, *doBatch, *epochLength)
 	}
 
 	rpc.Register(rep)

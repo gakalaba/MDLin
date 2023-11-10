@@ -48,6 +48,7 @@ type Replica struct {
 	before		    time.Time
 	after		    time.Time
 	batchingEnabled     bool
+	epochlen	    int
 }
 
 type InstanceStatus int
@@ -75,7 +76,7 @@ type LeaderBookkeeping struct {
 }
 
 func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
-    exec bool, dreply bool, beacon bool, durable bool, statsFile string, batch bool) *Replica {
+    exec bool, dreply bool, beacon bool, durable bool, statsFile string, batch bool, epochLength int) *Replica {
 	// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
 	r := &Replica{genericsmr.NewReplica(id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -95,7 +96,8 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		-1,
 		time.Now(),
 		time.Now(),
-		batch}
+		batch,
+		epochLength}
 
 
 	log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
@@ -169,7 +171,7 @@ func (r *Replica) replyAccept(replicaId int32, reply *paxosproto.AcceptReply) {
 
 func (r *Replica) batchClock(proposeDone *(chan bool)) {
   for !r.Shutdown {
-    time.Sleep(5 * time.Millisecond)
+    time.Sleep(time.Duration(r.epochlen) * time.Millisecond)
     (*proposeDone) <- true
   }
 }
