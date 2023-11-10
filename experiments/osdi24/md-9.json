@@ -4,7 +4,7 @@
 	  ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol":[
-	  "multi_paxos"
+	  "mdl"
   ],
   "replication_protocol_settings": [
     {
@@ -27,12 +27,55 @@
       "us-west-1-1",
       "us-west-1-2"
   ],
-  "num_shards": 1,
+  "num_shards": 9,
   "shards": [
-        [
+    [
       "eu-west-1-0",
       "eu-west-1-1",
       "eu-west-1-2"
+    ],
+	[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+
+    [
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+    [
+	    "us-east-1-0",
+	    "us-east-1-1",
+	    "us-east-1-2"
+    ],
+
+    [
+	    "us-east-1-2",
+	    "us-east-1-0",
+	    "us-east-1-1"
+    ],
+
+    [
+	    "us-east-1-1",
+	    "us-east-1-2",
+	    "us-east-1-0"
+    ],
+    [
+	    "us-west-1-0",
+	    "us-west-1-1",
+	    "us-west-1-2"
+    ],
+    [
+	    "us-west-1-2",
+	    "us-west-1-0",
+	    "us-west-1-1"
+    ],
+    [
+	    "us-west-1-1",
+	    "us-west-1-2",
+	    "us-west-1-0"
     ]
   ],
   "clients": [
