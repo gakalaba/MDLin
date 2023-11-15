@@ -143,7 +143,7 @@
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
   "client_fanout": 1,
-  "server_epoch": 500,
+  "server_epoch": 750,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,

@@ -1,18 +1,24 @@
 #!/bin/bash
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/mp-9-3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/mp-9-1.json
 wait
-mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/mp_batch_3ms_9s
-rm -rf experiments/osdi24/results/tput-3/mp_batch_3ms_9s/2*/2*/out/client*
-wait
-
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/mp-9-4.json
-wait
-mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/mp_batch_4ms_9s
-rm -rf experiments/osdi24/results/tput-3/mp_batch_4ms_9s/2*/2*/out/client*
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/ms_batch_1ms_ii
+rm -rf experiments/osdi24/results/tput-3/ms_batch_1ms_ii/2*/2*/out/client*
 wait
 
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/mp-9-5.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/mp-9-1_5.json
 wait
-mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/mp_batch_5ms_9s
-rm -rf experiments/osdi24/results/tput-3/mp_batch_5ms_9s/2*/2*/out/client*
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/ms_batch_1_5ms_ii
+rm -rf experiments/osdi24/results/tput-3/ms_batch_1_5ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/mp-9-2.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/ms_batch_2ms_ii
+rm -rf experiments/osdi24/results/tput-3/ms_batch_2ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/mp-9-2_5.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/ms_batch_2_5ms_ii
+rm -rf experiments/osdi24/results/tput-3/ms_batch_2_5ms_ii/2*/2*/out/client*
 wait

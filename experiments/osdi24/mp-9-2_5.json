@@ -132,10 +132,10 @@
       }
   },
   "client_total": [
-	  [3072, 4096]
+	  [2048, 3072]
   ],
   "client_processes_per_client_node": [
-	  [384, 512]
+	  [256, 384]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -143,7 +143,7 @@
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
   "client_fanout": 1,
-  "server_epoch": 500,
+  "server_epoch": 2500,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,

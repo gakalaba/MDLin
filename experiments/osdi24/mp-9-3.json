@@ -85,7 +85,9 @@
 	  "client-2-0",
 	  "client-3-0",
 	  "client-4-0",
-	  "client-5-0"
+	  "client-5-0",
+	  "client-6-0",
+	  "client-7-0"
   ],
   "server_regions": {
     "us-east-1": [
@@ -97,7 +99,9 @@
       "client-2-0",
       "client-3-0",
       "client-4-0",
-      "client-5-0"
+      "client-5-0",
+      "client-6-0",
+      "client-7-0"
     ],
     "eu-west-1": [
       "eu-west-1-0",
@@ -128,10 +132,10 @@
       }
   },
   "client_total": [
-	  [48, 96, 192, 384, 768, 1536, 3072]
+	  [4096]
   ],
   "client_processes_per_client_node": [
-	  [8, 16, 32, 64, 128, 256, 512]
+	  [512]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -208,7 +212,7 @@
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "MDL",
+  "experiment_name": "mpmp",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,
