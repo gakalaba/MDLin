@@ -311,7 +311,7 @@ func (r *Replica) replyCoord(replicaId int32, reply *mdlinproto.CoordinationResp
 func (r *Replica) batchClock(proposeDone *(chan bool)) {
   for !r.Shutdown {
     dlog.Printf("batchClock sleeping... %v\n", time.Now().UnixMilli())
-    time.Sleep(2 * time.Millisecond)
+    time.Sleep(time.Duration(r.epochlen) * time.Microsecond)
     (*proposeDone) <- true
     //dlog.Printf("!!!Pulled of proposeDone\n")
   }
@@ -319,7 +319,7 @@ func (r *Replica) batchClock(proposeDone *(chan bool)) {
 func (r *Replica) epochClock(proposeChan *(chan bool), proposeDone *(chan bool)) {
   for !r.Shutdown {
 	  dlog.Printf("batchClock sleeping... %v\n", time.Now().UnixMilli())
-    time.Sleep(100 * time.Microsecond)
+    time.Sleep(time.Duration(r.epochlen) * time.Microsecond)
     (*proposeChan) <- true
     <-(*proposeDone)
     dlog.Printf("!!!Pulled of epochDone\n")
@@ -1418,6 +1418,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
   if inst.lb.acceptOKs+1 > r.N>>1 {
     dlog.Printf("Quorum reached at time %v for commandID %v which has batchsize = %v\n", time.Now().UnixMilli(), areply.IdTag[0], len(areply.IdTag))
     numacks := inst.lb.acceptOKs
+    // This is for batching, we go through all the requests just replicated by a replica
     for i := 0; i < len(areply.IdTag); i++ {
       inst = r.bufferedLog[areply.IdTag[i]]
       inst.lb.acceptOKs = numacks
