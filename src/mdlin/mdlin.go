@@ -1366,8 +1366,18 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 
   //NewPrintf(LEVELALL, "handlePrepareReply, prepare.Instance = %v", preply.Instance)
-  inst, ok := r.bufferedLog[preply.Instance[0]]
-  if !ok {
+  // Because we've grouped together naught requests and others, we gotta do this
+  found := false
+  var inst *Instance
+  var ok bool
+  for i := 0; i < len(preply.Instance); i++ {
+	inst, ok = r.bufferedLog[preply.Instance[i]]
+	if ok {
+		found = true
+		break
+	}
+  }
+  if !found {
     panic("Got index out of bounds at leader in prepareReply")
   }
 
@@ -1406,7 +1416,10 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
       seqnos := make([]int64, len(preply.Instance))
       cmdIds := make([]int32, len(preply.Instance))
       for i := 0; i < len(preply.Instance); i++ {
-        inst = r.bufferedLog[preply.Instance[i]]
+	inst, OK := r.bufferedLog[preply.Instance[i]]
+	if !OK {
+		continue
+	}
         inst.lb.prepareOKs = numacks
 			  inst.status = PREPARED
 			  inst.lb.nacks = 0
