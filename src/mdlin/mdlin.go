@@ -759,7 +759,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	dlog.Printf("Calling handlePropose at time %v\n", r.printMap[propose.CommandId])
 
 	// Get batch size
-  batchSize := 1
+	batchSize := 1
 	numProposals := len(r.MDLProposeChan) + 1
 	dlog.Printf("length of the MDLProposeChan = %v\n", len(r.MDLProposeChan)+1)
 	if r.batchingEnabled {
@@ -772,26 +772,24 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.MDLPropose, batchSize)
-  pid := make([]int64, batchSize)
-  seqno := make([]int64, batchSize)
-  prepareTags := make([]mdlinproto.Tag, batchSize)
-  cmdIds := make([]int32, batchSize)
+	pid := make([]int64, batchSize)
+	seqno := make([]int64, batchSize)
+	prepareTags := make([]mdlinproto.Tag, batchSize)
+	cmdIds := make([]int32, batchSize)
+	naught_list := list.New()
 
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
 	}
 
 	found := 0
+	found_total := 0
 	var expectedSeqno int64
 	prop := propose
 	i := 1
-  // i, numProposals = i is a for loop from 1 to numProposals
-  // found, batchsize = we use found to bound the number of entries added to batchsize=1 (and flushing buffer)
-	for found < batchSize && i <= numProposals {
-		pid[found] = prop.PID
-		seqno[found] = prop.SeqNo
-		expectedSeqno = 0
-
+	// i, numProposals = i is a for loop from 1 to numProposals
+	// found, batchsize = we use found to bound the number of entries added to batchsize=1 (and flushing buffer)
+	for found_total < batchSize && i <= numProposals {
 		if val, ok := r.nextSeqNo[prop.PID]; ok {
 			expectedSeqno = val
 		}
@@ -808,18 +806,24 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			//TODO update other state maps, like CR, CRR, pred, etc.
 			//NewPrintf(LEVELALL, "Out of order, (got command %d seqno %d) buffering back into channel", prop.CommandId, seqno)
 		} else {
-			cmds[found] = prop.Command
-			//NewPrintf(LEVEL0, "In order, has command %d, seqno %d", prop.CommandId, seqno)
-			proposals[found] = prop
-			cmdIds[found] = prop.CommandId
-			found++
-			r.nextSeqNo[prop.PID]++
-
-			// If no predecessor, then request is vacuously coordinated
 			var coord int8 = -1
-			var thisCr *genericsmr.MDLCoordReq = nil
-			var zeroeth = false
-			if (prop.Predecessor.SeqNo == -1) {
+                        var thisCr *genericsmr.MDLCoordReq = nil
+                        var zeroeth = false
+			var newEntry *Instance
+			t := mdlinproto.Tag{K: prop.Command.K, PID: prop.PID, SeqNo: prop.SeqNo}
+			if (prop.Predecessor.SeqNo != -1) {
+				pid[found] = prop.PID
+				seqno[found] = prop.SeqNo
+				expectedSeqno = 0
+				cmds[found] = prop.Command
+				//NewPrintf(LEVEL0, "In order, has command %d, seqno %d", prop.CommandId, seqno)
+				proposals[found] = prop
+				cmdIds[found] = prop.CommandId
+				found++
+				found_total++
+				r.nextSeqNo[prop.PID]++
+			} else {
+				// If no predecessor, then request is vacuously coordinated
 				coord = 1
 				zeroeth = true
 				r.epoch = r.epoch + 1
@@ -847,11 +851,13 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 					thisEpoch,
 					r.totalEpochs}
 				r.readyBuff.PushBack(e)
+				naught_list.PushBack(e)
+				newEntry = e
+				found_total++
 			}
 			// Check if coordination request from successor arrived
 			// before the request arrived, if so add it
-			t := mdlinproto.Tag{K: prop.Command.K, PID: prop.PID, SeqNo: prop.SeqNo}
-			prepareTags[found-1] = t
+			prepareTags[found_total-1] = t //TODO
 			recvCoordReq := false
 			if v, ok1 := r.outstandingCR[t]; ok1 {
 				//NewPrintf(LEVEL0, "^^^^^^^^^^^^found an awaiting CR for %v", t)
@@ -867,11 +873,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 				delete(r.outstandingCRR, t)
 			}
 
-			var newEntry *Instance
 			if !zeroeth {
 				newEntry = r.addEntryToBuffLog(cmds[found-1], proposals[found-1], pid[found-1], seqno[found-1], coord, thisCr, &prop.Predecessor, r.epoch) //This seems like a bad idea TODO... the address of a message that's gonna disapear?
-			} else {
-				newEntry = r.processCCEntry()
 			}
 			if !recvCoordReq {
 				r.seen[t] = newEntry
@@ -919,7 +922,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			}
 		}
 		i++
-		if found < batchSize && i <= numProposals {
+		if found_total < batchSize && i <= numProposals {
 			//NewPrintf(LEVELALL, "--->Pulled out the next one")
 			prop = <-r.MDLProposeChan
 		}
@@ -928,7 +931,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	dlog.Printf("found = %v\n", found)
 	// None of the proposals in the channel
 	// are ready to be added to the log
-	if found == 0 {
+	if found_total == 0 {
 		//NewPrintf(LEVELALL, "None of the proposals pulled out of the channel or in the buffers are ready!")
 		// We won't respond to the client, since that response
 		// will come when the command gets unbuffered and later executed
@@ -952,15 +955,30 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		r.bcastPrepare(prepareTags, r.makeUniqueBallot(0), true)
 	} else {
 		//NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting accepts!....")
-		for i := 0; i < found; i++ {
-			r.recordInstanceMetadata(r.bufferedLog[prepareTags[i]])
-			cmdRecord := make([]state.Command, 1)
-			cmdRecord[0] = cmds[i]
-			r.recordCommands(cmdRecord)
+		p := naught_list.Front()
+		for i := 0; i < found_total; i++ {
+			v, OK := r.bufferedLog[prepareTags[i]]
+			if OK {
+				r.recordInstanceMetadata(v)
+				cmdRecord := make([]state.Command, 1)
+				cmdRecord[0] = cmds[i]
+				r.recordCommands(cmdRecord)
+			} else {
+				e := p.Value.(*Instance)
+				r.recordInstanceMetadata(e)
+                                cmdRecord := make([]state.Command, 1)
+                                cmdRecord[0] = e.cmds[0]
+                                r.recordCommands(cmdRecord)
+			}
 			r.sync()
 		}
 		dlog.Printf("BCASTAccept for at time %v\n", time.Now().UnixMilli())
-		r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
+		if found != 0 {
+			r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
+		}
+		if (found_total > found && !r.epochBatching) {
+			r.processCCEntry()
+		}
 	}
 }
 
