@@ -1,0 +1,266 @@
+#!/bin/bash
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-250_i.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_250ms_i
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_250ms_i/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-250_ii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_250ms_ii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_250ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-250_iii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_250ms_iii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_250ms_iii/2*/2*/out/client*
+wait
+
+#
+cmd="rm -rf /mnt/extra/experiments/2*"
+addrId=(0829 1137 1106 1039 0845 0837 1142 1036)
+for ((i = 0; i < ${#addrId[@]}; i++)); do
+      ssh -AX akalaba@ms${addrId[i]}.utah.cloudlab.us $cmd
+    done
+#
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-500_i.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_500ms_i
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_500ms_i/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-500_ii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_500ms_ii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_500ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-500_iii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_500ms_iii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_500ms_iii/2*/2*/out/client*
+wait
+
+#
+for ((i = 0; i < ${#addrId[@]}; i++)); do
+      ssh -AX akalaba@ms${addrId[i]}.utah.cloudlab.us $cmd
+    done
+#
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-750_i.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_750ms_i
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_750ms_i/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-750_ii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_750ms_ii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_750ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-750_iii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_750ms_iii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_750ms_iii/2*/2*/out/client*
+wait
+
+#
+for ((i = 0; i < ${#addrId[@]}; i++)); do
+      ssh -AX akalaba@ms${addrId[i]}.utah.cloudlab.us $cmd
+    done
+#
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-1_i.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_1ms_i
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_1ms_i/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-1_ii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_1ms_ii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_1ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-1_iii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_1ms_iii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_1ms_iii/2*/2*/out/client*
+wait
+
+#
+for ((i = 0; i < ${#addrId[@]}; i++)); do
+      ssh -AX akalaba@ms${addrId[i]}.utah.cloudlab.us $cmd
+    done
+#
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-1_5_i.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_1_5ms_i
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_1_5ms_i/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-1_5_ii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_1_5ms_ii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_1_5ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-1_5_iii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_1_5ms_iii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_1_5ms_iii/2*/2*/out/client*
+wait
+
+#
+for ((i = 0; i < ${#addrId[@]}; i++)); do
+      ssh -AX akalaba@ms${addrId[i]}.utah.cloudlab.us $cmd
+    done
+#
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-2_5_i.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_2_5ms_i
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_2_5ms_i/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-2_5_ii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_2_5ms_ii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_2_5ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-2_5_iii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_2_5ms_iii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_2_5ms_iii/2*/2*/out/client*
+wait
+
+#
+for ((i = 0; i < ${#addrId[@]}; i++)); do
+      ssh -AX akalaba@ms${addrId[i]}.utah.cloudlab.us $cmd
+    done
+#
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-2_i.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_2ms_i
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_2ms_i/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-2_ii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_2ms_ii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_2ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-2_iii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_2ms_iii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_2ms_iii/2*/2*/out/client*
+wait
+
+#
+for ((i = 0; i < ${#addrId[@]}; i++)); do
+      ssh -AX akalaba@ms${addrId[i]}.utah.cloudlab.us $cmd
+    done
+#
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-3_i.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_3ms_i
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_3ms_i/2*/2*/out/clien
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-3_ii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_3ms_ii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_3ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-3_iii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_3ms_iii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_3ms_iii/2*/2*/out/client*
+wait
+
+#
+for ((i = 0; i < ${#addrId[@]}; i++)); do
+      ssh -AX akalaba@ms${addrId[i]}.utah.cloudlab.us $cmd
+    done
+#
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-4_i.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_4ms_i
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_4ms_i/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-4_ii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_4ms_ii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_4ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-4_iii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_4ms_iii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_4ms_iii/2*/2*/out/client*
+wait
+
+#
+for ((i = 0; i < ${#addrId[@]}; i++)); do
+      ssh -AX akalaba@ms${addrId[i]}.utah.cloudlab.us $cmd
+    done
+#
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-5_i.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_5ms_i
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_5ms_i/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-5_ii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_5ms_ii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_5ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-5_iii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_5ms_iii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_5ms_iii/2*/2*/out/client*
+wait
+
+#
+for ((i = 0; i < ${#addrId[@]}; i++)); do
+      ssh -AX akalaba@ms${addrId[i]}.utah.cloudlab.us $cmd
+    done
+#
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-10_i.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_10ms_i
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_10ms_i/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-10_ii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_10ms_ii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_10ms_ii/2*/2*/out/client*
+wait
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/batch_f10/md-9-10_iii.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/batch_f10/md_batch_10ms_iii
+rm -rf experiments/osdi24/results/tput-3/batch_f10/md_batch_10ms_iii/2*/2*/out/client*
+wait
+
+#
+for ((i = 0; i < ${#addrId[@]}; i++)); do
+      ssh -AX akalaba@ms${addrId[i]}.utah.cloudlab.us $cmd
+    done
+#

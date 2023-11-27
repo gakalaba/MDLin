@@ -1,0 +1,21 @@
+#!/bin/bash
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/mp-3-wide5.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/mp_wide5-f1
+rm -rf experiments/osdi24/results/tput-3/mp_wide5-f1/2*/2*/out/client*
+wait
+
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/mp-3-wide5-10.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/mp_wide5-f10
+rm -rf experiments/osdi24/results/tput-3/mp_wide5-f10/2*/2*/out/client*
+wait
+
+
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi24/mp-3-wide5-100.json
+wait
+mv experiments/osdi24/results/tput-3/2* experiments/osdi24/results/tput-3/mp_wide5-f100
+rm -rf experiments/osdi24/results/tput-3/mp_wide5-f100/2*/2*/out/client*
+wait
