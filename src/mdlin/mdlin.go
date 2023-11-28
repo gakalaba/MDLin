@@ -777,6 +777,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	prepareTags := make([]mdlinproto.Tag, batchSize)
 	cmdIds := make([]int32, batchSize)
 	naught_list := list.New()
+	naught_i := list.New()
 
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
@@ -850,10 +851,10 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 					thisCr,
 					thisEpoch,
 					r.totalEpochs}
-				r.readyBuff.PushBack(e)
 				naught_list.PushBack(e)
 				newEntry = e
 				found_total++
+				naught_i.PushBack(found_total-1)
 			}
 			// Check if coordination request from successor arrived
 			// before the request arrived, if so add it
@@ -952,6 +953,18 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	if r.defaultBallot == -1 {
 		dlog.Printf("BCASTPrepare at time %v\n", time.Now().UnixMilli())
 		//NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting prepares....")
+		p := naught_list.Front()
+		q := naught_i.Front()
+		for p != nil {
+			next := p.Next()
+			next2 := q.Next()
+			e := p.Value.(*Instance)
+			e.status = PREPARING
+			i := q.Value.(int)
+			r.bufferedLog[prepareTags[i]] = e
+			p = next
+			q = next2
+		}
 		r.bcastPrepare(prepareTags, r.makeUniqueBallot(0), true)
 	} else {
 		//NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting accepts!....")
@@ -964,11 +977,14 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 				cmdRecord[0] = cmds[i]
 				r.recordCommands(cmdRecord)
 			} else {
+				next := p.Next()
 				e := p.Value.(*Instance)
+				r.readyBuff.PushBack(e)
 				r.recordInstanceMetadata(e)
                                 cmdRecord := make([]state.Command, 1)
                                 cmdRecord[0] = e.cmds[0]
                                 r.recordCommands(cmdRecord)
+				p = next
 			}
 			r.sync()
 		}
@@ -1364,22 +1380,12 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 }
 
 func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
-
-  //NewPrintf(LEVELALL, "handlePrepareReply, prepare.Instance = %v", preply.Instance)
-  // Because we've grouped together naught requests and others, we gotta do this
-  found := false
-  var inst *Instance
-  var ok bool
-  for i := 0; i < len(preply.Instance); i++ {
-	inst, ok = r.bufferedLog[preply.Instance[i]]
-	if ok {
-		found = true
-		break
+	//NewPrintf(LEVELALL, "handlePrepareReply, prepare.Instance = %v", preply.Instance)
+	// Because we've grouped together naught requests and others, we gotta do this
+	inst, ok := r.bufferedLog[preply.Instance[0]]
+	if !ok {
+		panic("Got index out of bounds at leader in prepareReply")
 	}
-  }
-  if !found {
-    panic("Got index out of bounds at leader in prepareReply")
-  }
 
 	if inst.status != PREPARING {
 		// TODO: should replies for non-current ballots be ignored?
@@ -1408,32 +1414,41 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 		// Don't need to change anything for MDL, just issue bcast Accept
 		// as usual and let the number of accepts compete with the ISRT replies
 		if inst.lb.prepareOKs+1 > r.N>>1 {
-      b := inst.ballot
-      e := inst.epoch[0]
-      numacks := inst.lb.prepareOKs
-      cmds := make([]state.Command, len(preply.Instance))
-      pids := make([]int64, len(preply.Instance))
-      seqnos := make([]int64, len(preply.Instance))
-      cmdIds := make([]int32, len(preply.Instance))
-      for i := 0; i < len(preply.Instance); i++ {
-	inst, OK := r.bufferedLog[preply.Instance[i]]
-	if !OK {
-		continue
-	}
-        inst.lb.prepareOKs = numacks
-			  inst.status = PREPARED
-			  inst.lb.nacks = 0
-			  if inst.ballot > r.defaultBallot {
-				  r.defaultBallot = inst.ballot
-			  }
-			  r.recordInstanceMetadata(r.bufferedLog[preply.Instance[i]])
-			  r.sync()
-        cmds[i] = inst.cmds[0]
-        pids[i] = inst.pid
-        seqnos[i] = inst.seqno
-        cmdIds[i] = inst.lb.clientProposals[0].CommandId
-      }
-			dlog.Printf("BCASTAccept for CommandId = %d of batchSize %v PID %v at %v\n", inst.seqno, len(preply.Instance), inst.pid, time.Now().UnixMilli())
+			b := inst.ballot
+			e := inst.epoch[0]
+			numacks := inst.lb.prepareOKs
+			cmds := make([]state.Command, len(preply.Instance))
+			pids := make([]int64, len(preply.Instance))
+			seqnos := make([]int64, len(preply.Instance))
+			cmdIds := make([]int32, len(preply.Instance))
+			real_total := 0
+			for i := 0; i < len(preply.Instance); i++ {
+				inst = r.bufferedLog[preply.Instance[i]]
+				inst.lb.prepareOKs = numacks
+				inst.status = PREPARED
+				inst.lb.nacks = 0
+				if inst.ballot > r.defaultBallot {
+					r.defaultBallot = inst.ballot
+				}
+				r.recordInstanceMetadata(r.bufferedLog[preply.Instance[i]])
+				r.sync()
+				if (inst.pred == nil) {
+					inst.status = ACCEPTED
+					delete(r.bufferedLog, preply.Instance[i])
+					r.readyBuff.PushBack(inst)
+					continue
+				}
+				cmds[real_total] = inst.cmds[0]
+				pids[real_total] = inst.pid
+				seqnos[real_total] = inst.seqno
+				cmdIds[real_total] = inst.lb.clientProposals[0].CommandId
+				real_total++
+			}
+			cmds = append([]state.Command(nil), cmds[:real_total]...)
+			pids = append([]int64(nil), pids[:real_total]...)
+			seqnos = append([]int64(nil), seqnos[:real_total]...)
+			cmdIds = append([]int32(nil), cmdIds[:real_total]...)
+			dlog.Printf("BCASTAccept for CommandId = %d of batchSize %v PID %v at %v\n", inst.seqno, real_total, inst.pid, time.Now().UnixMilli())
 			r.bcastAccept(b, cmds, pids, seqnos, e, cmdIds)
 		}
 	} else {
