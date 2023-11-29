@@ -817,6 +817,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		}
 		if prop.SeqNo != expectedSeqno {
 			// Add to buffer
+			dlog.Printf("prop.SeqNo = %v, expectedSeqno = %v\n", prop.SeqNo, expectedSeqno)
 			panic("We shouldn't be getting OoO reqs per client")
 			if _, ok := r.outstandingInst[prop.PID]; !ok {
 				r.outstandingInst[prop.PID] = make([]*genericsmr.MDLPropose, 0)
@@ -843,7 +844,6 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 				cmdIds[found] = prop.CommandId
 				found++
 				found_total++
-				r.nextSeqNo[prop.PID]++
 			} else {
 				// If no predecessor, then request is vacuously coordinated
 				coord = 1
@@ -866,8 +866,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 					ball,
 					stat,
 					&LeaderBookkeeping{props, 0, 0, 0, 0, coord},
-					pid[0],
-					seqno[0],
+					prop.PID,
+					prop.SeqNo,
 					nil,
 					thisCr,
 					thisEpoch,
@@ -879,6 +879,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			}
 			// Check if coordination request from successor arrived
 			// before the request arrived, if so add it
+			r.nextSeqNo[prop.PID]++
 			prepareTags[found_total-1] = t //TODO
 			recvCoordReq := false
 			if v, ok1 := r.outstandingCR[t]; ok1 {
@@ -1320,7 +1321,7 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       result := true
       for i, k := range faccept.CmdTags {
         if v, ok := r.bufferedLog[k]; !ok {
-	  if (faccept.PIDs[i] == -1 && faccept.SeqNos[i] == -1) {
+	  if (faccept.PIDs[i] != -1 && faccept.SeqNos[i] != -1) {
 		  b[i] = faccept.Command[i]
 		  bi[i] = faccept.EpochSize[i]
 	  } else {
