@@ -478,6 +478,8 @@ func (r *Replica) processEpoch() {
   bi := make([]int64, n) // Epoch to sort by
   bp := make([]*genericsmr.MDLPropose, n) // Client we are responding to
   cmdids := make([]mdlinproto.Tag, n)
+  ps := make([]int64, n)
+  sn := make([]int64, n)
   j := 0
   //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
   oldLen := len(r.bufferedLog)
@@ -489,8 +491,16 @@ func (r *Replica) processEpoch() {
     b[j] = p.Value.(*Instance).cmds[0]
     bi[j] = p.Value.(*Instance).epoch[0]
     bp[j] = p.Value.(*Instance).lb.clientProposals[0]
-    cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
-    delete(r.bufferedLog, cmdids[j])
+
+    if (p.Value.(*Instance).pred != nil) {
+	    cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
+	    delete(r.bufferedLog, cmdids[j])
+	    ps[j] = -1
+	    sn[j] = -1
+    } else {
+	    ps[j] = p.Value.(*Instance).pid
+	    sn[j] = p.Value.(*Instance).seqno
+    }
     j++
     //NewPrintf(LEVEL0, "ProcessEpoch: adding entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
     dlog.Printf("Ordering CommandID %v PID %v\n", p.Value.(*Instance).seqno, p.Value.(*Instance).pid)
@@ -503,7 +513,7 @@ func (r *Replica) processEpoch() {
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
   dlog.Printf("BCASTFinal!!Accept for instNo %v at %v\n", instNo, time.Now().UnixMilli())
-  r.bcastFinalAccept(instNo, r.defaultBallot, cmdids, bi)
+  r.bcastFinalAccept(instNo, r.defaultBallot, cmdids, b, ps, sn, bi)
 
   r.epoch++
   r.totalEpochs++
@@ -518,7 +528,7 @@ func (r *Replica) processEpoch() {
 }
 
 // indexOL, orderedLog, bufferedLog
-func (r *Replica) processCCEntry() *Instance {
+func (r *Replica) processCCEntry() {
   // TODO garbage collection :)
   // create an entry from the readyBuff
   //dlog.Printf("------------Epoch Beginning---------%v\n", time.Now().UnixMilli())
@@ -531,21 +541,29 @@ func (r *Replica) processCCEntry() *Instance {
   b := make([]state.Command, 1) // Command to execute
   bi := make([]int64, 1) // Epoch to sort by
   bp := make([]*genericsmr.MDLPropose, 1) // Client we are responding to
+  pp := make([]int64, 1)
+  sn := make([]int64, 1)
   cmdids := make([]mdlinproto.Tag, 1)
   j := 0
   //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
   b[j] = p.Value.(*Instance).cmds[0]
   bi[j] = p.Value.(*Instance).epoch[0]
   bp[j] = p.Value.(*Instance).lb.clientProposals[0]
-  cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
-  delete(r.bufferedLog, cmdids[j])
+  if (p.Value.(*Instance).pred == nil) {
+	  pp[j] = p.Value.(*Instance).seqno
+	  sn[j] = p.Value.(*Instance).pid
+  } else {
+	  cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
+	  delete(r.bufferedLog, cmdids[j])
+	  pp[j] = -1
+	  sn[j] = -1
+  }
   instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED)
   r.crtInstance++
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
   dlog.Printf("|-------------|BCASTFinal!!Accept for instNo %v at %v\n", instNo, time.Now().UnixMilli())
-  r.bcastFinalAccept(instNo, r.defaultBallot, cmdids, bi)
-  return p.Value.(*Instance)
+  r.bcastFinalAccept(instNo, r.defaultBallot, cmdids, b, pp, sn, bi)
 }
 
 func (r *Replica) updateCommittedUpTo() {
@@ -592,7 +610,7 @@ func (r *Replica) bcastPrepare(instance []mdlinproto.Tag, ballot int32, toInfini
 
 var fpa mdlinproto.FinalAccept
 
-func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdids []mdlinproto.Tag, es []int64) {
+func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdids []mdlinproto.Tag, command []state.Command, pids []int64, seqnos []int64, es []int64) {
 	defer func() {
 		if err := recover(); err != nil {
 			//NewPrintf(LEVEL0, "Accept bcast failed: %v", err)
@@ -603,7 +621,10 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdids []mdlinp
 	fpa.LeaderId = r.Id
 	fpa.Instance = instance
 	fpa.Ballot = ballot
-  fpa.CmdTags = cmdids
+	fpa.CmdTags = cmdids
+	fpa.Command = command
+	fpa.PIDs = pids
+	fpa.SeqNos = seqnos
 	// Make a copy of the nextSeqNo map
 	//expectedSeqs := make(map[int64]int64)
 	//copyMap(expectedSeqs, r.nextSeqNo)
@@ -929,7 +950,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		}
 	}
 
-	dlog.Printf("found = %v\n", found)
+	dlog.Printf("found = %v\n", found_total)
 	// None of the proposals in the channel
 	// are ready to be added to the log
 	if found_total == 0 {
@@ -943,12 +964,12 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	r.noProposalsReady = false
 
 	// Resize all the arrays to hold the actual amount we found
-	prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found]...)
+	prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found_total]...)
 	cmds = append([]state.Command(nil), cmds[:found]...)
 	pid = append([]int64(nil), pid[:found]...)
 	seqno = append([]int64(nil), seqno[:found]...)
 	cmdIds = append([]int32(nil), cmdIds[:found]...)
-	dlog.Printf("ended up finding %d entries for this batch", found)
+	dlog.Printf("ended up finding %d entries for this batch, %d of which were NOT naught ones", found_total, found)
 	//NewPrintf(LEVEL0, "handlePropose: CurrInst Pushed back entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
 	if r.defaultBallot == -1 {
 		dlog.Printf("BCASTPrepare at time %v\n", time.Now().UnixMilli())
@@ -961,6 +982,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			e := p.Value.(*Instance)
 			e.status = PREPARING
 			i := q.Value.(int)
+			dlog.Printf("PrepareTags looks like %v\n", prepareTags)
 			r.bufferedLog[prepareTags[i]] = e
 			p = next
 			q = next2
@@ -1298,9 +1320,14 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       result := true
       for i, k := range faccept.CmdTags {
         if v, ok := r.bufferedLog[k]; !ok {
-          panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
-          result = false
-          break
+	  if (faccept.PIDs[i] == -1 && faccept.SeqNos[i] == -1) {
+		  b[i] = faccept.Command[i]
+		  bi[i] = faccept.EpochSize[i]
+	  } else {
+		  panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
+		  result = false
+		  break
+	  }
         } else {
           b[i] = v.cmds[0]
           bi[i] = faccept.EpochSize[i]
@@ -1432,24 +1459,33 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 				}
 				r.recordInstanceMetadata(r.bufferedLog[preply.Instance[i]])
 				r.sync()
+				dlog.Printf("is this a naught one being prepared?\n")
 				if (inst.pred == nil) {
+					dlog.Printf("yes\n")
 					inst.status = ACCEPTED
 					delete(r.bufferedLog, preply.Instance[i])
 					r.readyBuff.PushBack(inst)
 					continue
 				}
+				dlog.Printf("No\n")
 				cmds[real_total] = inst.cmds[0]
 				pids[real_total] = inst.pid
 				seqnos[real_total] = inst.seqno
 				cmdIds[real_total] = inst.lb.clientProposals[0].CommandId
 				real_total++
 			}
-			cmds = append([]state.Command(nil), cmds[:real_total]...)
-			pids = append([]int64(nil), pids[:real_total]...)
-			seqnos = append([]int64(nil), seqnos[:real_total]...)
-			cmdIds = append([]int32(nil), cmdIds[:real_total]...)
-			dlog.Printf("BCASTAccept for CommandId = %d of batchSize %v PID %v at %v\n", inst.seqno, real_total, inst.pid, time.Now().UnixMilli())
-			r.bcastAccept(b, cmds, pids, seqnos, e, cmdIds)
+			if (real_total > 0) {
+				cmds = append([]state.Command(nil), cmds[:real_total]...)
+				pids = append([]int64(nil), pids[:real_total]...)
+				seqnos = append([]int64(nil), seqnos[:real_total]...)
+				cmdIds = append([]int32(nil), cmdIds[:real_total]...)
+				dlog.Printf("BCASTAccept for CommandId = %d of batchSize %v PID %v at %v\n", inst.seqno, real_total, inst.pid, time.Now().UnixMilli())
+				r.bcastAccept(b, cmds, pids, seqnos, e, cmdIds)
+			}
+			if (len(preply.Instance) > real_total && !r.epochBatching) {
+				dlog.Printf("Calling processCCEntry from handlePrepareReply\n")
+				r.processCCEntry()
+			}
 		}
 	} else {
 		// TODO: there is probably another active leader
