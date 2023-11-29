@@ -481,6 +481,7 @@ func (r *Replica) processEpoch() {
   ps := make([]int64, n)
   sn := make([]int64, n)
   j := 0
+  naught_count := 0
   //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
   oldLen := len(r.bufferedLog)
   for p != nil {
@@ -498,6 +499,7 @@ func (r *Replica) processEpoch() {
 	    ps[j] = -1
 	    sn[j] = -1
     } else {
+	    naught_count++
 	    ps[j] = p.Value.(*Instance).pid
 	    sn[j] = p.Value.(*Instance).seqno
     }
@@ -522,7 +524,7 @@ func (r *Replica) processEpoch() {
   }
   end := time.Now()
   dlog.Printf("------------Epoch End---------%v, it took %v nano\n", time.Now().UnixMilli(), end.Sub(start).Nanoseconds())
-  if (len(r.bufferedLog) != oldLen-n) {
+  if (len(r.bufferedLog) != oldLen-n+naught_count) {
 	  panic ("didn't take out the right amount of elements in buffLog")
   }
 }
@@ -812,12 +814,12 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	// i, numProposals = i is a for loop from 1 to numProposals
 	// found, batchsize = we use found to bound the number of entries added to batchsize=1 (and flushing buffer)
 	for found_total < batchSize && i <= numProposals {
+		dlog.Printf("prop.SeqNo = %v, expectedSeqno = %v\n", prop.SeqNo, expectedSeqno)
 		if val, ok := r.nextSeqNo[prop.PID]; ok {
 			expectedSeqno = val
 		}
 		if prop.SeqNo != expectedSeqno {
 			// Add to buffer
-			dlog.Printf("prop.SeqNo = %v, expectedSeqno = %v\n", prop.SeqNo, expectedSeqno)
 			panic("We shouldn't be getting OoO reqs per client")
 			if _, ok := r.outstandingInst[prop.PID]; !ok {
 				r.outstandingInst[prop.PID] = make([]*genericsmr.MDLPropose, 0)
