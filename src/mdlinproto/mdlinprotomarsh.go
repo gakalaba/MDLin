@@ -913,6 +913,18 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
   // CmdTags  []Tag
   // ExpectedSeqs map[int64]int64
   // EpochSize []int64
+
+//LeaderId  int32
+  //Instance  int32
+    //Ballot    int32
+      //CmdTags   []Tag
+        //Command []state.Command
+	  //PIDs []int64
+	    //SeqNos []int64
+	      //ExpectedSeqs  map[int64]int64
+	        //EpochSize []int64
+
+
   var b [12]byte
 	var bs []byte
 	bs = b[:12]
@@ -932,6 +944,15 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 	bs[10] = byte(tmp32 >> 16)
 	bs[11] = byte(tmp32 >> 24)
 	wire.Write(bs)
+
+	bs = b[:4]
+	tmp32 = t.CommandId
+	bs[0] = byte(tmp32)
+	bs[1] = byte(tmp32 >> 8)
+	bs[2] = byte(tmp32 >> 16)
+	bs[3] = byte(tmp32 >> 24)
+	wire.Write(bs)
+
 
   // CmdTags
   bs = b[:]
@@ -1066,6 +1087,11 @@ func (t *FinalAccept) Unmarshal(rr io.Reader) error {
 	t.Instance = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
 	t.Ballot = int32((uint32(bs[8]) | (uint32(bs[9]) << 8) | (uint32(bs[10]) << 16) | (uint32(bs[11]) << 24)))
 
+	bs = b[:4]
+	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
+		return err
+	}
+	t.CommandId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
   // CmdTags
   alen1, err := binary.ReadVarint(wire)
   if err != nil {
