@@ -534,13 +534,14 @@ func (r *Replica) processEpoch() {
 
 // indexOL, orderedLog, bufferedLog
 func (r *Replica) processCCEntry() {
+  A := time.Now().UnixNano()
   // TODO garbage collection :)
   // create an entry from the readyBuff
   dlog.Printf("------------Epoch Beginning---------%v\n", time.Now().UnixMilli())
   p := r.readyBuff.Back()
-  dlog.Printf("readyBuff: %v\n", r.readyBuff)
+  //dlog.Printf("readyBuff: %v\n", r.readyBuff)
   r.readyBuff.Remove(p)
-  dlog.Printf("orderedLog: %v\n", r.bufferedLog)
+  //dlog.Printf("orderedLog: %v\n", r.bufferedLog)
   if (r.readyBuff.Len() != 0) {
     panic("Should only be adding one thing at a time")
   }
@@ -565,12 +566,16 @@ func (r *Replica) processCCEntry() {
 	  pp[j] = -1
 	  sn[j] = -1
   }
+  B := time.Now().UnixNano()
   instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED)
+  C := time.Now().UnixNano()
   r.crtInstance++
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
   dlog.Printf("|-------------|BCASTFinal!!Accept for commandId %v instNo %v at %v\n",pp[0]*500+int64(bp[0].CommandId), instNo, time.Now().UnixMilli())
   r.bcastFinalAccept(instNo, r.defaultBallot, bp[0].CommandId, cmdids, b, pp, sn, bi)
+  D := time.Now().UnixNano()
+  dlog.Printf(":):):):) A -B = %v, B-C = %v, C-D = %v\n", B-A, C-B, D-C)
 }
 
 func (r *Replica) updateCommittedUpTo() {
@@ -624,6 +629,7 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cm
 		}
 	}()
 
+	A := time.Now().UnixNano()
   //NewPrintf(LEVELALL, "BcastFinalAccept")
 	fpa.LeaderId = r.Id
 	fpa.Instance = instance
@@ -642,17 +648,25 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cm
   // sending the epochs.. which it needs to do because they are
   // updated values from what the replicas have since the entries
   // changed them once they got coordinated!
-  fpa.ExpectedSeqs = r.nextSeqNo
+  n := len(pids)
+  if (n != 1) {
+	  panic("nope")
+  }
+  fpa.ExpectedSeqs = make(map[int64]int64, n)
+  for i := 0; i < n; i++ {
+	  fpa.ExpectedSeqs[pids[i]] = seqnos[i]
+  }
   fpa.EpochSize = es
 	args := &fpa
 
   //NewPrintf(LEVELALL, "Broadcasting accept with message %v", fpa)
-	n := r.N - 1
+	n = r.N - 1
 	if r.Thrifty {
 		n = r.N >> 1 //n = n//2
 	}
 	q := r.Id
 
+	B := time.Now().UnixNano()
 	for sent := 0; sent < n; {
 		q = (q + 1) % int32(r.N)
 		if q == r.Id {
@@ -664,6 +678,8 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cm
 		sent++
 		r.SendMsg(q, r.finalAcceptRPC, args)
 	}
+	C := time.Now().UnixNano()
+	dlog.Printf("^&^&^&^ A -B= %v, B-C = %v\n", B-A, C-B)
 }
 var pa mdlinproto.Accept
 
@@ -778,6 +794,9 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 
 // Client submitted a command to a server
 func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
+	var A,AA, B, C, D, E, F, FF int64
+	A = time.Now().UnixNano()
+	start := time.Now().UnixNano()
 	if !r.IsLeader {
 		preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.NIL, 0}
 		//NewPrintf(LEVELALL, "I'm not the leader... responding to client with OK = false (0)")
@@ -805,6 +824,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	seqno := make([]int64, batchSize)
 	prepareTags := make([]mdlinproto.Tag, batchSize)
 	cmdIds := make([]int32, batchSize)
+	AA = time.Now().UnixNano()
 	naught_list := list.New()
 	naught_i := list.New()
 
@@ -819,6 +839,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	i := 1
 	// i, numProposals = i is a for loop from 1 to numProposals
 	// found, batchsize = we use found to bound the number of entries added to batchsize=1 (and flushing buffer)
+	B = time.Now().UnixNano()
 	for found_total < batchSize && i <= numProposals {
 		if val, ok := r.nextSeqNo[prop.PID]; ok {
 			expectedSeqno = val
@@ -910,6 +931,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			if !recvCoordReq {
 				r.seen[t] = newEntry
 			}
+			C = time.Now().UnixNano()
 			// Check if any others are ready
 			for found < batchSize {
 				//NewPrintf(LEVELALL, "looking for any others that might be ready from this PID %d", pid)
@@ -960,6 +982,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	}
 
 	dlog.Printf("found = %v\n", found_total)
+	D = time.Now().UnixNano()
 	// None of the proposals in the channel
 	// are ready to be added to the log
 	if found_total == 0 {
@@ -1003,9 +1026,12 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	} else {
 		//NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting accepts!....")
 		p := naught_list.Front()
+		E = time.Now().UnixNano()
+		dlog.Printf("found_total should be 1 = %v length of naught_list = %v\n", found_total, naught_list.Len())
 		for i := 0; i < found_total; i++ {
 			v, OK := r.bufferedLog[prepareTags[i]]
 			if OK {
+				panic("nope")
 				r.recordInstanceMetadata(v)
 				cmdRecord := make([]state.Command, 1)
 				cmdRecord[0] = cmds[i]
@@ -1028,9 +1054,16 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
 		}
 		if (found_total > found && !r.epochBatching) {
+			dlog.Printf("yes we must be here\n")
+			FF = time.Now().UnixNano()
 			r.processCCEntry()
 		}
+		F = time.Now().UnixNano()
 	}
+	end := time.Now().UnixNano()
+	dlog.Printf("OYOYOY handlePropose function took %v nanoseconds to run\n", end-start)
+	dlog.Printf("A - AA = %v, AA-B = %v, B -C = %v, C -D = %v, D -E = %v, E -F= %v\n", AA-A, B-AA, C-B, D-C, E-D, F-E,)
+	dlog.Printf("E-FF = %v, FF-F = %v\n", FF-E, F-FF)
 }
 
 func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MDLPropose, pid int64,
@@ -1302,11 +1335,11 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
   if inst != nil {
     panic("No failures happening yet, so we shouldn't be hitting this case")
     if inst.ballot > faccept.Ballot {
-      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, inst.ballot}
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, inst.ballot, -1, -1}
     } else if inst.ballot < faccept.Ballot {
       inst.ballot = faccept.Ballot
       inst.status = ACCEPTED
-      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot}
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, -1, -1}
       if inst.lb != nil && inst.lb.clientProposals != nil {
         //TODO: is this correct?
         // try the proposal in a different instance
@@ -1321,11 +1354,11 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       if r.instanceSpace[faccept.Instance].status != COMMITTED {
         r.instanceSpace[faccept.Instance].status = ACCEPTED
       }
-      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, r.defaultBallot}
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, r.defaultBallot, faccept.PIDs[0], faccept.CommandId}
     }
   } else {
     if faccept.Ballot < r.defaultBallot {
-      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, r.defaultBallot}
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, r.defaultBallot, faccept.PIDs[0], faccept.CommandId}
     } else {
       n := len(faccept.CmdTags)
       b := make([]state.Command, n)
@@ -1356,10 +1389,10 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       if result {
         r.addEntryToOrderedLog(faccept.Instance, b, bi, nil, ACCEPTED)
 	dlog.Printf("HOOHOO from commandID: %d @ time %v\n", faccept.PIDs[0]*500+int64(faccept.CommandId), time.Now().UnixMilli())
-        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot}
+        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, faccept.PIDs[0], faccept.CommandId}
       } else {
         panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
-        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, faccept.Ballot}
+        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, faccept.Ballot, faccept.PIDs[0], faccept.CommandId}
       }
     }
   }
@@ -1584,6 +1617,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
 
 func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
   //NewPrintf(LEVELALL, "got RESPONSE to FINAL accept %v", fareply.OK)
+  start := time.Now().UnixNano()
   inst := r.instanceSpace[fareply.Instance]
 
 	if inst.status != PREPARED && inst.status != ACCEPTED {
@@ -1611,6 +1645,8 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
 			// TODO
 		}
 	}
+  end := time.Now().UnixNano()
+  dlog.Printf("YOYOYO FinalAcceptReply function took %v nanoseconds to run\n", end-start)
 }
 
 func (r *Replica) executeCommands() {
@@ -1648,6 +1684,7 @@ func (r *Replica) executeCommands() {
 						deltaT := int(time.Now().UnixMilli()) - x
 						if deltaT < 110 {
 							r.statsmap[0]++
+							dlog.Printf("GOOD\n")
 						} else {
 							dlog.Printf("HIHIHI\n")
 							r.statsmap[1]++

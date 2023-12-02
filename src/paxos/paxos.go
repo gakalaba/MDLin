@@ -110,7 +110,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 	r.commitShortRPC = r.RegisterRPC(new(paxosproto.CommitShort), r.commitShortChan)
 	r.prepareReplyRPC = r.RegisterRPC(new(paxosproto.PrepareReply), r.prepareReplyChan)
 	r.acceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.acceptReplyChan)
-
+	dlog.Printf("acceptReplyRPC = %d\n", r.acceptReplyRPC)
 	go r.run(masterAddr, masterPort)
 
 	return r
@@ -438,6 +438,8 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
+	start := time.Now().UnixNano()
+
 	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)
 	if !r.IsLeader {
 		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL, 0}
@@ -496,6 +498,8 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		r.bcastAccept(instNo, r.defaultBallot, cmds)
 		//dlog.Printf("Fast round for instance %d\n", instNo)
 	}
+	end := time.Now().UnixNano()
+	dlog.Printf("OYOYOY handlePropose function took %v nanoseconds to run\n", end-start)
 }
 
 func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
@@ -681,6 +685,8 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 }
 
 func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
+	start := time.Now().UnixNano()
+
 	inst := r.instanceSpace[areply.Instance]
 
 	if inst.status != PREPARED && inst.status != ACCEPTED {
@@ -724,6 +730,8 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 			// TODO
 		}
 	}
+	end := time.Now().UnixNano()
+	dlog.Printf("YOYOYO AcceptReply function took %v nanoseconds to run\n", end-start)
 }
 
 func (r *Replica) executeCommands() {
