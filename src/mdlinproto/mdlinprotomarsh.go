@@ -1025,9 +1025,6 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 	// Expected Sequence Numbers Map
 	bs = b[:]
 	alen1 = int64(len(t.ExpectedSeqs)) * 2 // Since we're entering (k,v) pairs
-	if (alen1 != 2) {
-		panic("nope")
-	}
 	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
 		wire.Write(b[0:wlen])
 	}

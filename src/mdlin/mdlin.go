@@ -651,9 +651,6 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cm
   // updated values from what the replicas have since the entries
   // changed them once they got coordinated!
   n := len(pids)
-  if (n != 1) {
-	  panic("nope")
-  }
   fpa.ExpectedSeqs = make(map[int64]int64, n)
   for i := 0; i < n; i++ {
 	  fpa.ExpectedSeqs[pids[i]] = seqnos[i]
@@ -709,12 +706,16 @@ func (r *Replica) bcastAccept(ballot int32, command []state.Command, pids []int6
 	//copyMap(expectedSeqs, r.nextSeqNo)
   //pa.ExpectedSeqs = expectedMap
   //TODO what other maps..?
-  pa.ExpectedSeqs = r.nextSeqNo
+  n := len(pids)
+  pa.ExpectedSeqs = make(map[int64]int64, n)
+  for i := 0; i < n; i++ {
+          fpa.ExpectedSeqs[pids[i]] = seqnos[i]
+  }
   pa.Epoch = es
 	args := &pa
 
   //NewPrintf(LEVELALL, "Broadcasting accept with message %v", pa)
-	n := r.N - 1
+	n = r.N - 1
 	if r.Thrifty {
 		n = r.N >> 1 //n = n//2
 	}
@@ -1003,9 +1004,6 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	pid = append([]int64(nil), pid[:found]...)
 	seqno = append([]int64(nil), seqno[:found]...)
 	cmdIds = append([]int32(nil), cmdIds[:found]...)
-	if (found != 0) {
-		panic("nope")
-	}
 	dlog.Printf("ended up finding %d entries for this batch, %d of which WERE naught ones", found_total, found_total-found)
 	//NewPrintf(LEVEL0, "handlePropose: CurrInst Pushed back entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
 	if r.defaultBallot == -1 {
@@ -1033,7 +1031,6 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		for i := 0; i < found_total; i++ {
 			v, OK := r.bufferedLog[prepareTags[i]]
 			if OK {
-				panic("nope")
 				r.recordInstanceMetadata(v)
 				cmdRecord := make([]state.Command, 1)
 				cmdRecord[0] = cmds[i]
@@ -1052,7 +1049,6 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		}
 		dlog.Printf("BCASTAccept for at time %v\n", time.Now().UnixMilli())
 		if found != 0 {
-			panic("nope")
 			r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
 		}
 		if (found_total > found && !r.epochBatching) {
@@ -1366,9 +1362,6 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       b := make([]state.Command, n)
       bi := make([]int64, n)
       result := true
-      if (len(faccept.CmdTags) != 1) {
-	      panic("nope")
-      }
       for i, k := range faccept.CmdTags {
         if v, ok := r.bufferedLog[k]; !ok {
 	  if (faccept.PIDs[i] != -1 && faccept.SeqNos[i] != -1) {
@@ -1382,7 +1375,6 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
 		  break
 	  }
         } else {
-		panic("nope")
           b[i] = v.cmds[0]
           bi[i] = faccept.EpochSize[i]
           delete(r.bufferedLog, k)
@@ -1562,6 +1554,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 }
 
 func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
+  start := time.Now().UnixNano()
   //NewPrintf(LEVELALL, "got RESPONSE to (regular) accept %v", areply.OK)
   if areply.OK != TRUE {
     panic("Replica didn't accept buffered appendEntries?")
@@ -1615,6 +1608,9 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
       }
     }
   }
+
+  end := time.Now().UnixNano()
+  dlog.Printf("AYAYAY AcceptReply function took %v nanoseconds to run\n", end-start)
 }
 
 func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
