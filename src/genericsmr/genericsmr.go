@@ -529,15 +529,30 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 
 		default:
 			if rpair, present := r.rpcTable[msgType]; present {
+				now := time.Now().UnixNano()
+				if msgType == 14 {
+					dlog.Printf("Got finalAccept @ time = %v\n", now)
+				} else if msgType == 15 {
+					dlog.Printf("God finalAcceptReply @ time = %v\n", now)
+				}
 				obj := rpair.Obj.New()
 				if err = obj.Unmarshal(reader); err != nil {
 					break
 				}
-				//dlog.Printf("[%d] Done unmarshaling message with op %d from replica %d.\n", r.Id, msgType, rid)
+				if msgType == 14 {
+					//objj := obj.(*mdlinproto.FinalAccept)
+					//dlog.Printf("[%d] Done unmarshaling message with op %d from replica %d, CommandID = %v, it took %v .\n", r.Id, msgType, rid, objj.PIDs[0]*500+int64(objj.CommandId),(time.Now().UnixNano()-now))
+				} else if msgType == 15 {
+					//objj := obj.(*mdlinproto.FinalAcceptReply)
+					//dlog.Printf("[%d] Done MDL unmarshaling message with op %d from replica %d, commdId = %v, channel length = %d\n", r.Id, msgType, rid, objj.PID*500+int64(objj.CommandId), len(rpair.Chan))
+				} else if msgType == 13 {
+					//dlog.Printf("[%d] Done PAXOS unmarshaling message with op %d from replica %d, channel length = %d\n", r.Id, msgType, rid, len(rpair.Chan))
+				}
 				rpair.Chan <- obj
 				r.Stats.Max(fmt.Sprintf("server_rpc_%d_chan_length", msgType), len(rpair.Chan))
 			} else {
-				log.Printf("Error: received unknown message type %d.\n", msgType)
+				dlog.Printf("Error: received unknown message type %d. from replica %d\n", msgType, rid)
+				panic("nope")
 			}
 		}
 	}
@@ -557,7 +572,7 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
                         if err = obj.Unmarshal(reader); err != nil {
 				break
                         }
-                        //dlog.Printf("[%d] Done unmarshaling message with op %d from replica %d.\n", r.Id, msgType, rid)
+                        dlog.Printf("[%d] Done unmarshaling message with op %d from replica %d.\n", r.Id, msgType, rid)
                         rpair.Chan <- obj
                         r.Stats.Max(fmt.Sprintf("server_rpc_%d_chan_length", msgType), len(rpair.Chan))
 		} else {
@@ -694,11 +709,29 @@ func (r *Replica) SendMsg(peerId int32, code uint8, msg fastrpc.Serializable) {
 	if r.ShouldDelayNextRPC(int(peerId), code) {
 		r.delayedRPC[peerId][code] <- msg
 	} else {
-		//dlog.Printf("[%d] Sending message with op %d to replica %d.\n", r.Id, code, peerId)
+		now := time.Now().UnixNano()
+		/*if code == 14 {
+			dlog.Printf("[%d] Sending message with op %d FinalAccept to replica %d @t=%v.\n", r.Id, code, peerId, now)
+		} else if code == 15 {
+			dlog.Printf("[%d] Sending message with op %d FinalAcceptReply to replica %d @t=%v.\n", r.Id, code, peerId, now)
+		} else if code == 9 {
+			dlog.Printf("[%d] Sending message with op %d Accept to replica %d @t=%v.\n", r.Id, code, peerId, now)
+		}*/
 		w := r.PeerWriters[peerId]
+		if (code == 0) {
+			panic("nope")
+		}
 		w.WriteByte(code)
 		msg.Marshal(w)
+		B := time.Now().UnixNano()
+		if code == 14 || code == 15 || code == 9 {
+			dlog.Printf("Marshalling took %v\n", (B - now))
+		}
 		w.Flush()
+		C := time.Now().UnixNano()
+		if code == 14 || code == 15 || code == 9 {
+			dlog.Printf("Flushing took %v\n", (C - B))
+		}
 	}
 }
 

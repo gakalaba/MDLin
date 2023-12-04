@@ -27,7 +27,7 @@ const NUM_OUTSTANDING_INST = 10000
 
 const MAX_BATCH = 5000
 
-const DEBUG_LEVEL = 0
+const DEBUG_LEVEL = -1
 const LEVEL0 = 1
 const LEVELALL = 3
 
@@ -93,7 +93,8 @@ type Replica struct {
   epochlen            int
   epoch               int64
   seen                map[mdlinproto.Tag]*Instance
-  printMap		map[int32]int
+  printMap		map[int64]int
+  statsmap	[]int
   totalEpochs	      int
 }
 
@@ -171,8 +172,11 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
     epochLength,
     0,
     make(map[mdlinproto.Tag]*Instance),
-    make(map[int32]int),
+    make(map[int64]int),
+    make([]int, 2),
     0}
+    	r.statsmap[0] = 0
+	r.statsmap[1] = 1
         dlog.Printf("first round batching = %v, 2nd round = %v\n", batch, epBatch)
 
 	r.Durable = durable
@@ -185,6 +189,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 	r.acceptReplyRPC = r.RegisterRPC(new(mdlinproto.AcceptReply), r.acceptReplyChan)
   r.finalAcceptRPC = r.RegisterRPC(new(mdlinproto.FinalAccept), r.finalAcceptChan)
   r.finalAcceptReplyRPC = r.RegisterRPC(new(mdlinproto.FinalAcceptReply), r.finalAcceptReplyChan)
+  dlog.Printf("finalAccept RPC = %v, Reply = %v\n", r.finalAcceptRPC, r.finalAcceptReplyRPC)
   r.coordResponseRPC = r.RegisterRPC(new(mdlinproto.CoordinationResponse), r.coordReqReplyChan)
 
 	go r.run(masterAddr, masterPort)
@@ -478,7 +483,10 @@ func (r *Replica) processEpoch() {
   bi := make([]int64, n) // Epoch to sort by
   bp := make([]*genericsmr.MDLPropose, n) // Client we are responding to
   cmdids := make([]mdlinproto.Tag, n)
+  ps := make([]int64, n)
+  sn := make([]int64, n)
   j := 0
+  naught_count := 0
   //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
   oldLen := len(r.bufferedLog)
   for p != nil {
@@ -489,8 +497,17 @@ func (r *Replica) processEpoch() {
     b[j] = p.Value.(*Instance).cmds[0]
     bi[j] = p.Value.(*Instance).epoch[0]
     bp[j] = p.Value.(*Instance).lb.clientProposals[0]
-    cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
-    delete(r.bufferedLog, cmdids[j])
+
+    if (p.Value.(*Instance).pred != nil) {
+	    cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
+	    delete(r.bufferedLog, cmdids[j])
+	    ps[j] = -1
+	    sn[j] = -1
+    } else {
+	    naught_count++
+	    ps[j] = p.Value.(*Instance).pid
+	    sn[j] = p.Value.(*Instance).seqno
+    }
     j++
     //NewPrintf(LEVEL0, "ProcessEpoch: adding entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
     dlog.Printf("Ordering CommandID %v PID %v\n", p.Value.(*Instance).seqno, p.Value.(*Instance).pid)
@@ -498,12 +515,12 @@ func (r *Replica) processEpoch() {
   }
   // increment the epoch
   // add all ordered entries to the ordered log
-  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED)
+  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED, p.Value.(*Instance).cr)
   r.crtInstance++
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
   dlog.Printf("BCASTFinal!!Accept for instNo %v at %v\n", instNo, time.Now().UnixMilli())
-  r.bcastFinalAccept(instNo, r.defaultBallot, cmdids, bi)
+  r.bcastFinalAccept(instNo, r.defaultBallot, -1, cmdids, b, ps, sn, bi)
 
   r.epoch++
   r.totalEpochs++
@@ -512,18 +529,21 @@ func (r *Replica) processEpoch() {
   }
   end := time.Now()
   dlog.Printf("------------Epoch End---------%v, it took %v nano\n", time.Now().UnixMilli(), end.Sub(start).Nanoseconds())
-  if (len(r.bufferedLog) != oldLen-n) {
+  if (len(r.bufferedLog) != oldLen-n+naught_count) {
 	  panic ("didn't take out the right amount of elements in buffLog")
   }
 }
 
 // indexOL, orderedLog, bufferedLog
 func (r *Replica) processCCEntry() {
+  A := time.Now().UnixNano()
   // TODO garbage collection :)
   // create an entry from the readyBuff
-  //dlog.Printf("------------Epoch Beginning---------%v\n", time.Now().UnixMilli())
+  dlog.Printf("------------Epoch Beginning---------%v\n", time.Now().UnixMilli())
   p := r.readyBuff.Back()
+  //dlog.Printf("readyBuff: %v\n", r.readyBuff)
   r.readyBuff.Remove(p)
+  //dlog.Printf("orderedLog: %v\n", r.bufferedLog)
   if (r.readyBuff.Len() != 0) {
     panic("Should only be adding one thing at a time")
   }
@@ -531,20 +551,33 @@ func (r *Replica) processCCEntry() {
   b := make([]state.Command, 1) // Command to execute
   bi := make([]int64, 1) // Epoch to sort by
   bp := make([]*genericsmr.MDLPropose, 1) // Client we are responding to
+  pp := make([]int64, 1)
+  sn := make([]int64, 1)
   cmdids := make([]mdlinproto.Tag, 1)
   j := 0
   //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
   b[j] = p.Value.(*Instance).cmds[0]
   bi[j] = p.Value.(*Instance).epoch[0]
   bp[j] = p.Value.(*Instance).lb.clientProposals[0]
-  cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
-  delete(r.bufferedLog, cmdids[j])
-  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED)
+  if (p.Value.(*Instance).pred == nil) {
+	  pp[j] = p.Value.(*Instance).pid
+	  sn[j] = p.Value.(*Instance).seqno
+  } else {
+	  cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
+	  delete(r.bufferedLog, cmdids[j])
+	  pp[j] = -1
+	  sn[j] = -1
+  }
+  B := time.Now().UnixNano()
+  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED, p.Value.(*Instance).cr)
+  C := time.Now().UnixNano()
   r.crtInstance++
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
-  dlog.Printf("|-------------|BCASTFinal!!Accept for instNo %v at %v\n", instNo, time.Now().UnixMilli())
-  r.bcastFinalAccept(instNo, r.defaultBallot, cmdids, bi)
+  dlog.Printf("|-------------|BCASTFinal!!Accept for commandId %v instNo %v at %v with cr=%v\n",pp[0]*500+int64(bp[0].CommandId), instNo, time.Now().UnixMilli(), p.Value.(*Instance).cr)
+  r.bcastFinalAccept(instNo, r.defaultBallot, bp[0].CommandId, cmdids, b, pp, sn, bi)
+  D := time.Now().UnixNano()
+  dlog.Printf(":):):):) A -B = %v, B-C = %v, C-D = %v\n", B-A, C-B, D-C)
 }
 
 func (r *Replica) updateCommittedUpTo() {
@@ -591,18 +624,23 @@ func (r *Replica) bcastPrepare(instance []mdlinproto.Tag, ballot int32, toInfini
 
 var fpa mdlinproto.FinalAccept
 
-func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdids []mdlinproto.Tag, es []int64) {
+func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cmdids []mdlinproto.Tag, command []state.Command, pids []int64, seqnos []int64, es []int64) {
 	defer func() {
 		if err := recover(); err != nil {
 			//NewPrintf(LEVEL0, "Accept bcast failed: %v", err)
 		}
 	}()
 
+	A := time.Now().UnixNano()
   //NewPrintf(LEVELALL, "BcastFinalAccept")
 	fpa.LeaderId = r.Id
 	fpa.Instance = instance
 	fpa.Ballot = ballot
-  fpa.CmdTags = cmdids
+	fpa.CommandId = cmdID
+	fpa.CmdTags = cmdids
+	fpa.Command = command
+	fpa.PIDs = pids
+	fpa.SeqNos = seqnos
 	// Make a copy of the nextSeqNo map
 	//expectedSeqs := make(map[int64]int64)
 	//copyMap(expectedSeqs, r.nextSeqNo)
@@ -612,17 +650,22 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdids []mdlinp
   // sending the epochs.. which it needs to do because they are
   // updated values from what the replicas have since the entries
   // changed them once they got coordinated!
-  fpa.ExpectedSeqs = r.nextSeqNo
+  n := len(pids)
+  fpa.ExpectedSeqs = make(map[int64]int64, n)
+  for i := 0; i < n; i++ {
+	  fpa.ExpectedSeqs[pids[i]] = seqnos[i]
+  }
   fpa.EpochSize = es
 	args := &fpa
 
   //NewPrintf(LEVELALL, "Broadcasting accept with message %v", fpa)
-	n := r.N - 1
+	n = r.N - 1
 	if r.Thrifty {
 		n = r.N >> 1 //n = n//2
 	}
 	q := r.Id
 
+	B := time.Now().UnixNano()
 	for sent := 0; sent < n; {
 		q = (q + 1) % int32(r.N)
 		if q == r.Id {
@@ -634,6 +677,8 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdids []mdlinp
 		sent++
 		r.SendMsg(q, r.finalAcceptRPC, args)
 	}
+	C := time.Now().UnixNano()
+	dlog.Printf("^&^&^&^ A -B= %v, B-C = %v\n", B-A, C-B)
 }
 var pa mdlinproto.Accept
 
@@ -661,12 +706,16 @@ func (r *Replica) bcastAccept(ballot int32, command []state.Command, pids []int6
 	//copyMap(expectedSeqs, r.nextSeqNo)
   //pa.ExpectedSeqs = expectedMap
   //TODO what other maps..?
-  pa.ExpectedSeqs = r.nextSeqNo
+  n := len(pids)
+  pa.ExpectedSeqs = make(map[int64]int64, n)
+  for i := 0; i < n; i++ {
+          fpa.ExpectedSeqs[pids[i]] = seqnos[i]
+  }
   pa.Epoch = es
 	args := &pa
 
   //NewPrintf(LEVELALL, "Broadcasting accept with message %v", pa)
-	n := r.N - 1
+	n = r.N - 1
 	if r.Thrifty {
 		n = r.N >> 1 //n = n//2
 	}
@@ -748,17 +797,20 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 
 // Client submitted a command to a server
 func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
+	var A,AA, B, C, D, E, F, FF int64
+	A = time.Now().UnixNano()
+	start := time.Now().UnixNano()
 	if !r.IsLeader {
 		preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.NIL, 0}
 		//NewPrintf(LEVELALL, "I'm not the leader... responding to client with OK = false (0)")
 		r.MDReplyPropose(preply, propose.Reply)
 		return
 	}
-	r.printMap[propose.CommandId] = int(time.Now().UnixMilli())
-	dlog.Printf("Calling handlePropose at time %v\n", r.printMap[propose.CommandId])
+	r.printMap[propose.PID*500+int64(propose.CommandId)] = int(time.Now().UnixMilli())
+	dlog.Printf("Calling handlePropose for pid %v at time %v\n", propose.PID*500+int64(propose.CommandId), r.printMap[propose.PID*500+int64(propose.CommandId)])
 
 	// Get batch size
-  batchSize := 1
+	batchSize := 1
 	numProposals := len(r.MDLProposeChan) + 1
 	dlog.Printf("length of the MDLProposeChan = %v\n", len(r.MDLProposeChan)+1)
 	if r.batchingEnabled {
@@ -771,32 +823,34 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.MDLPropose, batchSize)
-  pid := make([]int64, batchSize)
-  seqno := make([]int64, batchSize)
-  prepareTags := make([]mdlinproto.Tag, batchSize)
-  cmdIds := make([]int32, batchSize)
+	pid := make([]int64, batchSize)
+	seqno := make([]int64, batchSize)
+	prepareTags := make([]mdlinproto.Tag, batchSize)
+	cmdIds := make([]int32, batchSize)
+	AA = time.Now().UnixNano()
+	naught_list := list.New()
+	naught_i := list.New()
 
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
 	}
 
 	found := 0
+	found_total := 0
 	var expectedSeqno int64
 	prop := propose
 	i := 1
-  // i, numProposals = i is a for loop from 1 to numProposals
-  // found, batchsize = we use found to bound the number of entries added to batchsize=1 (and flushing buffer)
-	for found < batchSize && i <= numProposals {
-		pid[found] = prop.PID
-		seqno[found] = prop.SeqNo
-		expectedSeqno = 0
-
+	// i, numProposals = i is a for loop from 1 to numProposals
+	// found, batchsize = we use found to bound the number of entries added to batchsize=1 (and flushing buffer)
+	B = time.Now().UnixNano()
+	for found_total < batchSize && i <= numProposals {
+		dlog.Printf("prop.SeqNo = %v, expectedSeqno = %v\n", prop.SeqNo, expectedSeqno)
 		if val, ok := r.nextSeqNo[prop.PID]; ok {
 			expectedSeqno = val
 		}
 		if prop.SeqNo != expectedSeqno {
 			// Add to buffer
-      panic("We shouldn't be getting OoO reqs per client")
+			panic("We shouldn't be getting OoO reqs per client")
 			if _, ok := r.outstandingInst[prop.PID]; !ok {
 				r.outstandingInst[prop.PID] = make([]*genericsmr.MDLPropose, 0)
 			}
@@ -804,101 +858,141 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			if len(r.outstandingInst[prop.PID]) > 1 {
 				mysort.MergeSort(r.outstandingInst[prop.PID])
 			}
-      //TODO update other state maps, like CR, CRR, pred, etc.
+			//TODO update other state maps, like CR, CRR, pred, etc.
 			//NewPrintf(LEVELALL, "Out of order, (got command %d seqno %d) buffering back into channel", prop.CommandId, seqno)
 		} else {
-      cmds[found] = prop.Command
-			//NewPrintf(LEVEL0, "In order, has command %d, seqno %d", prop.CommandId, seqno)
-			proposals[found] = prop
-      cmdIds[found] = prop.CommandId
-			found++
+			var coord int8 = -1
+                        var thisCr *genericsmr.MDLCoordReq = nil
+                        var zeroeth = false
+			var newEntry *Instance
+			t := mdlinproto.Tag{K: prop.Command.K, PID: prop.PID, SeqNo: prop.SeqNo}
+			// Check if coordination request from successor arrived
+			// before the request arrived, if so add it
+			recvCoordReq := false
+			if v, ok1 := r.outstandingCR[t]; ok1 {
+				//NewPrintf(DEBUG_LEVEL, "^^^^^^^^^^^^found an awaiting CR for %v", t)
+				thisCr = v
+				delete(r.outstandingCR, t)
+				recvCoordReq = true
+			}
+			// Check if response from this request's coordination req
+			// arrived from predecessor before this req arrived.
+			if v, ok2 := r.outstandingCRR[t]; ok2 {
+				//NewPrintf(DEBUG_LEVEL, "!!!!!!!!!!!!!!found an awaiting CRR for %v", t)
+				coord = int8(v.OK)
+				delete(r.outstandingCRR, t)
+			}
+			if (prop.Predecessor.SeqNo != -1) {
+				pid[found] = prop.PID
+				seqno[found] = prop.SeqNo
+				expectedSeqno = 0
+				cmds[found] = prop.Command
+				//NewPrintf(LEVEL0, "In order, has command %d, seqno %d", prop.CommandId, seqno)
+				proposals[found] = prop
+				cmdIds[found] = prop.CommandId
+				found++
+				found_total++
+			} else {
+				// If no predecessor, then request is vacuously coordinated
+				coord = 1
+				zeroeth = true
+				r.epoch = r.epoch + 1
+				ball := r.defaultBallot
+				stat := ACCEPTED
+				if r.defaultBallot == -1 {
+					ball = r.makeUniqueBallot(0)
+					stat = PREPARING
+				}
+				thisEpoch := make([]int64, 1)
+				thisEpoch[0] = r.epoch-1 //want the value before we bumped up the shard's timestamp
+				com := make([]state.Command, 1)
+				com[0] = prop.Command
+				props := make([]*genericsmr.MDLPropose, 1)
+				props[0] = prop
+				e := &Instance{
+					com,
+					ball,
+					stat,
+					&LeaderBookkeeping{props, 0, 0, 0, 0, coord},
+					prop.PID,
+					prop.SeqNo,
+					nil,
+					thisCr,
+					thisEpoch,
+					r.totalEpochs}
+				naught_list.PushBack(e)
+				newEntry = e
+				dlog.Printf("and my predecessor pointer is %v\n", newEntry.cr)
+				found_total++
+				naught_i.PushBack(found_total-1)
+			}
+			// Check if coordination request from successor arrived
+			// before the request arrived, if so add it
 			r.nextSeqNo[prop.PID]++
+			prepareTags[found_total-1] = t //TODO
 
-      // If no predecessor, then request is vacuously coordinated
-      var coord int8 = -1
-      var thisCr *genericsmr.MDLCoordReq = nil
-      if (prop.Predecessor.SeqNo == -1) {
-        coord = 1
-      }
-
-      // Check if coordination request from successor arrived
-      // before the request arrived, if so add it
-      t := mdlinproto.Tag{K: prop.Command.K, PID: prop.PID, SeqNo: prop.SeqNo}
-      prepareTags[found-1] = t
-      recvCoordReq := false
-      if v, ok1 := r.outstandingCR[t]; ok1 {
-        //NewPrintf(LEVEL0, "^^^^^^^^^^^^found an awaiting CR for %v", t)
-        thisCr = v
-        delete(r.outstandingCR, t)
-        recvCoordReq = true
-      }
-      // Check if response from this request's coordination req
-      // arrived from predecessor before this req arrived.
-      if v, ok2 := r.outstandingCRR[t]; ok2 {
-        //NewPrintf(LEVEL0, "!!!!!!!!!!!!!!found an awaiting CRR for %v", t)
-        coord = int8(v.OK)
-        delete(r.outstandingCRR, t)
-      }
-
-      newEntry := r.addEntryToBuffLog(cmds[found-1], proposals[found-1], pid[found-1], seqno[found-1], coord, thisCr, &prop.Predecessor, r.epoch) //This seems like a bad idea TODO... the address of a message that's gonna disapear?
-      if !recvCoordReq {
-        r.seen[t] = newEntry
-      }
+			if !zeroeth {
+				newEntry = r.addEntryToBuffLog(cmds[found-1], proposals[found-1], pid[found-1], seqno[found-1], coord, thisCr, &prop.Predecessor, r.epoch) //This seems like a bad idea TODO... the address of a message that's gonna disapear?
+			}
+			if !recvCoordReq {
+				dlog.Printf("((((((((((((()ADDING TO seen list\n")
+				r.seen[t] = newEntry
+			}
+			C = time.Now().UnixNano()
 			// Check if any others are ready
 			for found < batchSize {
 				//NewPrintf(LEVELALL, "looking for any others that might be ready from this PID %d", pid)
-        pID := prop.PID
+				pID := prop.PID
 				l := len(r.outstandingInst[pID])
 				//NewPrintf(LEVELALL, "apppears there are %d outstanding for this pid", l)
 				expectedSeqno = r.nextSeqNo[pID]
 				if (l > 0) && (r.outstandingInst[pID][l-1].SeqNo == expectedSeqno) {
-          panic("Shouldn't be adding any buffered OoO reqs per client")
+					panic("Shouldn't be adding any buffered OoO reqs per client")
 					// We found previously outstanding requests that can be replicated now
 					prop = r.outstandingInst[pID][l-1]
 					r.outstandingInst[pID] = r.outstandingInst[pID][:l-1]
 					r.nextSeqNo[pID]++ // Giving us linearizability!
 					cmds[found] = prop.Command
 					proposals[found] = prop
-          cmdIds[found] = prop.CommandId
-          coord = -1
-          thisCr = nil
-          if (prop.Predecessor.SeqNo == -1) {
-            panic("This should never happen...? :D delete me")
-          }
-
-          // Check if coordination request from successor arrived
-          // before the request arrived, if so add it
-          t = mdlinproto.Tag{K: prop.Command.K, PID: pID, SeqNo: expectedSeqno}
-          prepareTags[found] = t
-          if v, ok := r.outstandingCR[t]; ok {
-            thisCr = v
-            delete(r.outstandingCR, t)
-          }
-          // Check if response from this request's coordination req
-          // arrived from predecessor before this req arrived.
-          if v, ok := r.outstandingCRR[t]; ok {
-            coord = int8(v.OK)
-            delete(r.outstandingCRR, t)
-          }
-
+					cmdIds[found] = prop.CommandId
+					coord = -1
+					thisCr = nil
+					if (prop.Predecessor.SeqNo == -1) {
+						panic("This should never happen...? :D delete me")
+					}
+					// Check if coordination request from successor arrived
+					// before the request arrived, if so add it
+					t = mdlinproto.Tag{K: prop.Command.K, PID: pID, SeqNo: expectedSeqno}
+					prepareTags[found] = t
+					if v, ok := r.outstandingCR[t]; ok {
+						thisCr = v
+						delete(r.outstandingCR, t)
+					}
+					// Check if response from this request's coordination req
+					// arrived from predecessor before this req arrived.
+					if v, ok := r.outstandingCRR[t]; ok {
+						coord = int8(v.OK)
+						delete(r.outstandingCRR, t)
+					}
 					//NewPrintf(LEVELALL, "head of it's buff Q is ready, with command %d", prop.CommandId)
-          found++
+					found++
 				} else {
 					break
 				}
 			}
 		}
 		i++
-		if found < batchSize && i <= numProposals {
+		if found_total < batchSize && i <= numProposals {
 			//NewPrintf(LEVELALL, "--->Pulled out the next one")
 			prop = <-r.MDLProposeChan
 		}
 	}
 
-	dlog.Printf("found = %v\n", found)
+	dlog.Printf("found = %v\n", found_total)
+	D = time.Now().UnixNano()
 	// None of the proposals in the channel
 	// are ready to be added to the log
-	if found == 0 {
+	if found_total == 0 {
 		//NewPrintf(LEVELALL, "None of the proposals pulled out of the channel or in the buffers are ready!")
 		// We won't respond to the client, since that response
 		// will come when the command gets unbuffered and later executed
@@ -908,30 +1002,72 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 
 	r.noProposalsReady = false
 
-  // Resize all the arrays to hold the actual amount we found
-  prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found]...)
-  cmds = append([]state.Command(nil), cmds[:found]...)
-  pid = append([]int64(nil), pid[:found]...)
-  seqno = append([]int64(nil), seqno[:found]...)
-  cmdIds = append([]int32(nil), cmdIds[:found]...)
-  dlog.Printf("ended up finding %d entries for this batch", found)
+	// Resize all the arrays to hold the actual amount we found
+	prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found_total]...)
+	cmds = append([]state.Command(nil), cmds[:found]...)
+	pid = append([]int64(nil), pid[:found]...)
+	seqno = append([]int64(nil), seqno[:found]...)
+	cmdIds = append([]int32(nil), cmdIds[:found]...)
+	dlog.Printf("ended up finding %d entries for this batch, %d of which WERE naught ones", found_total, found_total-found)
 	//NewPrintf(LEVEL0, "handlePropose: CurrInst Pushed back entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
 	if r.defaultBallot == -1 {
+		E = time.Now().UnixNano()
 		dlog.Printf("BCASTPrepare at time %v\n", time.Now().UnixMilli())
 		//NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting prepares....")
+		p := naught_list.Front()
+		q := naught_i.Front()
+		for p != nil {
+			next := p.Next()
+			next2 := q.Next()
+			e := p.Value.(*Instance)
+			e.status = PREPARING
+			i := q.Value.(int)
+			dlog.Printf("PrepareTags looks like %v AND inst.cr = %v\n", prepareTags, e.cr)
+			r.bufferedLog[prepareTags[i]] = e
+			p = next
+			q = next2
+		}
 		r.bcastPrepare(prepareTags, r.makeUniqueBallot(0), true)
+		F = time.Now().UnixNano()
 	} else {
-		//NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting accepts!....")
-    for i := 0; i < found; i++ {
-		  r.recordInstanceMetadata(r.bufferedLog[prepareTags[i]])
-      cmdRecord := make([]state.Command, 1)
-      cmdRecord[0] = cmds[i]
-      r.recordCommands(cmdRecord)
-      r.sync()
-    }
+		//NewPrintf(DEBUG_LEVEL, "    Step2. (candidate) leader broadcasting accepts!....")
+		p := naught_list.Front()
+		E = time.Now().UnixNano()
+		dlog.Printf("found_total should be 1 = %v length of naught_list = %v\n", found_total, naught_list.Len())
+		for i := 0; i < found_total; i++ {
+			v, OK := r.bufferedLog[prepareTags[i]]
+			if OK {
+				r.recordInstanceMetadata(v)
+				cmdRecord := make([]state.Command, 1)
+				cmdRecord[0] = cmds[i]
+				r.recordCommands(cmdRecord)
+			} else {
+				next := p.Next()
+				e := p.Value.(*Instance)
+				r.readyBuff.PushBack(e)
+				r.recordInstanceMetadata(e)
+                                cmdRecord := make([]state.Command, 1)
+                                cmdRecord[0] = e.cmds[0]
+                                r.recordCommands(cmdRecord)
+				p = next
+			}
+			r.sync()
+		}
 		dlog.Printf("BCASTAccept for at time %v\n", time.Now().UnixMilli())
-		r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
+		if found != 0 {
+			r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
+		}
+		if (found_total > found && !r.epochBatching) {
+			dlog.Printf("yes we must be here\n")
+			FF = time.Now().UnixNano()
+			r.processCCEntry()
+		}
+		F = time.Now().UnixNano()
 	}
+	end := time.Now().UnixNano()
+	dlog.Printf("OYOYOY handlePropose function took %v nanoseconds to run\n", end-start)
+	dlog.Printf("A - AA = %v, AA-B = %v, B -C = %v, C -D = %v, D -E = %v, E -F= %v\n", AA-A, B-AA, C-B, D-C, E-D, F-E,)
+	dlog.Printf("E-FF = %v, FF-F = %v\n", FF-E, F-FF)
 }
 
 func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MDLPropose, pid int64,
@@ -975,7 +1111,7 @@ func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MD
 }
 
 
-func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, epochSizes []int64, cPs []*genericsmr.MDLPropose, status InstanceStatus) int32 {
+func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, epochSizes []int64, cPs []*genericsmr.MDLPropose, status InstanceStatus, cr *genericsmr.MDLCoordReq) int32 {
 	// Add entry to log
 	//NewPrintf(LEVEL0, "Flushing ready entries buffLog --> orderedLog at END OF EPOCH!")
 
@@ -987,7 +1123,7 @@ func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, epochS
 		-1,
 		-1,
     nil,
-    nil,
+    cr,
     epochSizes,
     0}
   return index
@@ -1048,7 +1184,7 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
     e, in = r.seen[cr.AskeeTag]
     if (!in) {
       //NewPrintf(LEVEL0, "Coordination Request arrived before the predecessor did")
-      dlog.Printf("handleCoordinationRequest from client for req not yet here\n")
+      dlog.Printf("handleCoordinationRequest from client for req %v from asker %v not yet here\n", cr.AskeeTag.PID*int64(500) + cr.AskeeTag.SeqNo+1, cr.AskerTag.PID*int64(500) + cr.AskerTag.SeqNo+1)
       r.outstandingCR[cr.AskeeTag] = cr //This seems like a bad idea TODO... the address of a message that's gonna disapear?
       return
     }
@@ -1198,7 +1334,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
 func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
   var fareply *mdlinproto.FinalAcceptReply
 
-  //NewPrintf(LEVELALL, "New FINAL Accept from leader, instance = %v", faccept.Instance)
+  //NewPrintf(DEBUG_LEVEL, "New FINAL Accept from leader, instance = %v commandId = %v @time = %v", faccept.Instance, faccept.PIDs[0]*500+int64(faccept.CommandId), time.Now().UnixMilli())
   inst := r.instanceSpace[faccept.Instance]
   if inst != nil {
     panic("No failures happening yet, so we shouldn't be hitting this case")
@@ -1222,11 +1358,11 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       if r.instanceSpace[faccept.Instance].status != COMMITTED {
         r.instanceSpace[faccept.Instance].status = ACCEPTED
       }
-      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, r.defaultBallot, -1, -1}
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, r.defaultBallot, faccept.PIDs[0], faccept.CommandId}
     }
   } else {
     if faccept.Ballot < r.defaultBallot {
-      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, r.defaultBallot, -1, -1}
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, r.defaultBallot, faccept.PIDs[0], faccept.CommandId}
     } else {
       n := len(faccept.CmdTags)
       b := make([]state.Command, n)
@@ -1234,9 +1370,16 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       result := true
       for i, k := range faccept.CmdTags {
         if v, ok := r.bufferedLog[k]; !ok {
-          panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
-          result = false
-          break
+	  if (faccept.PIDs[i] != -1 && faccept.SeqNos[i] != -1) {
+		  dlog.Printf("HEYHEY from commandID: %d @ time %v\n", faccept.PIDs[0]*500+int64(faccept.CommandId), time.Now().UnixMilli())
+		  //dlog.Printf("Expected Map: %v\n", faccept.ExpectedSeqs)
+		  b[i] = faccept.Command[i]
+		  bi[i] = faccept.EpochSize[i]
+	  } else {
+		  panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
+		  result = false
+		  break
+	  }
         } else {
           b[i] = v.cmds[0]
           bi[i] = faccept.EpochSize[i]
@@ -1244,17 +1387,18 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
         }
       }
       if result {
-        r.addEntryToOrderedLog(faccept.Instance, b, bi, nil, ACCEPTED)
-        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, -1, -1}
+        r.addEntryToOrderedLog(faccept.Instance, b, bi, nil, ACCEPTED, nil) //For now we're not replicating predecessors.. this wouldn't work in event of failover
+	dlog.Printf("HOOHOO from commandID: %d @ time %v\n", faccept.PIDs[0]*500+int64(faccept.CommandId), time.Now().UnixMilli())
+        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, faccept.PIDs[0], faccept.CommandId}
       } else {
         panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
-        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, faccept.Ballot, -1, -1}
+        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, faccept.Ballot, faccept.PIDs[0], faccept.CommandId}
       }
     }
   }
 
 	if fareply.OK == TRUE {
-    //NewPrintf(LEVELALL, "Replica %v accepted this request in OrderedLog", r.Id)
+    //NewPrintf(DEBUG_LEVEL, "Replica %v accepted this request in OrderedLog", r.Id)
 		r.recordInstanceMetadata(r.instanceSpace[faccept.Instance])
 		r.recordCommands(r.instanceSpace[faccept.Instance].cmds)
 		r.sync()
@@ -1262,6 +1406,7 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
 		copyMap(r.nextSeqNo, faccept.ExpectedSeqs)
 	}
 
+	dlog.Printf("HAYHAY from commandID: %d @ time %v\n", faccept.PIDs[0]*500+int64(faccept.CommandId), time.Now().UnixMilli())
 	r.replyFinalAccept(faccept.LeaderId, fareply)
 }
 
@@ -1269,7 +1414,7 @@ func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
 	inst := r.instanceSpace[commit.Instance]
 
 	if inst == nil {
-    r.addEntryToOrderedLog(commit.Instance, commit.Command, commit.EpochSize, nil, COMMITTED)
+    r.addEntryToOrderedLog(commit.Instance, commit.Command, commit.EpochSize, nil, COMMITTED, nil)
 	} else {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
@@ -1298,7 +1443,7 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 
 	//NewPrintf(LEVEL0, "Replica %d is getting handleCommitShort", r.Id)
 	if inst == nil {
-    r.addEntryToOrderedLog(commit.Instance, nil, nil, nil, COMMITTED)
+    r.addEntryToOrderedLog(commit.Instance, nil, nil, nil, COMMITTED, nil)
 	} else {
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
@@ -1316,12 +1461,12 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 }
 
 func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
-
-  //NewPrintf(LEVELALL, "handlePrepareReply, prepare.Instance = %v", preply.Instance)
-  inst, ok := r.bufferedLog[preply.Instance[0]]
-  if !ok {
-    panic("Got index out of bounds at leader in prepareReply")
-  }
+	//NewPrintf(LEVELALL, "handlePrepareReply, prepare.Instance = %v", preply.Instance)
+	// Because we've grouped together naught requests and others, we gotta do this
+	inst, ok := r.bufferedLog[preply.Instance[0]]
+	if !ok {
+		panic("Got index out of bounds at leader in prepareReply")
+	}
 
 	if inst.status != PREPARING {
 		// TODO: should replies for non-current ballots be ignored?
@@ -1350,30 +1495,51 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 		// Don't need to change anything for MDL, just issue bcast Accept
 		// as usual and let the number of accepts compete with the ISRT replies
 		if inst.lb.prepareOKs+1 > r.N>>1 {
-      b := inst.ballot
-      e := inst.epoch[0]
-      numacks := inst.lb.prepareOKs
-      cmds := make([]state.Command, len(preply.Instance))
-      pids := make([]int64, len(preply.Instance))
-      seqnos := make([]int64, len(preply.Instance))
-      cmdIds := make([]int32, len(preply.Instance))
-      for i := 0; i < len(preply.Instance); i++ {
-        inst = r.bufferedLog[preply.Instance[i]]
-        inst.lb.prepareOKs = numacks
-			  inst.status = PREPARED
-			  inst.lb.nacks = 0
-			  if inst.ballot > r.defaultBallot {
-				  r.defaultBallot = inst.ballot
-			  }
-			  r.recordInstanceMetadata(r.bufferedLog[preply.Instance[i]])
-			  r.sync()
-        cmds[i] = inst.cmds[0]
-        pids[i] = inst.pid
-        seqnos[i] = inst.seqno
-        cmdIds[i] = inst.lb.clientProposals[0].CommandId
-      }
-			dlog.Printf("BCASTAccept for CommandId = %d of batchSize %v PID %v at %v\n", inst.seqno, len(preply.Instance), inst.pid, time.Now().UnixMilli())
-			r.bcastAccept(b, cmds, pids, seqnos, e, cmdIds)
+			b := inst.ballot
+			e := inst.epoch[0]
+			numacks := inst.lb.prepareOKs
+			cmds := make([]state.Command, len(preply.Instance))
+			pids := make([]int64, len(preply.Instance))
+			seqnos := make([]int64, len(preply.Instance))
+			cmdIds := make([]int32, len(preply.Instance))
+			real_total := 0
+			for i := 0; i < len(preply.Instance); i++ {
+				inst = r.bufferedLog[preply.Instance[i]]
+				inst.lb.prepareOKs = numacks
+				inst.status = PREPARED
+				inst.lb.nacks = 0
+				if inst.ballot > r.defaultBallot {
+					r.defaultBallot = inst.ballot
+				}
+				r.recordInstanceMetadata(r.bufferedLog[preply.Instance[i]])
+				r.sync()
+				dlog.Printf("is this a naught one being prepared?\n")
+				if (inst.pred == nil) {
+					dlog.Printf("yes and it has predecessor %v\n", inst.cr)
+					inst.status = ACCEPTED
+					delete(r.bufferedLog, preply.Instance[i])
+					r.readyBuff.PushBack(inst)
+					continue
+				}
+				dlog.Printf("No\n")
+				cmds[real_total] = inst.cmds[0]
+				pids[real_total] = inst.pid
+				seqnos[real_total] = inst.seqno
+				cmdIds[real_total] = inst.lb.clientProposals[0].CommandId
+				real_total++
+			}
+			if (real_total > 0) {
+				cmds = append([]state.Command(nil), cmds[:real_total]...)
+				pids = append([]int64(nil), pids[:real_total]...)
+				seqnos = append([]int64(nil), seqnos[:real_total]...)
+				cmdIds = append([]int32(nil), cmdIds[:real_total]...)
+				dlog.Printf("BCASTAccept for CommandId = %d of batchSize %v PID %v at %v\n", inst.seqno, real_total, inst.pid, time.Now().UnixMilli())
+				r.bcastAccept(b, cmds, pids, seqnos, e, cmdIds)
+			}
+			if (len(preply.Instance) > real_total && !r.epochBatching) {
+				dlog.Printf("Calling processCCEntry from handlePrepareReply\n")
+				r.processCCEntry()
+			}
 		}
 	} else {
 		// TODO: there is probably another active leader
@@ -1394,6 +1560,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 }
 
 func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
+  start := time.Now().UnixNano()
   //NewPrintf(LEVELALL, "got RESPONSE to (regular) accept %v", areply.OK)
   if areply.OK != TRUE {
     panic("Replica didn't accept buffered appendEntries?")
@@ -1437,6 +1604,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
       if (OK && inst.cr != nil) {
         shardTo := inst.cr.From
         // Send this req's epoch to the successor
+	dlog.Printf("Proposal %v sending coord response to %v\n", inst.cr.AskeeTag.PID*500+inst.cr.AskeeTag.SeqNo+1, inst.cr.AskerTag.PID*500+inst.cr.AskerTag.SeqNo+1)
         msg := &mdlinproto.CoordinationResponse{inst.cr.AskerTag, inst.cr.AskeeTag, inst.epoch[0], int32(r.ShardId), CC}
         r.replyCoord(shardTo, msg)
       }
@@ -1447,10 +1615,14 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
       }
     }
   }
+
+  end := time.Now().UnixNano()
+  dlog.Printf("AYAYAY AcceptReply function took %v nanoseconds to run\n", end-start)
 }
 
 func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
   //NewPrintf(LEVELALL, "got RESPONSE to FINAL accept %v", fareply.OK)
+  start := time.Now().UnixNano()
   inst := r.instanceSpace[fareply.Instance]
 
 	if inst.status != PREPARED && inst.status != ACCEPTED {
@@ -1465,7 +1637,14 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
       // Check if the successor already sent a CR for this req,
       // but before it was committed itself
       //NewPrintf(LEVELALL, "FINAL ROUND Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
-      //dlog.Printf("--->Committing instNo %v at time %v\n", fareply.Instance, time.Now().UnixMilli())
+      dlog.Printf("FA_REPLY--->Committing commandID %v instNo %v at time %v\n", inst.lb.clientProposals[0].PID*500+int64(inst.lb.clientProposals[0].CommandId), fareply.Instance, time.Now().UnixMilli())
+      if (inst.cr != nil) {
+	      dlog.Printf("Proposal %v sending coord response to %v\n", inst.cr.AskeeTag.PID*500+inst.cr.AskeeTag.SeqNo+1, inst.cr.AskerTag.PID*500+inst.cr.AskerTag.SeqNo+1)
+	      shardTo := inst.cr.From
+	      // Send this req's epoch to the successor
+	      msg := &mdlinproto.CoordinationResponse{inst.cr.AskerTag, inst.cr.AskeeTag, inst.epoch[0], int32(r.ShardId), 1}
+	      r.replyCoord(shardTo, msg)
+      }
       r.readyToCommit(fareply.Instance)
 		}
 	} else {
@@ -1478,6 +1657,8 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
 			// TODO
 		}
 	}
+  end := time.Now().UnixNano()
+  dlog.Printf("YOYOYO FinalAcceptReply function took %v nanoseconds to run\n", end-start)
 }
 
 func (r *Replica) executeCommands() {
@@ -1507,13 +1688,21 @@ func (r *Replica) executeCommands() {
 							val,
 							17}
 
-						//NewPrintf(LEVEL0, "EXECUTING --> CLIENT:OK = TRUE, CommandID = %d, val = %v, key = %d, seqno = %d, PID = %dHA", inst.lb.clientProposals[j].CommandId, val, inst.lb.clientProposals[j].Command.K, inst.lb.clientProposals[j].SeqNo, inst.lb.clientProposals[j].PID)
+						NewPrintf(LEVEL0, "EXECUTING --> CLIENT:OK = TRUE, CommandID = %d, val = %v, key = %d, seqno = %d, PID = %dHA", inst.lb.clientProposals[j].CommandId, val, inst.lb.clientProposals[j].Command.K, inst.lb.clientProposals[j].SeqNo, inst.lb.clientProposals[j].PID)
 
-						//dlog.Printf("Proposal with CommandId = %d PID %v RESPONDed at time %v\n", inst.lb.clientProposals[j].CommandId, inst.pid, time.Now().UnixMilli())
-						//x := r.printMap[inst.lb.clientProposals[j].CommandId]
-						//delete(r.printMap, inst.lb.clientProposals[j].CommandId)
+						//dlog.Printf("Proposal with CommandId = %d PID %v RESPONDed at time %v\n", inst.lb.clientProposals[j].PID*500+int64(inst.lb.clientProposals[j].CommandId), inst.pid, time.Now().UnixMilli())
+						//x := r.printMap[inst.lb.clientProposals[j].PID*500+int64(inst.lb.clientProposals[j].CommandId)]
+						//delete(r.printMap, inst.lb.clientProposals[j].PID*500+int64(inst.lb.clientProposals[j].CommandId))
 						//deltaT := int(time.Now().UnixMilli()) - x
-						//dlog.Printf("Proposal with CommandId = %d PID %v took %v milliseconds\n", inst.lb.clientProposals[j].CommandId, inst.lb.clientProposals[j].PID, deltaT)
+						//if deltaT < 110 {
+						//	r.statsmap[0]++
+						//	dlog.Printf("GOOD\n")
+						//} else {
+						//	dlog.Printf("HIHIHI\n")
+						//	r.statsmap[1]++
+						//}
+						//dlog.Printf("Ratio: under_95:over_95 --> %v:%v\n", r.statsmap[0], r.statsmap[1])
+						//dlog.Printf("Proposal with CommandId = %d PID %v took %v milliseconds\n", inst.lb.clientProposals[j].PID*500+int64(inst.lb.clientProposals[j].CommandId), inst.lb.clientProposals[j].PID, deltaT)
             r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
 					} else {
             //NewPrintf(LEVEL0, "REPLICAS EXECUTING!!")
