@@ -729,11 +729,11 @@ func (r *Replica) handleAccept(oaccept *mdlinproto.OldAccept) {
   if inst != nil {
     panic("No failures happening yet, so we shouldn't be hitting this case")
     if inst.ballot > oaccept.Ballot {
-      oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, FALSE, inst.ballot}
+      oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, FALSE, inst.ballot, -1 ,-1}
     } else if inst.ballot < oaccept.Ballot {
       inst.ballot = oaccept.Ballot
       inst.status = ACCEPTED
-      oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, TRUE, oaccept.Ballot}
+      oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, TRUE, oaccept.Ballot, -1, -1}
       if inst.lb != nil && inst.lb.clientProposals != nil {
         //TODO: is this correct?
         // try the proposal in a different instance
@@ -748,16 +748,16 @@ func (r *Replica) handleAccept(oaccept *mdlinproto.OldAccept) {
       if r.instanceSpace[oaccept.Instance].status != COMMITTED {
         r.instanceSpace[oaccept.Instance].status = ACCEPTED
       }
-      oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, TRUE, r.defaultBallot}
+      oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, TRUE, r.defaultBallot, -1, -1}
     }
   } else {
     if oaccept.Ballot < r.defaultBallot {
 	    dlog.Printf("What is the ballot %v, what is my default ballot %v, i'm responding FALSE\n", oaccept.Ballot, r.defaultBallot)
-      oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, FALSE, r.defaultBallot}
+      oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, FALSE, r.defaultBallot, -1, -1}
     } else {
 	    dlog.Printf("we are responding TRUE\n")
       r.addEntryToOrderedLog(oaccept.Instance, oaccept.Command, nil, ACCEPTED, oaccept.PIDs, oaccept.SeqNos)
-      oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, TRUE, r.defaultBallot}
+      oareply = &mdlinproto.FinalAcceptReply{oaccept.Instance, TRUE, r.defaultBallot, -1, -1}
     }
   }
 

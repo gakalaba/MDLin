@@ -1,8 +1,6 @@
 package mdlinproto
 
 import (
-	"time"
-	"dlog"
 	"bufio"
 	"encoding/binary"
 	"fastrpc"
@@ -915,19 +913,6 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
   // CmdTags  []Tag
   // ExpectedSeqs map[int64]int64
   // EpochSize []int64
-
-//LeaderId  int32
-  //Instance  int32
-    //Ballot    int32
-      //CmdTags   []Tag
-        //Command []state.Command
-	  //PIDs []int64
-	    //SeqNos []int64
-	      //ExpectedSeqs  map[int64]int64
-	        //EpochSize []int64
-
-
-		A := time.Now().UnixNano()
   var b [12]byte
 	var bs []byte
 	bs = b[:12]
@@ -948,15 +933,6 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 	bs[11] = byte(tmp32 >> 24)
 	wire.Write(bs)
 
-	bs = b[:4]
-	tmp32 = t.CommandId
-	bs[0] = byte(tmp32)
-	bs[1] = byte(tmp32 >> 8)
-	bs[2] = byte(tmp32 >> 16)
-	bs[3] = byte(tmp32 >> 24)
-	wire.Write(bs)
-
-
   // CmdTags
   bs = b[:]
   alen1 := int64(len(t.CmdTags))
@@ -966,7 +942,6 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
   for i := int64(0); i < alen1; i++ {
     t.CmdTags[i].Marshal(wire)
   }
-  B := time.Now().UnixNano()
 
 // Marshalling for variable length arrays:
 	// Command array
@@ -1020,7 +995,6 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 	  wire.Write(bs)
   }
 
-  C := time.Now().UnixNano()
 
 	// Expected Sequence Numbers Map
 	bs = b[:]
@@ -1055,7 +1029,6 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 		wire.Write(bs)
 	}
 
-	DD := time.Now().UnixNano()
   // EpochSize
   bs = b[:]
   alen1 = int64(len(t.EpochSize))
@@ -1075,8 +1048,6 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
     bs[7] = byte(tmp64 >> 56)
     wire.Write(bs)
   }
-  D := time.Now().UnixNano()
-  dlog.Printf("Marshalling FinalAccept: A -B = %v, B-C  = %v, C-DD = %v, DD-D = %v\n", B-A, C-B, DD-C, D-DD)
 }
 
 func (t *FinalAccept) Unmarshal(rr io.Reader) error {
@@ -1095,11 +1066,6 @@ func (t *FinalAccept) Unmarshal(rr io.Reader) error {
 	t.Instance = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
 	t.Ballot = int32((uint32(bs[8]) | (uint32(bs[9]) << 8) | (uint32(bs[10]) << 16) | (uint32(bs[11]) << 24)))
 
-	bs = b[:4]
-	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-		return err
-	}
-	t.CommandId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
   // CmdTags
   alen1, err := binary.ReadVarint(wire)
   if err != nil {
@@ -1197,8 +1163,6 @@ func (t *FinalAcceptReply) Marshal(wire io.Writer) {
   // Instance  int32
   // OK        uint8
   // Ballot    int32
-  // PID in64
-  // CommandId int32
   var b [9]byte
 	var bs []byte
 	bs = b[:9]
@@ -1214,22 +1178,6 @@ func (t *FinalAcceptReply) Marshal(wire io.Writer) {
 	bs[7] = byte(tmp32 >> 16)
 	bs[8] = byte(tmp32 >> 24)
 	wire.Write(bs)
-	tmp64 := t.PID
-	bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
-	tmp32 = t.CommandId
-	bs[0] = byte(tmp32)
-	bs[1] = byte(tmp32 >> 8)
-	bs[2] = byte(tmp32 >> 16)
-	bs[3] = byte(tmp32 >> 24)
-	wire.Write(bs)
 }
 
 func (t *FinalAcceptReply) Unmarshal(wire io.Reader) error {
@@ -1242,16 +1190,6 @@ func (t *FinalAcceptReply) Unmarshal(wire io.Reader) error {
 	t.Instance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	t.OK = uint8(bs[4])
 	t.Ballot = int32((uint32(bs[5]) | (uint32(bs[6]) << 8) | (uint32(bs[7]) << 16) | (uint32(bs[8]) << 24)))
-	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-		return err
-	}
-	bs = b[:8]
-	t.PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-		return err
-	}
-	bs = b[:4]
-	t.CommandId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	return nil
 }
 
