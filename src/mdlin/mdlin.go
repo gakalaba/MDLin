@@ -490,6 +490,7 @@ func (r *Replica) processEpoch() {
   naught_count := 0
   //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
   oldLen := len(r.bufferedLog)
+  dlog.Printf("initial bufferedLog length = %v", oldLen)
   for p != nil {
     next = p.Next()
     // remove ordered entries from the buffer log
@@ -501,12 +502,16 @@ func (r *Replica) processEpoch() {
     crs[j] = p.Value.(*Instance).cr[0]
 
     if (p.Value.(*Instance).pred != nil) {
+	    dlog.Printf("middle j = %v", j)
 	    cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
+	    dlog.Printf("len before delete === %v", len(r.bufferedLog))
 	    delete(r.bufferedLog, cmdids[j])
+	    dlog.Printf("len after delete === %v", len(r.bufferedLog))
 	    ps[j] = -1
 	    sn[j] = -1
     } else {
 	    naught_count++
+	    dlog.Printf("naught j = %v", j)
 	    ps[j] = p.Value.(*Instance).pid
 	    sn[j] = p.Value.(*Instance).seqno
     }
@@ -515,6 +520,7 @@ func (r *Replica) processEpoch() {
     dlog.Printf("Ordering CommandID %v PID %v\n", p.Value.(*Instance).seqno, p.Value.(*Instance).pid)
     p = next
   }
+  dlog.Printf("after the loop, j = %v, len(bufferedlog) = %v", j, len(r.bufferedLog))
   // increment the epoch
   // add all ordered entries to the ordered log
 
@@ -533,7 +539,8 @@ func (r *Replica) processEpoch() {
   end := time.Now()
   dlog.Printf("------------Epoch End---------%v, it took %v nano\n", time.Now().UnixMilli(), end.Sub(start).Nanoseconds())
   if (len(r.bufferedLog) != oldLen-n+naught_count) {
-	  panic ("didn't take out the right amount of elements in buffLog")
+	  dlog.Printf("didn't take out the right amount of elements in buffLog, len(r.bufferedLog) = %v, oldLen-n+naught_count = %v, oldLen %v, n %v, naught_count %v", len(r.bufferedLog), oldLen-n+naught_count, oldLen, n, naught_count)
+	  panic ("didn't take out the right amount of elements in buffLog, len(r.bufferedLog) = %v, oldLen-n+naught_count = %v")
   }
 }
 
@@ -1041,13 +1048,15 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		//NewPrintf(DEBUG_LEVEL, "    Step2. (candidate) leader broadcasting accepts!....")
 		p := naught_list.Front()
 		E = time.Now().UnixNano()
+		the_index := 0
 		dlog.Printf("found_total should be 1 = %v length of naught_list = %v\n", found_total, naught_list.Len())
 		for i := 0; i < found_total; i++ {
 			v, OK := r.bufferedLog[prepareTags[i]]
 			if OK {
 				r.recordInstanceMetadata(v)
 				cmdRecord := make([]state.Command, 1)
-				cmdRecord[0] = cmds[i]
+				cmdRecord[0] = cmds[the_index]
+				the_index++
 				r.recordCommands(cmdRecord)
 			} else {
 				next := p.Next()
