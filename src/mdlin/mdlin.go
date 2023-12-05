@@ -116,7 +116,7 @@ type Instance struct {
 	pid        int64
 	seqno      int64
   pred       *mdlinproto.Tag
-  cr         *genericsmr.MDLCoordReq
+  cr         []*genericsmr.MDLCoordReq
   epoch      []int64
   absoluteEpoch int
 }
@@ -485,6 +485,7 @@ func (r *Replica) processEpoch() {
   cmdids := make([]mdlinproto.Tag, n)
   ps := make([]int64, n)
   sn := make([]int64, n)
+  crs := make([]*genericsmr.MDLCoordReq, n)
   j := 0
   naught_count := 0
   //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
@@ -497,6 +498,7 @@ func (r *Replica) processEpoch() {
     b[j] = p.Value.(*Instance).cmds[0]
     bi[j] = p.Value.(*Instance).epoch[0]
     bp[j] = p.Value.(*Instance).lb.clientProposals[0]
+    crs[j] = p.Value.(*Instance).cr[0]
 
     if (p.Value.(*Instance).pred != nil) {
 	    cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
@@ -515,7 +517,8 @@ func (r *Replica) processEpoch() {
   }
   // increment the epoch
   // add all ordered entries to the ordered log
-  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED, p.Value.(*Instance).cr)
+
+  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED, crs)
   r.crtInstance++
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
@@ -553,12 +556,14 @@ func (r *Replica) processCCEntry() {
   bp := make([]*genericsmr.MDLPropose, 1) // Client we are responding to
   pp := make([]int64, 1)
   sn := make([]int64, 1)
+  crs := make([]*genericsmr.MDLCoordReq, 1)
   cmdids := make([]mdlinproto.Tag, 1)
   j := 0
   //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
   b[j] = p.Value.(*Instance).cmds[0]
   bi[j] = p.Value.(*Instance).epoch[0]
   bp[j] = p.Value.(*Instance).lb.clientProposals[0]
+  crs[j] = p.Value.(*Instance).cr[0]
   if (p.Value.(*Instance).pred == nil) {
 	  pp[j] = p.Value.(*Instance).pid
 	  sn[j] = p.Value.(*Instance).seqno
@@ -569,7 +574,7 @@ func (r *Replica) processCCEntry() {
 	  sn[j] = -1
   }
   B := time.Now().UnixNano()
-  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED, p.Value.(*Instance).cr)
+  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED, crs)
   C := time.Now().UnixNano()
   r.crtInstance++
   // do last paxos roundtrip with this whole batch you just added
@@ -844,10 +849,11 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	// found, batchsize = we use found to bound the number of entries added to batchsize=1 (and flushing buffer)
 	B = time.Now().UnixNano()
 	for found_total < batchSize && i <= numProposals {
-		dlog.Printf("prop.SeqNo = %v, expectedSeqno = %v\n", prop.SeqNo, expectedSeqno)
+		expectedSeqno = 0
 		if val, ok := r.nextSeqNo[prop.PID]; ok {
 			expectedSeqno = val
 		}
+		dlog.Printf("map = %v, prop.PID = %v, prop.SeqNo = %v, expectedSeqno = %v\n", r.nextSeqNo, prop.PID, prop.SeqNo, expectedSeqno)
 		if prop.SeqNo != expectedSeqno {
 			// Add to buffer
 			panic("We shouldn't be getting OoO reqs per client")
@@ -909,6 +915,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 				com[0] = prop.Command
 				props := make([]*genericsmr.MDLPropose, 1)
 				props[0] = prop
+				crs := make([]*genericsmr.MDLCoordReq, 1)
+				crs[0] = thisCr
 				e := &Instance{
 					com,
 					ball,
@@ -917,7 +925,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 					prop.PID,
 					prop.SeqNo,
 					nil,
-					thisCr,
+					crs,
 					thisEpoch,
 					r.totalEpochs}
 				naught_list.PushBack(e)
@@ -1088,6 +1096,8 @@ func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MD
   }
   thisEpoch := make([]int64, 1)
   thisEpoch[0] = ep
+  crs := make([]*genericsmr.MDLCoordReq, 1)
+  crs[0] = thisCr
   com := make([]state.Command, 1)
   com[0] = cmds
   props := make([]*genericsmr.MDLPropose, 1)
@@ -1100,7 +1110,7 @@ func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MD
       pid,
       seqno,
       pred,
-      thisCr,
+      crs,
       thisEpoch,
       r.totalEpochs}
 
@@ -1111,7 +1121,7 @@ func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MD
 }
 
 
-func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, epochSizes []int64, cPs []*genericsmr.MDLPropose, status InstanceStatus, cr *genericsmr.MDLCoordReq) int32 {
+func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, epochSizes []int64, cPs []*genericsmr.MDLPropose, status InstanceStatus, cr []*genericsmr.MDLCoordReq) int32 {
 	// Add entry to log
 	//NewPrintf(LEVEL0, "Flushing ready entries buffLog --> orderedLog at END OF EPOCH!")
 
@@ -1195,11 +1205,12 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
     OK, CC = r.checkCoordination(e)
   }
   delete(r.seen, cr.AskeeTag)
-  e.cr = cr // won't be nil anymore, signals acceptReply() and coordReply()
+  e.cr = make([]*genericsmr.MDLCoordReq, 1)
+  e.cr[0] = cr // won't be nil anymore, signals acceptReply() and coordReply()
   if OK {
-    shardTo := e.cr.From
+    shardTo := e.cr[0].From
     // Send this req's epoch to the successor
-    msg := &mdlinproto.CoordinationResponse{e.cr.AskerTag, e.cr.AskeeTag, e.epoch[0], int32(r.ShardId), CC}
+    msg := &mdlinproto.CoordinationResponse{e.cr[0].AskerTag, e.cr[0].AskeeTag, e.epoch[0], int32(r.ShardId), CC}
     r.replyCoord(shardTo, msg)
   }
 }
@@ -1248,9 +1259,9 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
   }
   // Check if this req's successor (asker's asker) already sent 
   // a CR for this req, but before it was coordinated itself
-  if (OK && e.cr != nil) {
-    shardTo := e.cr.From
-    msg := &mdlinproto.CoordinationResponse{e.cr.AskerTag, e.cr.AskeeTag, e.epoch[0], int32(r.ShardId), CC}
+  if (OK && e.cr[0] != nil) {
+    shardTo := e.cr[0].From
+    msg := &mdlinproto.CoordinationResponse{e.cr[0].AskerTag, e.cr[0].AskeeTag, e.epoch[0], int32(r.ShardId), CC}
     r.replyCoord(shardTo, msg)
   }
   if (!r.epochBatching && OK && CC==1) {
@@ -1601,11 +1612,11 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
         r.readyBuff.PushBack(inst)
         dlog.Printf("Proposal with CommandId %v PID %v got CC (in handleAccept) at %v\n", inst.lb.clientProposals[0].CommandId, inst.pid, time.Now().UnixMilli())
       }
-      if (OK && inst.cr != nil) {
-        shardTo := inst.cr.From
+      if (OK && inst.cr[0] != nil) {
+        shardTo := inst.cr[0].From
         // Send this req's epoch to the successor
-	dlog.Printf("Proposal %v sending coord response to %v\n", inst.cr.AskeeTag.PID*500+inst.cr.AskeeTag.SeqNo+1, inst.cr.AskerTag.PID*500+inst.cr.AskerTag.SeqNo+1)
-        msg := &mdlinproto.CoordinationResponse{inst.cr.AskerTag, inst.cr.AskeeTag, inst.epoch[0], int32(r.ShardId), CC}
+	dlog.Printf("Proposal %v sending coord response to %v\n", inst.cr[0].AskeeTag.PID*500+inst.cr[0].AskeeTag.SeqNo+1, inst.cr[0].AskerTag.PID*500+inst.cr[0].AskerTag.SeqNo+1)
+        msg := &mdlinproto.CoordinationResponse{inst.cr[0].AskerTag, inst.cr[0].AskeeTag, inst.epoch[0], int32(r.ShardId), CC}
         r.replyCoord(shardTo, msg)
       }
       // I know this is ugly, i just did this so that we send the coord message first!
@@ -1638,11 +1649,11 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
       // but before it was committed itself
       //NewPrintf(LEVELALL, "FINAL ROUND Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
       dlog.Printf("FA_REPLY--->Committing commandID %v instNo %v at time %v\n", inst.lb.clientProposals[0].PID*500+int64(inst.lb.clientProposals[0].CommandId), fareply.Instance, time.Now().UnixMilli())
-      if (inst.cr != nil) {
-	      dlog.Printf("Proposal %v sending coord response to %v\n", inst.cr.AskeeTag.PID*500+inst.cr.AskeeTag.SeqNo+1, inst.cr.AskerTag.PID*500+inst.cr.AskerTag.SeqNo+1)
-	      shardTo := inst.cr.From
+      if (inst.cr[0] != nil) {
+	      dlog.Printf("Proposal %v sending coord response to %v\n", inst.cr[0].AskeeTag.PID*500+inst.cr[0].AskeeTag.SeqNo+1, inst.cr[0].AskerTag.PID*500+inst.cr[0].AskerTag.SeqNo+1)
+	      shardTo := inst.cr[0].From
 	      // Send this req's epoch to the successor
-	      msg := &mdlinproto.CoordinationResponse{inst.cr.AskerTag, inst.cr.AskeeTag, inst.epoch[0], int32(r.ShardId), 1}
+	      msg := &mdlinproto.CoordinationResponse{inst.cr[0].AskerTag, inst.cr[0].AskeeTag, inst.epoch[0], int32(r.ShardId), 1}
 	      r.replyCoord(shardTo, msg)
       }
       r.readyToCommit(fareply.Instance)
