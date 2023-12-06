@@ -937,7 +937,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 					r.totalEpochs}
 				naught_list.PushBack(e)
 				newEntry = e
-				dlog.Printf("and my predecessor pointer is %v\n", newEntry.cr)
+				dlog.Printf("and my predecessor pointer is %v\n", newEntry.cr[0])
 				found_total++
 				naught_i.PushBack(found_total-1)
 			}
@@ -950,8 +950,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 				newEntry = r.addEntryToBuffLog(cmds[found-1], proposals[found-1], pid[found-1], seqno[found-1], coord, thisCr, &prop.Predecessor, r.epoch) //This seems like a bad idea TODO... the address of a message that's gonna disapear?
 			}
 			if !recvCoordReq {
-				dlog.Printf("((((((((((((()ADDING TO seen list\n")
 				r.seen[t] = newEntry
+				dlog.Printf("((((((((((((()ADDING TO seen list %v\n", r.seen)
 			}
 			C = time.Now().UnixNano()
 			// Check if any others are ready
@@ -1062,6 +1062,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 				next := p.Next()
 				e := p.Value.(*Instance)
 				r.readyBuff.PushBack(e)
+				dlog.Printf("##########pushing PID %v seqNo %v", e.pid, e.seqno)
 				r.recordInstanceMetadata(e)
                                 cmdRecord := make([]state.Command, 1)
                                 cmdRecord[0] = e.cmds[0]
@@ -1207,13 +1208,15 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
       r.outstandingCR[cr.AskeeTag] = cr //This seems like a bad idea TODO... the address of a message that's gonna disapear?
       return
     }
-    dlog.Printf("handleCoordinationRequest from client for that was already COMMITTED\n")
+    dlog.Printf("handleCoordinationRequest from client for that was already COMMITTED, for req %v from asker %v\n", cr.AskeeTag.PID*int64(500) + cr.AskeeTag.SeqNo+1, cr.AskerTag.PID*int64(500) + cr.AskerTag.SeqNo+1)
+    dlog.Printf("seen looks like %v", r.seen)
     OK = true
     CC = 1
   } else {
     OK, CC = r.checkCoordination(e)
   }
   delete(r.seen, cr.AskeeTag)
+  dlog.Printf("seen looks like %v AFTER delete", r.seen)
   e.cr = make([]*genericsmr.MDLCoordReq, 1)
   e.cr[0] = cr // won't be nil anymore, signals acceptReply() and coordReply()
   if OK {
@@ -1264,6 +1267,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
     // Now Add me to the orderedLog
     //NewPrintf(LEVEL0, "Pushingback seqno %v", e.seqno)
     r.readyBuff.PushBack(e)
+    dlog.Printf("##########pushing PID %v seqNo %v", e.pid, e.seqno)
     dlog.Printf("Proposal with CommandId %v PID %v got CC (in handleCoordReply) at %v\n", e.lb.clientProposals[0].CommandId, e.pid, time.Now().UnixMilli())
   }
   // Check if this req's successor (asker's asker) already sent 
@@ -1539,6 +1543,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 					inst.status = ACCEPTED
 					delete(r.bufferedLog, preply.Instance[i])
 					r.readyBuff.PushBack(inst)
+					dlog.Printf("##########pushing PID %v seqNo %v", inst.pid, inst.seqno)
 					continue
 				}
 				dlog.Printf("No\n")
@@ -1619,6 +1624,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
         // Now add me to the orderedLog and remove from buffLog
         //NewPrintf(LEVEL0, "Pushingback Seqno %v", inst.seqno)
         r.readyBuff.PushBack(inst)
+	dlog.Printf("##########pushing PID %v seqNo %v", inst.pid, inst.seqno)
         dlog.Printf("Proposal with CommandId %v PID %v got CC (in handleAccept) at %v\n", inst.lb.clientProposals[0].CommandId, inst.pid, time.Now().UnixMilli())
       }
       if (OK && inst.cr[0] != nil) {
@@ -1659,11 +1665,15 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
       //NewPrintf(LEVELALL, "FINAL ROUND Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
       dlog.Printf("FA_REPLY--->Committing commandID %v instNo %v at time %v\n", inst.lb.clientProposals[0].PID*500+int64(inst.lb.clientProposals[0].CommandId), fareply.Instance, time.Now().UnixMilli())
       if (inst.cr[0] != nil) {
-	      dlog.Printf("Proposal %v sending coord response to %v\n", inst.cr[0].AskeeTag.PID*500+inst.cr[0].AskeeTag.SeqNo+1, inst.cr[0].AskerTag.PID*500+inst.cr[0].AskerTag.SeqNo+1)
-	      shardTo := inst.cr[0].From
-	      // Send this req's epoch to the successor
-	      msg := &mdlinproto.CoordinationResponse{inst.cr[0].AskerTag, inst.cr[0].AskeeTag, inst.epoch[0], int32(r.ShardId), 1}
-	      r.replyCoord(shardTo, msg)
+	      _, in := r.seen[inst.cr[0].AskeeTag]
+	      if (in) {
+		      dlog.Printf("Proposal %v sending coord response to %v\n", inst.cr[0].AskeeTag.PID*500+inst.cr[0].AskeeTag.SeqNo+1, inst.cr[0].AskerTag.PID*500+inst.cr[0].AskerTag.SeqNo+1)
+		      shardTo := inst.cr[0].From
+		      // Send this req's epoch to the successor
+		      msg := &mdlinproto.CoordinationResponse{inst.cr[0].AskerTag, inst.cr[0].AskeeTag, inst.epoch[0], int32(r.ShardId), 1}
+		      r.replyCoord(shardTo, msg)
+		      delete(r.seen, inst.cr[0].AskeeTag)
+	      }
       }
       r.readyToCommit(fareply.Instance)
 		}
