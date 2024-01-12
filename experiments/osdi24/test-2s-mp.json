@@ -32,12 +32,17 @@
       "eu-west-1-1",
       "eu-west-1-2"
   ],
-  "num_shards": 1,
+  "num_shards": 2,
   "shards": [
 	  [
       "eu-west-1-0",
       "eu-west-1-1",
       "eu-west-1-2"
+    ],
+[
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
     ]
           ],
   "clients": [
@@ -47,32 +52,74 @@
     "region1": ["us-east-1-0"],
     "region2": ["us-east-1-1"],
     "region3": ["us-east-1-2"],
-    "region4": ["client-0-0"]
+    "region4": ["client-0-0"],
+    "region5": ["eu-west-1-0"],
+    "region6": ["eu-west-1-1"],
+    "region7": ["eu-west-1-2"]
   },
   "region_rtt_latencies": {
       "region1": {
         "region1": 0,
         "region2": 90,
         "region3": 90,
-	"region4": 90
+	"region4": 90,
+	"region5": 2,
+	"region6": 90,
+	"region7": 90
       },
       "region2": {
         "region1": 90,
         "region2": 0,
         "region3": 90,
-        "region4": 90
+        "region4": 90,
+        "region5": 90,
+        "region6": 90,
+        "region7": 90
       },
       "region3": {
         "region1": 90,
         "region2": 90,
         "region3": 0,
-        "region4": 90
+        "region4": 90,
+        "region5": 90,
+        "region6": 90,
+        "region7": 90
       },
       "region4": {
         "region1": 90,
         "region2": 90,
         "region3": 90,
-        "region4": 0
+        "region4": 0,
+        "region5": 90,
+        "region6": 90,
+        "region7": 90
+      },
+      "region5": {
+        "region1": 2,
+        "region2": 90,
+        "region3": 90,
+        "region4": 90,
+        "region5": 0,
+        "region6": 90,
+        "region7": 90
+      },
+      "region6": {
+        "region1": 90,
+        "region2": 90,
+        "region3": 90,
+        "region4": 90,
+        "region5": 90,
+        "region6": 0,
+        "region7": 90
+      },
+      "region7": {
+        "region1": 90,
+        "region2": 90,
+        "region3": 90,
+        "region4": 90,
+        "region5": 90,
+        "region6": 90,
+        "region7": 0
       }
  },
   "client_total": [
