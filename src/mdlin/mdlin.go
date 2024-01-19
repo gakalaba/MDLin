@@ -116,7 +116,6 @@ type Instance struct {
 	pid        int64
 	seqno      int64
   pred       *mdlinproto.Tag
-  cr         []*genericsmr.MDLCoordReq
   epoch      []int64
   absoluteEpoch int
 }
@@ -493,7 +492,6 @@ func (r *Replica) processEpoch() {
     b[j] = p.Value.(*Instance).cmds[0]
     bi[j] = p.Value.(*Instance).epoch[0]
     bp[j] = p.Value.(*Instance).lb.clientProposals[0]
-    crs[j] = p.Value.(*Instance).cr[0]
 
     if (p.Value.(*Instance).pred != nil) {
 	    dlog.Printf("middle j = %v", j)
@@ -536,13 +534,8 @@ func (r *Replica) processEpoch() {
 }
 
 // indexOL, orderedLog, bufferedLog
-func (r *Replica) processCCEntry() {
+func (r *Replica) processCCEntry(p *Instance) {
   // TODO garbage collection :)
-  // create an entry from the readyBuff
-  p := r.readyBuff.Back()
-  //dlog.Printf("readyBuff: %v\n", r.readyBuff)
-  r.readyBuff.Remove(p)
-  //dlog.Printf("orderedLog: %v\n", r.bufferedLog)
   if (r.readyBuff.Len() != 0) {
     panic("Should only be adding one thing at a time")
   }
@@ -556,21 +549,26 @@ func (r *Replica) processCCEntry() {
   cmdids := make([]mdlinproto.Tag, 1)
   j := 0
   //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
-  b[j] = p.Value.(*Instance).cmds[0]
-  bi[j] = p.Value.(*Instance).epoch[0]
-  bp[j] = p.Value.(*Instance).lb.clientProposals[0]
-  crs[j] = p.Value.(*Instance).cr[0]
-  if (p.Value.(*Instance).pred == nil) {
-	  pp[j] = p.Value.(*Instance).pid
-	  sn[j] = p.Value.(*Instance).seqno
+  b[j] = p.cmds[0]
+  bi[j] = p.epoch[0]
+  bp[j] = p.lb.clientProposals[0]
+  if (p.pred == nil) {
+	  pp[j] = p.pid
+	  sn[j] = p.seqno
   } else {
-	  cmdids[j] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).pid, SeqNo: p.Value.(*Instance).seqno}
+	  cmdids[j] = mdlinproto.Tag{K: p.cmds[0].K, PID: p.pid, SeqNo: p.seqno}
 	  delete(r.bufferedLog, cmdids[j])
 	  pp[j] = -1
 	  sn[j] = -1
   }
+  // Get the lamport clocks ordered
+  pred_epoch := p.epoch[0]
+  p.epoch[0] = int64(math.Max(float64(r.epoch), float64(pred_epoch + 1)))
+  r.epoch = int64(math.Max(float64(r.epoch), float64(p.epoch[0]))) + 1
+  // Add to ordered log
   instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED, crs)
   r.crtInstance++
+  // Add to seen map
   r.seen[cmdids[0]] = r.instanceSpace[instNo]
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
@@ -905,12 +903,10 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 					prop.PID,
 					prop.SeqNo,
 					nil,
-					crs,
 					thisEpoch,
 					r.totalEpochs}
 				naught_list.PushBack(e)
 				newEntry = e
-				dlog.Printf("and my predecessor pointer is %v\n", newEntry.cr[0])
 				found_total++
 				naught_i.PushBack(found_total-1)
 			}
@@ -1006,7 +1002,6 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			e := p.Value.(*Instance)
 			e.status = PREPARING
 			i := q.Value.(int)
-			dlog.Printf("PrepareTags looks like %v AND inst.cr = %v\n", prepareTags, e.cr)
 			r.bufferedLog[prepareTags[i]] = e
 			p = next
 			q = next2
@@ -1079,7 +1074,6 @@ func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MD
       pid,
       seqno,
       pred,
-      crs,
       thisEpoch,
       r.totalEpochs}
 
@@ -1102,7 +1096,6 @@ func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, epochS
 		-1,
 		-1,
     nil,
-    cr,
     epochSizes,
     0}
   return index
@@ -1126,22 +1119,22 @@ func (r *Replica) resolveShardFromKey(k state.Key) int32 {
 // If it is not both, then we should indicate that it will be waiting for those
 // flags to get set, in either the handleAcceptReply or handleCoordinationRReply
 // methods, both of which can then issue the replyCoord messages to the asker shard.
+
+// either we have cr AND we have seen
+// OR we're in neither
+// cr = nil && seen = V --> ok
+// cr = V && seen = nil
+
 func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
   e := r.findEntry(cr.AskeeTag)
   OK, coord, ts := r.checkCoordination(e)
+  r.outstandingCR[cr.AskeeTag] = cr
   if (e != nil && OK) {
-    shardTo := cr.From
-    // Send this req's epoch to the successor
-    msg := &mdlinproto.CoordinationResponse{cr.AskerTag, cr.AskeeTag, ts, int32(r.ShardId), coord}
-    r.replyCoord(shardTo, msg)
-    _, in := r.seen[cr.AskeeTag]
-    // ASSERT
-    if (!in) {
-      panic("handleCoordRequest Error: cannot be committed+coordinated in bufferedLog")
+    // Naught requests cannot respond to successors until they are committed
+    if (e.pred == nil && e.status != COMMITTED) {
+      return
     }
-    delete(r.seen, cr.AskeeTag)
-  } else {
-    r.outstandingCR[cr.AskeeTag] = cr
+    r.replyToSuccessorIfExists(cr.AskeeTag, ts, coord)
   }
 }
 
@@ -1149,7 +1142,7 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
 // 1. it has never arrived
 // 2. it is in the buffered log
 // 3. it is in the ordered log (either already committed or not yet committed)
-func (r *Replica) findEntry(tag mdlinproto.Tag) {
+func (r *Replica) findEntry(t mdlinproto.Tag) *Instance {
   var e *Instance
   var in bool
   // instance is in r.bufferedLog
@@ -1168,7 +1161,7 @@ func (r *Replica) findEntry(tag mdlinproto.Tag) {
 
 // We check the coordination and commit status of an instance
 // Return (committed ^ coordinated, coordination value, timestamp)
-func (r *Replica) checkCoordination(e *Instance) (bool, uint8, int) {
+func (r *Replica) checkCoordination(e *Instance) (bool, int8, int64) {
   if (e == nil) {
     return false, 0, 0
   }
@@ -1190,14 +1183,14 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
   var e *Instance
   var in bool
   // assert that the instance is not in the orderedLog
-  e, in = r.seen[cr.AskerTag]
+  e, in = r.seen[crr.AskerTag]
   if (in) {
     panic("Assert instance should not be in orderedLog for handleCoordinationReply")
   }
-  e, in = r.bufferedLog[cr.AskerTag]
+  e, in = r.bufferedLog[crr.AskerTag]
   // if the request hasn't arrived yet, then add it to the map
   if (!in) {
-    r.outstandingCRR[cr.AskerTag] = cr
+    r.outstandingCRR[crr.AskerTag] = crr
   } else {
     // Update my status
     e.lb.coordinated = int8(crr.OK)
@@ -1209,7 +1202,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
       if (!r.epochBatching && coord==1) {
         r.processCCEntry(e)
       }
-      r.replyToSuccessorIfExists(cr.AskerTag, ts, coord)
+      r.replyToSuccessorIfExists(crr.AskerTag, ts, coord)
     }
     // Otherwise, this will be handled by handleAcceptReply()
   }
@@ -1221,9 +1214,17 @@ func (r *Replica) replyToSuccessorIfExists(t mdlinproto.Tag, ts int64, coord int
     return
   }
   shardTo := succ.From
-  msg := &mdlinproto.CoordinationResponse{succ.AskerTag, succ.AskeeTag, ts, int32(r.ShardId), coord}
+  msg := &mdlinproto.CoordinationResponse{succ.AskerTag, succ.AskeeTag, ts, int32(r.ShardId), uint8(coord)}
   r.replyCoord(shardTo, msg)
-  delete(r.seen, t)
+  delete(r.outstandingCR, t)
+  if (coord == 1) {
+    delete(r.seen, t)
+  } else {
+    _, in := r.seen[t]
+    if in {
+      panic("request shouldn't be in r.seen if value wasn't coordinated and thus never added to orderedLog")
+    }
+  }
 }
 
 func (r *Replica) readyToCommit(instance int32) {
@@ -1467,7 +1468,6 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 				r.sync()
 				dlog.Printf("is this a naught one being prepared?\n")
 				if (inst.pred == nil) {
-					dlog.Printf("yes and it has predecessor %v\n", inst.cr)
 					inst.status = ACCEPTED
 					delete(r.bufferedLog, preply.Instance[i])
 					r.readyBuff.PushBack(inst)
@@ -1542,28 +1542,14 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
       //NewPrintf(LEVEL0, "Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
       OK, coord, ts := r.checkCoordination(inst)
       if OK {
-        if (coord == 1) {
-          // So that incoming reqs in real time are ordered after you
-          pred_epoch := inst.epoch[0]
-          inst.epoch[0] = int64(math.Max(float64(r.epoch), float64(pred_epoch+1)))
-          r.epoch = int64(math.Max(float64(r.epoch), float64(inst.epoch[0]))) + 1
-          // Now add me to the orderedLog and remove from buffLog
-          //NewPrintf(LEVEL0, "Pushingback Seqno %v", inst.seqno)
-          r.readyBuff.PushBack(inst)
-          if !r.epochBatching {
-            r.processCCEntry()
-          }
+        if (!r.epochBatching && coord==1) {
+          r.processCCEntry(inst)
         }
-        // Respond to successor
-	cr := r.outstandingCR[areply.IdTag[i]]
-        if (cr != nil) {
-          shardTo := cr.From
-          msg := &mdlinproto.CoordinationResponse{cr.AskerTag, cr.AskeeTag, ts, int32(r.ShardId), coord}
-          r.replyCoord(shardTo, msg)
-          delete(r.outstandingCR, areply.IdTag[i])
-        }
+        r.replyToSuccessorIfExists(areply.IdTag[i], ts, coord)
       }
     }
+    // Otherwise, this will be handled by handleCoordinationRReply()
+
   }
 }
 
@@ -1571,41 +1557,35 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
   //NewPrintf(LEVELALL, "got RESPONSE to FINAL accept %v", fareply.OK)
   inst := r.instanceSpace[fareply.Instance]
 
-	if inst.status != PREPARED && inst.status != ACCEPTED {
-		// The status is COMMITTED
-		// we've move on, these are delayed replies, so just ignore
-		return
-	}
+  if inst.status != PREPARED && inst.status != ACCEPTED {
+    // The status is COMMITTED
+    // we've move on, these are delayed replies, so just ignore
+    return
+  }
 
-	if fareply.OK == TRUE {
-		inst.lb.acceptOKs++
-		if inst.lb.acceptOKs+1 > r.N>>1 {
-      // Check if the successor already sent a CR for this req,
-      // but before it was committed itself
-      //NewPrintf(LEVELALL, "FINAL ROUND Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
-      if (inst.cr[0] != nil) {
-	      _, in := r.seen[inst.cr[0].AskeeTag]
-	      if (in) {
-		      dlog.Printf("Proposal %v sending coord response to %v\n", inst.cr[0].AskeeTag.PID*500+inst.cr[0].AskeeTag.SeqNo+1, inst.cr[0].AskerTag.PID*500+inst.cr[0].AskerTag.SeqNo+1)
-		      shardTo := inst.cr[0].From
-		      // Send this req's epoch to the successor
-		      msg := &mdlinproto.CoordinationResponse{inst.cr[0].AskerTag, inst.cr[0].AskeeTag, inst.epoch[0], int32(r.ShardId), 1}
-		      r.replyCoord(shardTo, msg)
-		      delete(r.seen, inst.cr[0].AskeeTag)
-	      }
-      }
+  if fareply.OK == TRUE {
+    inst.lb.acceptOKs++
+    if inst.lb.acceptOKs+1 > r.N>>1 {
       r.readyToCommit(fareply.Instance)
-		}
-	} else {
-		// TODO: there is probably another active leader
-		inst.lb.nacks++
-		if fareply.Ballot > inst.lb.maxRecvBallot {
-			inst.lb.maxRecvBallot = fareply.Ballot
-		}
-		if inst.lb.nacks >= r.N>>1 {
-			// TODO
-		}
-	}
+      t := mdlinproto.Tag{K: inst.cmds[0].K, PID: inst.pid, SeqNo: inst.seqno}
+      _, in := r.seen[t]
+      _, crin := r.outstandingCR[t]
+      // ASSERT
+      if (!in && crin) {
+        panic("Request should be in r.seen from r.handleFinalAcceptReply, was supposed to be added from processCCEntry")
+      }
+      r.replyToSuccessorIfExists(t, inst.epoch[0], inst.lb.coordinated)
+    }
+  } else {
+    // TODO: there is probably another active leader
+    inst.lb.nacks++
+    if fareply.Ballot > inst.lb.maxRecvBallot {
+      inst.lb.maxRecvBallot = fareply.Ballot
+    }
+    if inst.lb.nacks >= r.N>>1 {
+      // TODO
+    }
+  }
 }
 
 func (r *Replica) executeCommands() {
