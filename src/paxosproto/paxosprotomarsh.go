@@ -7,8 +7,6 @@ import (
 	"io"
 	"state"
 	"sync"
-	"dlog"
-	"time"
 )
 
 type byteReader interface {
@@ -214,7 +212,6 @@ func (p *AcceptCache) Put(t *Accept) {
 	p.mu.Unlock()
 }
 func (t *Accept) Marshal(wire io.Writer) {
-	A := time.Now().UnixNano()
 	var b [12]byte
 	var bs []byte
 	bs = b[:12]
@@ -242,8 +239,6 @@ func (t *Accept) Marshal(wire io.Writer) {
 	for i := int64(0); i < alen1; i++ {
 		t.Command[i].Marshal(wire)
 	}
-	B := time.Now().UnixNano()
-	dlog.Printf("Marshalling for paxos took %v\n", B - A)
 }
 
 func (t *Accept) Unmarshal(rr io.Reader) error {
