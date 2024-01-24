@@ -535,6 +535,9 @@ func (r *Replica) processEpoch() {
 
 // indexOL, orderedLog, bufferedLog
 func (r *Replica) processCCEntry(p *Instance) {
+  if p == nil {
+    return
+  }
   // TODO garbage collection :)
   if (r.readyBuff.Len() != 0) {
     panic("Should only be adding one thing at a time")
@@ -567,7 +570,7 @@ func (r *Replica) processCCEntry(p *Instance) {
   p.epoch[0] = int64(math.Max(float64(r.epoch), float64(pred_epoch + 1)))
   r.epoch = int64(math.Max(float64(r.epoch), float64(p.epoch[0]))) + 1
   // Add to ordered log
-  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED, crs)
+  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, ACCEPTED, crs)
   r.crtInstance++
   // Add to seen map
   r.seen[cmdids[0]] = r.instanceSpace[instNo]
@@ -592,6 +595,9 @@ func (r *Replica) bcastPrepare(instance []mdlinproto.Tag, ballot int32, toInfini
 			//NewPrintf(LEVEL0, "Prepare bcast failed: %v", err)
 		}
 	}()
+        if (len(instance) == 0) {
+          return
+        }
 	ti := FALSE
 	if toInfinity {
 		ti = TRUE
@@ -686,6 +692,9 @@ func (r *Replica) bcastAccept(ballot int32, command []state.Command, pids []int6
   // TODO currently not including the predecessor
   // in the Accept message... but we should!!
   //NewPrintf(LEVELALL, "BcastAccept regular")
+        if (len(command) == 0) {
+          return
+        }
 	pa.LeaderId = r.Id
 	pa.Ballot = ballot
 	pa.Command = command
@@ -813,15 +822,20 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	seqno := make([]int64, batchSize)
 	prepareTags := make([]mdlinproto.Tag, batchSize)
 	cmdIds := make([]int32, batchSize)
-	naught_list := list.New()
-	naught_i := list.New()
+
+	cmdsFA := make([]state.Command, batchSize)
+	proposalsFA := make([]*genericsmr.MDLPropose, batchSize)
+	pidFA := make([]int64, batchSize)
+	seqnoFA := make([]int64, batchSize)
+	prepareTagsFA := make([]mdlinproto.Tag, batchSize)
+	cmdIdsFA := make([]int32, batchSize)
 
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
 	}
 
 	found := 0
-	var newEntry *Instance
+	foundFA := 0
 	var expectedSeqno int64
 	prop := propose
 	i := 1
@@ -857,15 +871,24 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			}
 			if (prop.Predecessor.SeqNo == -1) {
 			  coord = int8(1)
-                        }
-                        pid[found] = prop.PID
-			seqno[found] = prop.SeqNo
-			cmds[found] = prop.Command
-			proposals[found] = prop
-			cmdIds[found] = prop.CommandId
+			  pidFA[foundFA] = prop.PID
+                          seqnoFA[foundFA] = prop.SeqNo
+                          cmdsFA[foundFA] = prop.Command
+                          proposalsFA[foundFA] = prop
+                          cmdIdsFA[foundFA] = prop.CommandId
+                          prepareTagsFA[foundFA] = t
+                          r.addEntryToBuffLog(cmdsFA[foundFA], proposalsFA[foundFA], pidFA[foundFA], seqnoFA[foundFA], coord, &prop.Predecessor, r.epoch)
+			  foundFA++
+                        } else {
+                          pid[found-foundFA] = prop.PID
+			  seqno[found-foundFA] = prop.SeqNo
+			  cmds[found-foundFA] = prop.Command
+			  proposals[found-foundFA] = prop
+			  cmdIds[found-foundFA] = prop.CommandId
+			  prepareTags[found-foundFA] = t
+			  r.addEntryToBuffLog(cmds[found-foundFA], proposals[found-foundFA], pid[found-foundFA], seqno[found-foundFA], coord, &prop.Predecessor, r.epoch)
+			}
 			r.nextSeqNo[prop.PID]++
-			prepareTags[found] = t
-			r.addEntryToBuffLog(cmds[found], proposals[found], pid[found], seqno[found], coord, &prop.Predecessor, r.epoch)
 			found++
 
 			// Check if any others are ready
@@ -925,50 +948,38 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	r.noProposalsReady = false
 
 	// Resize all the arrays to hold the actual amount we found
-	prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found]...)
-	cmds = append([]state.Command(nil), cmds[:found]...)
-	pid = append([]int64(nil), pid[:found]...)
-	seqno = append([]int64(nil), seqno[:found]...)
-	cmdIds = append([]int32(nil), cmdIds[:found]...)
+	prepareTagsFA = append([]mdlinproto.Tag(nil), prepareTagsFA[:foundFA]...)
+	cmdsFA = append([]state.Command(nil), cmdsFA[:foundFA]...)
+	pidFA = append([]int64(nil), pidFA[:foundFA]...)
+	seqnoFA = append([]int64(nil), seqnoFA[:foundFA]...)
+	cmdIdsFA = append([]int32(nil), cmdIdsFA[:foundFA]...)
+
+	prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found-foundFA]...)
+	cmds = append([]state.Command(nil), cmds[:found-foundFA]...)
+	pid = append([]int64(nil), pid[:found-foundFA]...)
+	seqno = append([]int64(nil), seqno[:found-foundFA]...)
+	cmdIds = append([]int32(nil), cmdIds[:found-foundFA]...)
 	//dlog.Printf("ended up finding %d entries for this batch, %d of which WERE naught ones", found)
 	//NewPrintf(LEVEL0, "handlePropose: CurrInst Pushed back entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
 	if r.defaultBallot == -1 {
 		//NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting prepares....")
 		r.bcastPrepare(prepareTags, r.makeUniqueBallot(0), true)
+		r.bcastPrepare(prepareTagsFA, r.makeUniqueBallot(0), true)
 	} else {
 		//NewPrintf(DEBUG_LEVEL, "    Step2. (candidate) leader broadcasting accepts!....")
-		for i := 0; i < found; i++ {
-			e := r.bufferedLog[prepareTags[i]]
-			r.recordInstanceMetadata(e)
-                        cmdRecord := make([]state.Command, 1)
-                        cmdRecord[0] = e.cmds[0]
-                        r.recordCommands(cmdRecord)
-			r.sync()
-		}
-		if found != 0 {
-			r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
-		}
-		if (found_total > found && !r.epochBatching) {
-			r.processCCEntry(newEntry)
-		}
+		var e *Instance = nil
+		if (len(prepareTagsFA) > 0) {
+                  e = r.bufferedLog[prepareTagsFA[0]]
+		  r.recordInstanceMetadata(e)
+                  cmdRecord := make([]state.Command, 1)
+                  cmdRecord[0] = e.cmds[0]
+                  r.recordCommands(cmdRecord)
+		  r.sync()
+                }
+		r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
+		r.processCCEntry(e)
 	}
 }
-
-	} else {
-		r.instanceSpace[instNo] = &Instance{
-			cmds,
-			r.defaultBallot,
-			PREPARED,
-			&LeaderBookkeeping{proposals, 0, 0, 0, 0}}
-
-		r.recordInstanceMetadata(r.instanceSpace[instNo])
-		r.recordCommands(cmds)
-		r.sync()
-
-		r.bcastAccept(instNo, r.defaultBallot, cmds)
-		//dlog.Printf("Fast round for instance %d\n", instNo)
-	}
-
 
 func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MDLPropose, pid int64,
   seqno int64, coord int8, pred *mdlinproto.Tag, ep int64) *Instance {
@@ -1376,46 +1387,33 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 		if inst.lb.prepareOKs+1 > r.N>>1 {
 			b := inst.ballot
 			e := inst.epoch[0]
+                        naught := (inst.pred == nil)
 			numacks := inst.lb.prepareOKs
 			cmds := make([]state.Command, len(preply.Instance))
 			pids := make([]int64, len(preply.Instance))
 			seqnos := make([]int64, len(preply.Instance))
 			cmdIds := make([]int32, len(preply.Instance))
-			real_total := 0
-			for i := 0; i < len(preply.Instance); i++ {
-				inst = r.bufferedLog[preply.Instance[i]]
-				inst.lb.prepareOKs = numacks
-				inst.status = PREPARED
-				inst.lb.nacks = 0
-				if inst.ballot > r.defaultBallot {
-					r.defaultBallot = inst.ballot
-				}
-				r.recordInstanceMetadata(r.bufferedLog[preply.Instance[i]])
-				r.sync()
-				dlog.Printf("is this a naught one being prepared?\n")
-				if (inst.pred == nil) {
-					inst.status = ACCEPTED
-					delete(r.bufferedLog, preply.Instance[i])
-					r.readyBuff.PushBack(inst)
-					dlog.Printf("##########pushing PID %v seqNo %v", inst.pid, inst.seqno)
-					continue
-				}
-				dlog.Printf("No\n")
-				cmds[real_total] = inst.cmds[0]
-				pids[real_total] = inst.pid
-				seqnos[real_total] = inst.seqno
-				cmdIds[real_total] = inst.lb.clientProposals[0].CommandId
-				real_total++
+
+			inst = r.bufferedLog[preply.Instance[0]]
+			inst.lb.prepareOKs = numacks
+			inst.status = PREPARED
+			inst.lb.nacks = 0
+			if inst.ballot > r.defaultBallot {
+				r.defaultBallot = inst.ballot
 			}
-			if (real_total > 0) {
-				cmds = append([]state.Command(nil), cmds[:real_total]...)
-				pids = append([]int64(nil), pids[:real_total]...)
-				seqnos = append([]int64(nil), seqnos[:real_total]...)
-				cmdIds = append([]int32(nil), cmdIds[:real_total]...)
+			r.recordInstanceMetadata(inst)
+			r.sync()
+			cmds[0] = inst.cmds[0]
+			pids[0] = inst.pid
+			seqnos[0] = inst.seqno
+			cmdIds[0] = inst.lb.clientProposals[0].CommandId
+			if (!naught) {
+				cmds = append([]state.Command(nil), cmds[:1]...)
+				pids = append([]int64(nil), pids[:1]...)
+				seqnos = append([]int64(nil), seqnos[:1]...)
+				cmdIds = append([]int32(nil), cmdIds[:1]...)
 				r.bcastAccept(b, cmds, pids, seqnos, e, cmdIds)
-			}
-			if (len(preply.Instance) > real_total && !r.epochBatching) {
-				dlog.Printf("Calling processCCEntry from handlePrepareReply\n")
+			} else {
 				r.processCCEntry(inst)
 			}
 		}
