@@ -48,6 +48,7 @@ var proxy = flag.Bool("proxy", false, "Proxy client requests at nearest replica.
 var epaxosMode = flag.Bool("epaxosMode", false, "Run Gryff with same message pattern as EPaxos.")
 var numShards = flag.Int("nshards", 1, "Number of shards.")
 var epochLength = flag.Int("epoch", 500, "Length between epochs")
+var fanout = flag.Int("fanout", 1, "Fanout")
 
 var statsFile = flag.String("statsFile", "", "Name of file to which stats should be written.")
 var memProfile = flag.String("memProfile", "", "Name of file to which a memory profile should be written.")
@@ -104,7 +105,7 @@ func main() {
 			rep = ssmdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *statsFile, *numShards)
 		} else {
 			log.Println("Starting MD Linearizability replica...")
-			rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *epBatch, *statsFile, *numShards, *epochLength)
+			rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *epBatch, *statsFile, *numShards, *epochLength, *fanout)
 		}
 	} else if *doGryff {
 		log.Println("Starting Gryff replica...")

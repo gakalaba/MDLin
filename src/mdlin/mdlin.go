@@ -96,6 +96,7 @@ type Replica struct {
   printMap		map[int64]int
   statsmap	[]int
   totalEpochs	      int
+  fanout		int
 }
 
 type InstanceStatus int
@@ -134,7 +135,7 @@ func tagtostring(t mdlinproto.Tag) string {
 }
 
 func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
-	exec bool, dreply bool, durable bool, batch bool, epBatch bool, statsFile string, numShards int, epochLength int) *Replica {
+	exec bool, dreply bool, durable bool, batch bool, epBatch bool, statsFile string, numShards int, epochLength int, fanout int) *Replica {
 	r := &Replica{
 		genericsmr.NewReplica(id, peerAddrList, numShards, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -173,7 +174,9 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
     make(map[mdlinproto.Tag]*Instance),
     make(map[int64]int),
     make([]int, 2),
-    0}
+    0,
+    fanout}
+        dlog.Printf("FANOUT = %v value passed in = %v\n", r.fanout, fanout)
 	r.statsmap[0] = 0
 	r.statsmap[1] = 1
         dlog.Printf("first round batching = %v, 2nd round = %v\n", batch, epBatch)
@@ -567,7 +570,9 @@ func (r *Replica) processCCEntry(p *Instance) {
   instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, ACCEPTED, crs, pp, sn)
   r.crtInstance++
   // Add to seen map
-  r.seen[cmdids[0]] = r.instanceSpace[instNo]
+  if (int(p.seqno) + 1) % r.fanout != 0 {
+    r.seen[cmdids[0]] = r.instanceSpace[instNo]
+  }
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
   dlog.Printf("calling bcastFinalAccept, seen = %v, bufferedLog = %v\n", r.seen, r.bufferedLog)
@@ -791,6 +796,14 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 	}
 }
 
+func (r *Replica) cleanSeen(pid int64, seqno int64) {
+  for t, _ := range r.seen {
+    if t.PID == pid && t.SeqNo < seqno {
+      delete(r.seen, t)
+    }
+  }
+}
+
 // Client submitted a command to a server
 func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	if !r.IsLeader {
@@ -867,6 +880,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			}
 			dlog.Printf("t = %v, coord = %v, naught = %v\n", t, coord, prop.Predecessor.SeqNo == -1)
 			if (prop.Predecessor.SeqNo == -1) {
+                          // I should also be able to delete anything in the seen map that has the same PID and smaller SeqNo
+                          // go r.cleanSeen(prop.PID, prop.SeqNo)
 			  coord = int8(1)
 			  pidFA[foundFA] = prop.PID
                           seqnoFA[foundFA] = prop.SeqNo
@@ -1509,7 +1524,7 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
       _, in := r.seen[t]
       _, crin := r.outstandingCR[t]
       // ASSERT
-      if (!in && crin) {
+      if (!in && crin && ((int(inst.seqno) + 1) % r.fanout != 0)) {
         panic("Request should be in r.seen from r.handleFinalAcceptReply, was supposed to be added from processCCEntry")
       }
       dlog.Printf("handleFinalAccept on %v calling reply to successor", t)
