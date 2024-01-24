@@ -174,7 +174,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
     make(map[int64]int),
     make([]int, 2),
     0}
-    	r.statsmap[0] = 0
+	r.statsmap[0] = 0
 	r.statsmap[1] = 1
         dlog.Printf("first round batching = %v, 2nd round = %v\n", batch, epBatch)
 
@@ -516,7 +516,7 @@ func (r *Replica) processEpoch() {
   // increment the epoch
   // add all ordered entries to the ordered log
 
-  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED, crs)
+  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED, crs, ps, sn)
   r.crtInstance++
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
@@ -557,25 +557,20 @@ func (r *Replica) processCCEntry(p *Instance) {
   bp[j] = p.lb.clientProposals[0]
   cmdids[j] = mdlinproto.Tag{K: p.cmds[0].K, PID: p.pid, SeqNo: p.seqno}
   delete(r.bufferedLog, cmdids[j])
-  //TODO what is this used for????
-  if (p.pred == nil) {
-	  pp[j] = p.pid
-	  sn[j] = p.seqno
-  } else {
-	  pp[j] = -1
-	  sn[j] = -1
-  }
+  pp[j] = p.pid
+  sn[j] = p.seqno
   // Get the lamport clocks ordered
   pred_epoch := p.epoch[0]
   p.epoch[0] = int64(math.Max(float64(r.epoch), float64(pred_epoch + 1)))
   r.epoch = int64(math.Max(float64(r.epoch), float64(p.epoch[0]))) + 1
   // Add to ordered log
-  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, ACCEPTED, crs)
+  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, ACCEPTED, crs, pp, sn)
   r.crtInstance++
   // Add to seen map
   r.seen[cmdids[0]] = r.instanceSpace[instNo]
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
+  dlog.Printf("calling bcastFinalAccept, seen = %v, bufferedLog = %v\n", r.seen, r.bufferedLog)
   r.bcastFinalAccept(instNo, r.defaultBallot, bp[0].CommandId, cmdids, b, pp, sn, bi)
 }
 
@@ -596,6 +591,7 @@ func (r *Replica) bcastPrepare(instance []mdlinproto.Tag, ballot int32, toInfini
 		}
 	}()
         if (len(instance) == 0) {
+	  dlog.Printf("empty bcastPrepare, not sending any RPCs")
           return
         }
 	ti := FALSE
@@ -869,6 +865,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 				coord = int8(v.OK)
 				delete(r.outstandingCRR, t)
 			}
+			dlog.Printf("t = %v, coord = %v, naught = %v\n", t, coord, prop.Predecessor.SeqNo == -1)
 			if (prop.Predecessor.SeqNo == -1) {
 			  coord = int8(1)
 			  pidFA[foundFA] = prop.PID
@@ -877,7 +874,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
                           proposalsFA[foundFA] = prop
                           cmdIdsFA[foundFA] = prop.CommandId
                           prepareTagsFA[foundFA] = t
-                          r.addEntryToBuffLog(cmdsFA[foundFA], proposalsFA[foundFA], pidFA[foundFA], seqnoFA[foundFA], coord, &prop.Predecessor, r.epoch)
+                          r.addEntryToBuffLog(cmdsFA[foundFA], proposalsFA[foundFA], pidFA[foundFA], seqnoFA[foundFA], coord, nil, r.epoch)
 			  foundFA++
                         } else {
                           pid[found-foundFA] = prop.PID
@@ -962,8 +959,9 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	//dlog.Printf("ended up finding %d entries for this batch, %d of which WERE naught ones", found)
 	//NewPrintf(LEVEL0, "handlePropose: CurrInst Pushed back entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
 	if r.defaultBallot == -1 {
-		//NewPrintf(LEVELALL, "    Step2. (candidate) leader broadcasting prepares....")
+		dlog.Printf("bcasting nonnaughts")
 		r.bcastPrepare(prepareTags, r.makeUniqueBallot(0), true)
+		dlog.Printf("bcasting naughts")
 		r.bcastPrepare(prepareTagsFA, r.makeUniqueBallot(0), true)
 	} else {
 		//NewPrintf(DEBUG_LEVEL, "    Step2. (candidate) leader broadcasting accepts!....")
@@ -1021,17 +1019,23 @@ func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MD
 }
 
 
-func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, epochSizes []int64, cPs []*genericsmr.MDLPropose, status InstanceStatus, cr []*genericsmr.MDLCoordReq) int32 {
+func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, epochSizes []int64, cPs []*genericsmr.MDLPropose, status InstanceStatus, cr []*genericsmr.MDLCoordReq, pid []int64, seqno []int64) int32 {
 	// Add entry to log
 	//NewPrintf(LEVEL0, "Flushing ready entries buffLog --> orderedLog at END OF EPOCH!")
 
+        var p int64 = -1
+        var s int64 = -1
+        if (pid != nil) {
+          p = pid[0]
+          s = seqno[0]
+        }
 	r.instanceSpace[index] = &Instance{
 		cmds,
 		r.defaultBallot,
 		status,
     &LeaderBookkeeping{cPs, 0, 0, 0, 0, int8(TRUE)}, // Need this to track acceptOKs
-		-1,
-		-1,
+		p,
+		s,
     nil,
     epochSizes,
     0}
@@ -1069,6 +1073,7 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
   if (e != nil && OK) {
     // Naught requests cannot respond to successors until they are committed
     if (e.pred == nil && e.status != COMMITTED) {
+      dlog.Printf("naught request not responding yet...")
       return
     }
     r.replyToSuccessorIfExists(cr.AskeeTag, ts, coord)
@@ -1085,14 +1090,17 @@ func (r *Replica) findEntry(t mdlinproto.Tag) *Instance {
   // instance is in r.bufferedLog
   e, in = r.bufferedLog[t]
   if (in) {
+    dlog.Printf("entry in bufflog")
     return e
   }
   // instance is in r.seen
   e, in = r.seen[t]
   if (in) {
+    dlog.Printf("entry in seen")
     return e
   }
   // instance hasn't arrived yet
+  dlog.Printf("entry hasn't arrived yet")
   return nil
 }
 
@@ -1147,9 +1155,12 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
 
 func (r *Replica) replyToSuccessorIfExists(t mdlinproto.Tag, ts int64, coord int8) {
   succ, _ := r.outstandingCR[t]
+  dlog.Printf("inside replyToSuccessor... outstandingCR = %v, t = %v, ts = %v, coord = %v\n", r.outstandingCR, t, ts, coord)
   if (succ == nil) {
+    dlog.Printf("the sucessor was nil??")
     return
   }
+  dlog.Printf("responding now\n")
   shardTo := succ.From
   msg := &mdlinproto.CoordinationResponse{succ.AskerTag, succ.AskeeTag, ts, int32(r.ShardId), uint8(coord)}
   r.replyCoord(shardTo, msg)
@@ -1162,6 +1173,7 @@ func (r *Replica) replyToSuccessorIfExists(t mdlinproto.Tag, ts int64, coord int
       panic("request shouldn't be in r.seen if value wasn't coordinated and thus never added to orderedLog")
     }
   }
+  dlog.Printf("oustandingCR = %v, r.seen = %v", r.outstandingCR, r.seen)
 }
 
 func (r *Replica) readyToCommit(instance int32) {
@@ -1279,7 +1291,7 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
         }
       }
       if result {
-        r.addEntryToOrderedLog(faccept.Instance, b, bi, nil, ACCEPTED, nil) //For now we're not replicating predecessors.. this wouldn't work in event of failover
+        r.addEntryToOrderedLog(faccept.Instance, b, bi, nil, ACCEPTED, nil, nil, nil) //TODO For now we're not replicating predecessors or pids/seqnos.. this wouldn't work in event of failover
         fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, faccept.PIDs[0], faccept.CommandId}
       } else {
         panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
@@ -1304,7 +1316,7 @@ func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
 	inst := r.instanceSpace[commit.Instance]
 
 	if inst == nil {
-    r.addEntryToOrderedLog(commit.Instance, commit.Command, commit.EpochSize, nil, COMMITTED, nil)
+    r.addEntryToOrderedLog(commit.Instance, commit.Command, commit.EpochSize, nil, COMMITTED, nil, nil, nil)
 	} else {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
@@ -1333,7 +1345,7 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 
 	//NewPrintf(LEVEL0, "Replica %d is getting handleCommitShort", r.Id)
 	if inst == nil {
-    r.addEntryToOrderedLog(commit.Instance, nil, nil, nil, COMMITTED, nil)
+    r.addEntryToOrderedLog(commit.Instance, nil, nil, nil, COMMITTED, nil, nil, nil)
 	} else {
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
@@ -1388,13 +1400,13 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 			b := inst.ballot
 			e := inst.epoch[0]
                         naught := (inst.pred == nil)
+			dlog.Printf("naught = %v", naught)
 			numacks := inst.lb.prepareOKs
 			cmds := make([]state.Command, len(preply.Instance))
 			pids := make([]int64, len(preply.Instance))
 			seqnos := make([]int64, len(preply.Instance))
 			cmdIds := make([]int32, len(preply.Instance))
 
-			inst = r.bufferedLog[preply.Instance[0]]
 			inst.lb.prepareOKs = numacks
 			inst.status = PREPARED
 			inst.lb.nacks = 0
@@ -1412,8 +1424,10 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 				pids = append([]int64(nil), pids[:1]...)
 				seqnos = append([]int64(nil), seqnos[:1]...)
 				cmdIds = append([]int32(nil), cmdIds[:1]...)
+				dlog.Printf("here.... of")
 				r.bcastAccept(b, cmds, pids, seqnos, e, cmdIds)
 			} else {
+				dlog.Printf("here??, inst = %v", inst)
 				r.processCCEntry(inst)
 			}
 		}
@@ -1498,6 +1512,7 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
       if (!in && crin) {
         panic("Request should be in r.seen from r.handleFinalAcceptReply, was supposed to be added from processCCEntry")
       }
+      dlog.Printf("handleFinalAccept on %v calling reply to successor", t)
       r.replyToSuccessorIfExists(t, inst.epoch[0], inst.lb.coordinated)
     }
   } else {
