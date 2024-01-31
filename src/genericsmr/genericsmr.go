@@ -557,7 +557,6 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
                         if err = obj.Unmarshal(reader); err != nil {
 				break
                         }
-                        dlog.Printf("[%d] Done unmarshaling message with op %d from replica %d.\n", r.Id, msgType, rid)
                         rpair.Chan <- obj
                         r.Stats.Max(fmt.Sprintf("server_rpc_%d_chan_length", msgType), len(rpair.Chan))
 		} else {
@@ -653,8 +652,6 @@ func (r *Replica) clientListener(conn net.Conn) {
 					errS = "unmarshaling message"
 					break
 				}
-				//dlog.Printf("[%d] Done unmarshaling message with op %d from client %s.\n", r.Id,
-				//	msgType, conn.RemoteAddr().String())
 				rpair.Chan <- &ClientRPC{obj, writer}
 				r.Stats.Max(fmt.Sprintf("client_rpc_%d_chan_length", msgType), len(rpair.Chan))
 			} else {

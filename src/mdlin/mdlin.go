@@ -307,8 +307,10 @@ func (r *Replica) replyAccept(replicaId int32, reply *mdlinproto.AcceptReply) {
 // msg is the actual message being sent of mdlinproto.InterShard* type
 func (r *Replica) replyCoord(replicaId int32, reply *mdlinproto.CoordinationResponse) {
 	if replicaId == int32(r.ShardId) {
+		dlog.Printf("Sending response to same shard!")
 		r.coordReqReplyChan <- reply
 	} else {
+		dlog.Printf("Sending response to DIFFERENT shard: %v", reply)
 		r.SendISMsg(replicaId, r.coordResponseRPC, reply)
 	}
 }
@@ -414,13 +416,13 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			break
 
 		case prepareReplyS := <-r.prepareReplyChan:
-			dlog.Printf("7\n")
+			dlog.Printf("7 handlePrepareReply\n")
 			prepareReply := prepareReplyS.(*mdlinproto.PrepareReply)
 			//got a Prepare reply
 			r.handlePrepareReply(prepareReply)
 			break
 		case acceptReplyS := <-r.acceptReplyChan:
-			dlog.Printf("8\n")
+			dlog.Printf("8 handleAcceptRepl\n")
 			acceptReply := acceptReplyS.(*mdlinproto.AcceptReply)
 			//got an Accept reply
 			r.handleAcceptReply(acceptReply)
@@ -432,18 +434,18 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			r.handleFinalAccept(finalAccept)
 			break
 		case coordinationRequest := <-r.MDLCoordReqChan:
-			dlog.Printf("10\n")
+			dlog.Printf("10 handleCoordinationRequest\n")
 			//NewPrintf(LEVELALL, "-----------CoordReq Chan-----------")
 			r.handleCoordinationRequest(coordinationRequest)
 			break
 		case coordinationRReply := <-r.coordReqReplyChan:
-			dlog.Printf("11\n")
+			dlog.Printf("11 CoordinationRESponse\n")
 			//NewPrintf(LEVELALL, "----------CoordReqReply Chan--------")
 			CRR := coordinationRReply.(*mdlinproto.CoordinationResponse)
 			r.handleCoordinationRReply(CRR)
 			break
 		case finalAcceptReplyS := <-r.finalAcceptReplyChan:
-			dlog.Printf("12\n")
+			dlog.Printf("12 finalAcceptReply\n")
 			finalAcceptReply := finalAcceptReplyS.(*mdlinproto.FinalAcceptReply)
 			// got a FinalAccept reply
 			r.handleFinalAcceptReply(finalAcceptReply)
@@ -570,12 +572,13 @@ func (r *Replica) processCCEntry(p *Instance) {
   instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, ACCEPTED, crs, pp, sn)
   r.crtInstance++
   // Add to seen map
-  if (int(p.seqno) + 1) % r.fanout != 0 {
+  if (p.lb.clientProposals[0].Timestamp == 1) {
+    dlog.Printf("Adding t = %v to seen!\n", cmdids[0])
     r.seen[cmdids[0]] = r.instanceSpace[instNo]
   }
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
-  dlog.Printf("calling bcastFinalAccept, seen = %v, bufferedLog = %v\n", r.seen, r.bufferedLog)
+  dlog.Printf("calling bcastFinalAccept, seen SIZE = %v, bufferedLog = %v\n", len(r.seen), r.bufferedLog)
   r.bcastFinalAccept(instNo, r.defaultBallot, bp[0].CommandId, cmdids, b, pp, sn, bi)
 }
 
@@ -796,14 +799,6 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 	}
 }
 
-func (r *Replica) cleanSeen(pid int64, seqno int64) {
-  for t, _ := range r.seen {
-    if t.PID == pid && t.SeqNo < seqno {
-      delete(r.seen, t)
-    }
-  }
-}
-
 // Client submitted a command to a server
 func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	if !r.IsLeader {
@@ -858,7 +853,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		if val, ok := r.nextSeqNo[prop.PID]; ok {
 			expectedSeqno = val
 		}
-		dlog.Printf("map = %v, prop.PID = %v, prop.SeqNo = %v, expectedSeqno = %v\n", r.nextSeqNo, prop.PID, prop.SeqNo, expectedSeqno)
+		dlog.Printf("map = %v, prop.PID = %v, prop.SeqNo = %v, expectedSeqno = %v, predecessor = %v\n", r.nextSeqNo, prop.PID, prop.SeqNo, expectedSeqno, prop.Predecessor)
 		if prop.SeqNo != expectedSeqno {
 			// Add to buffer
 			panic("We shouldn't be getting OoO reqs per client")
@@ -881,7 +876,6 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			dlog.Printf("t = %v, coord = %v, naught = %v\n", t, coord, prop.Predecessor.SeqNo == -1)
 			if (prop.Predecessor.SeqNo == -1) {
                           // I should also be able to delete anything in the seen map that has the same PID and smaller SeqNo
-                          // go r.cleanSeen(prop.PID, prop.SeqNo)
 			  coord = int8(1)
 			  pidFA[foundFA] = prop.PID
                           seqnoFA[foundFA] = prop.SeqNo
@@ -1085,6 +1079,8 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
   e := r.findEntry(cr.AskeeTag)
   OK, coord, ts := r.checkCoordination(e)
   r.outstandingCR[cr.AskeeTag] = cr
+  dlog.Printf("Successor %v looking for predecessor here %v", cr.AskerTag, cr.AskeeTag)
+  dlog.Printf("the predecessor OK, coord, ts = %v, %v, %v\n", OK, coord, ts)
   if (e != nil && OK) {
     // Naught requests cannot respond to successors until they are committed
     if (e.pred == nil && e.status != COMMITTED) {
@@ -1140,6 +1136,7 @@ func (r *Replica) checkCoordination(e *Instance) (bool, int8, int64) {
 // When we receive a response from the predecessor of the asker, we can coordinate
 // the asker request
 func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse) {
+  dlog.Printf("Predecessor %v responding to successor here %v", crr.AskeeTag, crr.AskerTag)
   var e *Instance
   var in bool
   // assert that the instance is not in the orderedLog
@@ -1155,6 +1152,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
     // Update my status
     e.lb.coordinated = int8(crr.OK)
     e.epoch[0] = crr.AskeeEpoch
+    dlog.Printf("status getting updated to coord = %v, epoch = %v\n", crr.OK, crr.AskeeEpoch)
     // if NOW i'm committed and coordinated, then I must add myself 
     // to the ordered log AND reply to my successors (if any exist)
     OK, coord, ts := r.checkCoordination(e)
@@ -1168,6 +1166,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
   }
 }
 
+// t: tag of the request r on this shard, shard_r. We want to reply to r's successor s on shard_s
 func (r *Replica) replyToSuccessorIfExists(t mdlinproto.Tag, ts int64, coord int8) {
   succ, _ := r.outstandingCR[t]
   dlog.Printf("inside replyToSuccessor... outstandingCR = %v, t = %v, ts = %v, coord = %v\n", r.outstandingCR, t, ts, coord)
@@ -1188,7 +1187,7 @@ func (r *Replica) replyToSuccessorIfExists(t mdlinproto.Tag, ts int64, coord int
       panic("request shouldn't be in r.seen if value wasn't coordinated and thus never added to orderedLog")
     }
   }
-  dlog.Printf("oustandingCR = %v, r.seen = %v", r.outstandingCR, r.seen)
+  dlog.Printf("oustandingCR = %v, SIZE(r.seen) = %v", r.outstandingCR, len(r.seen))
 }
 
 func (r *Replica) readyToCommit(instance int32) {
@@ -1566,7 +1565,7 @@ func (r *Replica) executeCommands() {
 							val,
 							17}
 
-						NewPrintf(LEVEL0, "EXECUTING --> CLIENT:OK = TRUE, CommandID = %d, val = %v, key = %d, seqno = %d, PID = %dHA", inst.lb.clientProposals[j].CommandId, val, inst.lb.clientProposals[j].Command.K, inst.lb.clientProposals[j].SeqNo, inst.lb.clientProposals[j].PID)
+						dlog.Printf("EXECUTING --> CLIENT:OK = TRUE, CommandID = %d, val = %v, key = %d, seqno = %d, PID = %dHA", inst.lb.clientProposals[j].CommandId, val, inst.lb.clientProposals[j].Command.K, inst.lb.clientProposals[j].SeqNo, inst.lb.clientProposals[j].PID)
 
             r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
 					} else {
