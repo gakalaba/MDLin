@@ -1526,7 +1526,7 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
     inst.lb.acceptOKs++
     if inst.lb.acceptOKs+1 > r.N>>1 {
       r.readyToCommit(fareply.Instance)
-      t := mdlinproto.Tag{K: inst.cmds[0].K, PID: inst.pid, SeqNo: inst.seqno}
+      /*t := mdlinproto.Tag{K: inst.cmds[0].K, PID: inst.pid, SeqNo: inst.seqno}
       _, in := r.seen[t]
       _, crin := r.outstandingCR[t]
       // ASSERT
@@ -1536,6 +1536,7 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
       dlog.Printf("handleFinalAccept on %v calling reply to successor", t)
       r.replyToSuccessorIfExists(t, inst.epoch[0], inst.lb.coordinated)
       dlog.Printf("This Command %v got FINAL accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
+      */
     }
   } else {
     // TODO: there is probably another active leader
