@@ -70,8 +70,8 @@ type FinalAccept struct {
   CommandId int32
   CmdTags   []Tag
   Command []state.Command
-  PIDs []int64
-  SeqNos []int64
+  //PIDs []int64
+  //SeqNos []int64
   ExpectedSeqs  map[int64]int64
   EpochSize []int64
 }
