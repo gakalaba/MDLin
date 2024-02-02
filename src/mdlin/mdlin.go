@@ -1293,16 +1293,18 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       n := len(faccept.CmdTags)
       b := make([]state.Command, n)
       bi := make([]int64, n)
-      result := true
+      if (n != 1) {
+	      panic("whattt")
+      }
       for i, k := range faccept.CmdTags {
         if v, ok := r.bufferedLog[k]; !ok {
+	  // naught request
 	  if (faccept.PIDs[i] != -1 && faccept.SeqNos[i] != -1) {
-		  //dlog.Printf("Expected Map: %v\n", faccept.ExpectedSeqs)
 		  b[i] = faccept.Command[i]
 		  bi[i] = faccept.EpochSize[i]
 	  } else {
 		  panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
-		  result = false
+		  fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, faccept.Ballot, faccept.PIDs[0], faccept.CommandId}
 		  break
 	  }
         } else {
@@ -1311,13 +1313,8 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
           delete(r.bufferedLog, k)
         }
       }
-      if result {
-        r.addEntryToOrderedLog(faccept.Instance, b, bi, nil, ACCEPTED, nil, nil, nil) //TODO For now we're not replicating predecessors or pids/seqnos.. this wouldn't work in event of failover
-        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, faccept.PIDs[0], faccept.CommandId}
-      } else {
-        panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
-        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, faccept.Ballot, faccept.PIDs[0], faccept.CommandId}
-      }
+      r.addEntryToOrderedLog(faccept.Instance, b, bi, nil, ACCEPTED, nil, nil, nil) //TODO For now we're not replicating predecessors or pids/seqnos.. this wouldn't work in event of failover
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, faccept.PIDs[0], faccept.CommandId}
     }
   }
 
@@ -1327,7 +1324,7 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
 		r.recordCommands(r.instanceSpace[faccept.Instance].cmds)
 		r.sync()
 		// If we are to accep the Proposal from the leader, we also need to bump up our nextSeqNo
-		copyMap(r.nextSeqNo, faccept.ExpectedSeqs)
+		//copyMap(r.nextSeqNo, faccept.ExpectedSeqs)
 	}
 
 	r.replyFinalAccept(faccept.LeaderId, fareply)
