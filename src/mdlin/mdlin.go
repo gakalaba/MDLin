@@ -14,6 +14,7 @@ import (
 	"mysort"
 	"state"
 	"time"
+	"runtime"
   "container/list"
   "masterproto"
 	"net/rpc"
@@ -159,7 +160,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		make(map[int64][]*genericsmr.MDLPropose),
 		true,
     make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
-    make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+    make(chan fastrpc.Serializable, 3*genericsmr.CHAN_BUFFER_SIZE),
     0, 0,
     make(map[mdlinproto.Tag]*Instance, genericsmr.CHAN_BUFFER_SIZE),
     list.New(),
@@ -196,6 +197,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 
 	go r.run(masterAddr, masterPort)
 
+	dlog.Printf("GO PMAPRICOS %v\n", runtime.GOMAXPROCS(0))
 	return r
 }
 
@@ -801,6 +803,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 
 // Client submitted a command to a server
 func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
+	dlog.Printf("got handlePropose for CommandID %v at time %v\n", propose.CommandId, time.Now().UnixNano())
 	if !r.IsLeader {
 		preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.NIL, 0}
 		//NewPrintf(LEVELALL, "I'm not the leader... responding to client with OK = false (0)")
@@ -812,6 +815,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	batchSize := 1
 	numProposals := len(r.MDLProposeChan) + 1
 	dlog.Printf("length of the MDLProposeChan = %v\n", len(r.MDLProposeChan)+1)
+	dlog.Printf("Batched %d, LENGTH of propose channel = %v\n", batchSize, len(r.ProposeChan))
 	if r.batchingEnabled {
 		batchSize = numProposals //TODO +1?
 		if batchSize > MAX_BATCH {
@@ -986,6 +990,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
 		r.processCCEntry(e)
 	}
+	dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }
 
 func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MDLPropose, pid int64,
@@ -1500,6 +1505,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
         r.replyToSuccessorIfExists(areply.IdTag[i], ts, coord)
       }
     }
+    dlog.Printf("This Command %v got accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
     // Otherwise, this will be handled by handleCoordinationRReply()
 
   }
@@ -1528,6 +1534,7 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
       }
       dlog.Printf("handleFinalAccept on %v calling reply to successor", t)
       r.replyToSuccessorIfExists(t, inst.epoch[0], inst.lb.coordinated)
+      dlog.Printf("This Command %v got FINAL accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
     }
   } else {
     // TODO: there is probably another active leader

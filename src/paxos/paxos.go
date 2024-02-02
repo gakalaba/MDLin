@@ -13,6 +13,7 @@ import (
 	"time"
   "net/rpc"
   "fmt"
+  "runtime"
   "masterproto"
 )
 
@@ -112,6 +113,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 	r.acceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.acceptReplyChan)
 	go r.run(masterAddr, masterPort)
 
+	dlog.Printf("GO PMAPRICOS %v\n", runtime.GOMAXPROCS(0))
 	return r
 }
 
@@ -438,6 +440,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
 
+	dlog.Printf("got handlePropose for CommandID %v at time %v\n", propose.CommandId, time.Now().UnixNano())
 	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)
 	if !r.IsLeader {
 		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL, 0}
@@ -461,7 +464,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	//	batchSize = MAX_BATCH
 	//}
 
-	dlog.Printf("Batched %d\n", batchSize)
+	dlog.Printf("Batched %d, LENGTH of propose channel = %v\n", batchSize, len(r.ProposeChan))
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.Propose, batchSize)
@@ -496,6 +499,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		r.bcastAccept(instNo, r.defaultBallot, cmds)
 		//dlog.Printf("Fast round for instance %d\n", instNo)
 	}
+	dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }
 
 func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
@@ -694,10 +698,15 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 		if inst.lb.acceptOKs+1 > r.N>>1 {
 			inst = r.instanceSpace[areply.Instance]
 			inst.status = COMMITTED
-			if inst.lb.clientProposals != nil {
+			/*if inst.lb.clientProposals != nil {
 				// give client the all clear
+				if len(inst.cmds) > 1 {
+					dlog.Printf("inst.cmds = %v\n", inst.cmds)
+					panic("what AAAHHHH")
+				}
 				for i := 0; i < len(inst.cmds); i++ {
 					if !r.NeedsWaitForExecute(&inst.cmds[i]) {
+						dlog.Printf("AAA\n")
 						propreply := &genericsmrproto.ProposeReplyTS{
 							TRUE,
 							inst.lb.clientProposals[i].CommandId,
@@ -706,7 +715,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 						r.ReplyProposeTS(propreply, inst.lb.clientProposals[i].Reply)
 					}
 				}
-			}
+			}*/
 
 			r.recordInstanceMetadata(r.instanceSpace[areply.Instance])
 			r.sync() //is this necessary?
@@ -714,6 +723,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 			r.updateCommittedUpTo()
 
 			r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
+			dlog.Printf("This Command %v got accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
 		}
 	} else {
 		// TODO: there is probably another active leader
@@ -737,7 +747,9 @@ func (r *Replica) executeCommands() {
 				inst := r.instanceSpace[i]
 				for j := 0; j < len(inst.cmds); j++ {
 					val := inst.cmds[j].Execute(r.State)
-					if r.NeedsWaitForExecute(&inst.cmds[j]) && inst.lb != nil && inst.lb.clientProposals != nil {
+					//dlog.Printf("command %v got EXECUTED at time %v\n", inst.lb.clientProposals[j].CommandId, time.Now().UnixNano())
+					if inst.lb != nil && inst.lb.clientProposals != nil {
+						dlog.Printf("BBB\n")
 						propreply := &genericsmrproto.ProposeReplyTS{
 							TRUE,
 							inst.lb.clientProposals[j].CommandId,

@@ -605,6 +605,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 				errS = "reading GEN_PROPOSE"
 				break
 			}
+			dlog.Printf("GENERICSMR got command %v at time %v\n", prop.CommandId, time.Now().UnixNano())
 			r.ProposeChan <- &Propose{prop, writer}
 			break
 
@@ -615,6 +616,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 				break
 			}
 			//dlog.Printf("Proposal with CommandId %v arrived on WIRE at %v,,, len(MDLProposeChan) = %v\n", prop.CommandId, time.Now().UnixMilli(), len(r.MDLProposeChan))
+			dlog.Printf("GENERICSMR got command %v at time %v\n", prop.CommandId, time.Now().UnixNano())
 			r.MDLProposeChan <- &MDLPropose{prop, writer}
 			break
 
