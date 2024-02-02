@@ -227,10 +227,10 @@ func (r *Replica) setupShards(masterAddr string, masterPort int) {
 	}
 	dlog.Printf("HH\n")
 	// Get the shards for multi-sharded MD-Lin
-	r.getShardsFromMaster(fmt.Sprintf("%s:%d", masterAddr, masterPort))
+	//r.getShardsFromMaster(fmt.Sprintf("%s:%d", masterAddr, masterPort))
 
-	dlog.Printf("-->Shard %d leader is ready!", r.ShardId)
-	r.ConnectToShards()
+	//dlog.Printf("-->Shard %d leader is ready!", r.ShardId)
+	//r.ConnectToShards()
 
 	var args masterproto.ShardReadyArgs
 	var reply masterproto.ShardReadyReply
