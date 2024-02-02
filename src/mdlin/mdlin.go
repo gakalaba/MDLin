@@ -384,11 +384,11 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 				proposeChan = nil
 			}
 			break
-		case <-epochChan:
+		/*case <-epochChan:
 			dlog.Printf("2\n")
 			r.processEpoch()
 			epochDone <- true
-			break
+			break*/
 		case prepareS := <-r.prepareChan:
 			dlog.Printf("3\n")
 			prepare := prepareS.(*mdlinproto.Prepare)
@@ -396,11 +396,18 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			r.handlePrepare(prepare)
 			break
 
-		case acceptS := <-r.acceptChan:
+		/*case acceptS := <-r.acceptChan:
 			dlog.Printf("4\n")
 			accept := acceptS.(*mdlinproto.Accept)
 			//got an Accept message
 			r.handleAccept(accept)
+			break*/
+
+		case finalAcceptS := <-r.finalAcceptChan:
+			dlog.Printf("9\n")
+			finalAccept := finalAcceptS.(*mdlinproto.FinalAccept)
+			//got a FinalAccept message
+			r.handleFinalAccept(finalAccept)
 			break
 
 		case commitS := <-r.commitChan:
@@ -423,35 +430,29 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			//got a Prepare reply
 			r.handlePrepareReply(prepareReply)
 			break
-		case acceptReplyS := <-r.acceptReplyChan:
+		/*case acceptReplyS := <-r.acceptReplyChan:
 			dlog.Printf("8 handleAcceptRepl\n")
 			acceptReply := acceptReplyS.(*mdlinproto.AcceptReply)
 			//got an Accept reply
 			r.handleAcceptReply(acceptReply)
-			break
-		case finalAcceptS := <-r.finalAcceptChan:
-			dlog.Printf("9\n")
-			finalAccept := finalAcceptS.(*mdlinproto.FinalAccept)
-			//got a FinalAccept message
-			r.handleFinalAccept(finalAccept)
-			break
-		case coordinationRequest := <-r.MDLCoordReqChan:
-			dlog.Printf("10 handleCoordinationRequest\n")
-			//NewPrintf(LEVELALL, "-----------CoordReq Chan-----------")
-			r.handleCoordinationRequest(coordinationRequest)
-			break
-		case coordinationRReply := <-r.coordReqReplyChan:
-			dlog.Printf("11 CoordinationRESponse\n")
-			//NewPrintf(LEVELALL, "----------CoordReqReply Chan--------")
-			CRR := coordinationRReply.(*mdlinproto.CoordinationResponse)
-			r.handleCoordinationRReply(CRR)
-			break
+			break*/
 		case finalAcceptReplyS := <-r.finalAcceptReplyChan:
 			dlog.Printf("12 finalAcceptReply\n")
 			finalAcceptReply := finalAcceptReplyS.(*mdlinproto.FinalAcceptReply)
 			// got a FinalAccept reply
 			r.handleFinalAcceptReply(finalAcceptReply)
 			break
+		/*case coordinationRequest := <-r.MDLCoordReqChan:
+			dlog.Printf("10 handleCoordinationRequest\n")
+			//NewPrintf(LEVELALL, "-----------CoordReq Chan-----------")
+			r.handleCoordinationRequest(coordinationRequest)
+			break*/
+		/*case coordinationRReply := <-r.coordReqReplyChan:
+			dlog.Printf("11 CoordinationRESponse\n")
+			//NewPrintf(LEVELALL, "----------CoordReqReply Chan--------")
+			CRR := coordinationRReply.(*mdlinproto.CoordinationResponse)
+			r.handleCoordinationRReply(CRR)
+			break*/
 
 			// case metricsRequest := <-r.MetricsChan:
 			// 	// Empty reply because there are no relevant metrics
