@@ -657,16 +657,16 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cm
   // sending the epochs.. which it needs to do because they are
   // updated values from what the replicas have since the entries
   // changed them once they got coordinated!
-  n := len(pids)
+  /*n := len(pids)
   fpa.ExpectedSeqs = make(map[int64]int64, n)
   for i := 0; i < n; i++ {
 	  fpa.ExpectedSeqs[pids[i]] = seqnos[i]
-  }
+  }*/
   fpa.EpochSize = es
 	args := &fpa
 
   //NewPrintf(LEVELALL, "Broadcasting accept with message %v", fpa)
-	n = r.N - 1
+  n := r.N - 1
 	if r.Thrifty {
 		n = r.N >> 1 //n = n//2
 	}
@@ -716,7 +716,7 @@ func (r *Replica) bcastAccept(ballot int32, command []state.Command, pids []int6
   n := len(pids)
   pa.ExpectedSeqs = make(map[int64]int64, n)
   for i := 0; i < n; i++ {
-          fpa.ExpectedSeqs[pids[i]] = seqnos[i]
+          pa.ExpectedSeqs[pids[i]] = seqnos[i]
   }
   pa.Epoch = es
 	args := &pa

@@ -72,7 +72,7 @@ type FinalAccept struct {
   Command []state.Command
   //PIDs []int64
   //SeqNos []int64
-  ExpectedSeqs  map[int64]int64
+  //ExpectedSeqs  map[int64]int64
   EpochSize []int64
 }
 
