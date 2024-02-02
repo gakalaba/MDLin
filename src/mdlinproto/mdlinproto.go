@@ -73,7 +73,7 @@ type FinalAccept struct {
   //PIDs []int64
   //SeqNos []int64
   //ExpectedSeqs  map[int64]int64
-  EpochSize []int64
+  //EpochSize []int64
 }
 
 type FinalAcceptReply struct {

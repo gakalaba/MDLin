@@ -662,7 +662,7 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cm
   for i := 0; i < n; i++ {
 	  fpa.ExpectedSeqs[pids[i]] = seqnos[i]
   }*/
-  fpa.EpochSize = es
+  //fpa.EpochSize = es
 	args := &fpa
 
   //NewPrintf(LEVELALL, "Broadcasting accept with message %v", fpa)
@@ -1301,7 +1301,8 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
 	  // naught request
 	  if (faccept.CmdTags[i].PID != -1 && faccept.CmdTags[i].SeqNo != -1) {
 		  b[i] = faccept.Command[i]
-		  bi[i] = faccept.EpochSize[i]
+		  //bi[i] = faccept.EpochSize[i]
+		  bi[i] = 0
 	  } else {
 		  panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
 		  fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, faccept.Ballot, 0, faccept.CommandId}
@@ -1309,7 +1310,8 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
 	  }
         } else {
           b[i] = v.cmds[0]
-          bi[i] = faccept.EpochSize[i]
+          //bi[i] = faccept.EpochSize[i]
+          bi[i] = 0
           delete(r.bufferedLog, k)
         }
       }
