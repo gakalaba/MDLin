@@ -19,10 +19,10 @@ type Tag struct {
 type Propose struct {
 	CommandId int32
 	Command   state.Command // state.key in here
-	Timestamp int64
+	//Timestamp int64
 	SeqNo     int64 // Add these for multidispatch
 	PID       int64
-  Predecessor Tag
+  //Predecessor Tag
 }
 
 type ProposeReply struct {

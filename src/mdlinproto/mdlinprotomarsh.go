@@ -29,7 +29,7 @@ func (t *Propose) Marshal(wire io.Writer) {
 	bs[3] = byte(tmp32 >> 24)
 	wire.Write(bs)
 	t.Command.Marshal(wire)
-	bs = b[:8]
+	/*bs = b[:8]
 	tmp64 := t.Timestamp
 	bs[0] = byte(tmp64)
 	bs[1] = byte(tmp64 >> 8)
@@ -39,9 +39,9 @@ func (t *Propose) Marshal(wire io.Writer) {
 	bs[5] = byte(tmp64 >> 40)
 	bs[6] = byte(tmp64 >> 48)
 	bs[7] = byte(tmp64 >> 56)
-	wire.Write(bs)
+	wire.Write(bs)*/
 	bs = b[:8]
-	tmp64 = t.SeqNo
+	tmp64 := t.SeqNo
 	bs[0] = byte(tmp64)
 	bs[1] = byte(tmp64 >> 8)
 	bs[2] = byte(tmp64 >> 16)
@@ -62,7 +62,7 @@ func (t *Propose) Marshal(wire io.Writer) {
 	bs[6] = byte(tmp64 >> 48)
 	bs[7] = byte(tmp64 >> 56)
 	wire.Write(bs)
-  t.Predecessor.Marshal(wire)
+  //t.Predecessor.Marshal(wire)
 }
 
 func (t *Propose) Unmarshal(rr io.Reader) error {
@@ -84,11 +84,12 @@ func (t *Propose) Unmarshal(rr io.Reader) error {
 	}
 	t.CommandId = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	t.Command.Unmarshal(wire)
-	bs = b[:8]
+	/*bs = b[:8]
 	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
 		return err
 	}
 	t.Timestamp = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+	*/
 
 	bs = b[:8]
 	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
@@ -102,7 +103,7 @@ func (t *Propose) Unmarshal(rr io.Reader) error {
 	}
 	t.PID = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
 
-  t.Predecessor.Unmarshal(wire)
+  //t.Predecessor.Unmarshal(wire)
 	return nil
 }
 

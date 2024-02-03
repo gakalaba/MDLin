@@ -48,7 +48,7 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 	startIdx := c.opCount
 	var prevTag mdlinproto.Tag
         // Doing this for the sake of cleaning the r.seen list in implementation
-        n := len(opTypes)
+        //n := len(opTypes)
 	for i, opType := range opTypes {
 		k := keys[i]
 		l := c.GetShardFromKey(state.Key(k))
@@ -60,12 +60,12 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		}
 		// Assign the sequence number and batch dependencies for this request
 		c.setSeqno(c.seqnos[l])
-                c.setTimestamp(i, n)
-		if i == 0 {
+                //c.setTimestamp(i, n)
+		/*if i == 0 {
 			c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
 		} else {
 			c.propose.Predecessor = prevTag
-		}
+		}*/
 
 		startTimes[i] = time.Now()
 
@@ -132,12 +132,12 @@ func (c *MDLClient) setSeqno(seqno int64) {
 	c.propose.SeqNo = seqno
 }
 
-func (c *MDLClient) setTimestamp(i int, n int) {
+/*func (c *MDLClient) setTimestamp(i int, n int) {
         c.propose.Timestamp = 1
         if (i == n-1) {
           c.propose.Timestamp = 0
         }
-}
+}*/
 
 func (c *MDLClient) sendPropose() {
 	shard := c.GetShardFromKey(c.propose.Command.K)

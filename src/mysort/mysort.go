@@ -43,7 +43,7 @@ func merge(a []*genericsmr.MDLPropose, start1 int, start2 int, end int) {
 		mdlp := new(mdlinproto.Propose)
 		mdlp.CommandId = elem.CommandId
 		mdlp.Command = elem.Command
-		mdlp.Timestamp = elem.Timestamp
+		//mdlp.Timestamp = elem.Timestamp
 		mdlp.SeqNo = elem.SeqNo
 		mdlp.PID = elem.PID
 		aux[i] = &genericsmr.MDLPropose{mdlp, elem.Reply} // This is copying the bufio object :D

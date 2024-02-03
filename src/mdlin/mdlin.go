@@ -575,10 +575,11 @@ func (r *Replica) processCCEntry(p *Instance) {
   instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, ACCEPTED, crs, pp, sn)
   r.crtInstance++
   // Add to seen map
-  if (p.lb.clientProposals[0].Timestamp == 1) {
+  /*if (p.lb.clientProposals[0].Timestamp == 1) {
     dlog.Printf("Adding t = %v to seen!\n", cmdids[0])
     r.seen[cmdids[0]] = r.instanceSpace[instNo]
-  }
+  }*/
+
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
   dlog.Printf("calling bcastFinalAccept, seen SIZE = %v, bufferedLog = %v\n", len(r.seen), r.bufferedLog)
@@ -858,7 +859,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		if val, ok := r.nextSeqNo[prop.PID]; ok {
 			expectedSeqno = val
 		}
-		dlog.Printf("map = %v, prop.PID = %v, prop.SeqNo = %v, expectedSeqno = %v, predecessor = %v\n", r.nextSeqNo, prop.PID, prop.SeqNo, expectedSeqno, prop.Predecessor)
+		//dlog.Printf("map = %v, prop.PID = %v, prop.SeqNo = %v, expectedSeqno = %v, predecessor = %v\n", r.nextSeqNo, prop.PID, prop.SeqNo, expectedSeqno, prop.Predecessor)
 		if prop.SeqNo != expectedSeqno {
 			// Add to buffer
 			panic("We shouldn't be getting OoO reqs per client")
@@ -878,8 +879,9 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 				coord = int8(v.OK)
 				delete(r.outstandingCRR, t)
 			}*/
-			dlog.Printf("t = %v, coord = %v, naught = %v\n", t, coord, prop.Predecessor.SeqNo == -1)
-			if (prop.Predecessor.SeqNo == -1) {
+			//dlog.Printf("t = %v, coord = %v, naught = %v\n", t, coord, prop.Predecessor.SeqNo == -1)
+			if (true) {
+			//if (prop.Predecessor.SeqNo == -1) {
                           // I should also be able to delete anything in the seen map that has the same PID and smaller SeqNo
 			  coord = int8(1)
 			  pidFA[foundFA] = prop.PID

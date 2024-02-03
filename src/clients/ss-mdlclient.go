@@ -42,7 +42,7 @@ func (c *SSMDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool,
 	fanout := len(keys)
 	startTimes := make([]time.Time, fanout)
 	startIdx := c.opCount
-	var prevTag mdlinproto.Tag
+	//var prevTag mdlinproto.Tag
 	for i, opType := range opTypes {
 		k := keys[i]
 		l := c.GetShardFromKey(state.Key(k))
@@ -54,11 +54,11 @@ func (c *SSMDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool,
 		}
 		// Assign the sequence number and batch dependencies for this request
 		c.setSeqno(c.seqnos[l])
-		if i == 0 {
+		/*if i == 0 {
 			c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
 		} else {
 			c.propose.Predecessor = prevTag
-		}
+		}*/
 
 		startTimes[i] = time.Now()
 
@@ -69,7 +69,7 @@ func (c *SSMDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool,
 		} else {
 			c.CompareAndSwap(k, int64(k-1), int64(k))
 		}
-		prevTag = mdlinproto.Tag{K: state.Key(k), PID: int64(c.id), SeqNo: c.seqnos[l]}
+		//prevTag = mdlinproto.Tag{K: state.Key(k), PID: int64(c.id), SeqNo: c.seqnos[l]}
 	}
 	success, _ := c.readReplies(startIdx, fanout, opTypes, keys, startTimes)
 	if !success {
