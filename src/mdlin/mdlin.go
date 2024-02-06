@@ -84,8 +84,8 @@ type Replica struct {
 
   bufferedLog         map[mdlinproto.Tag]*Instance  // the unordered requests LINKED LIST
   readyBuff           *list.List
-  coordReqReplyChan   chan fastrpc.Serializable
-  coordResponseRPC    uint8
+  //coordReqReplyChan   chan fastrpc.Serializable
+  //coordResponseRPC    uint8
   outstandingCR       map[mdlinproto.Tag]*genericsmr.MDLCoordReq
   outstandingCRR      map[mdlinproto.Tag]*mdlinproto.CoordinationResponse
 
@@ -162,8 +162,8 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
     0, 0,
     make(map[mdlinproto.Tag]*Instance, genericsmr.CHAN_BUFFER_SIZE),
     list.New(),
-    make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
-    0,
+    //make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
+    //0,
     make(map[mdlinproto.Tag]*genericsmr.MDLCoordReq),
     make(map[mdlinproto.Tag]*mdlinproto.CoordinationResponse),
     //time.NewTicker(time.Duration(epochLength) * time.Microsecond),
@@ -191,7 +191,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
   r.finalAcceptRPC = r.RegisterRPC(new(mdlinproto.FinalAccept), r.finalAcceptChan)
   r.finalAcceptReplyRPC = r.RegisterRPC(new(mdlinproto.FinalAcceptReply), r.finalAcceptReplyChan)
   dlog.Printf("finalAccept RPC = %v, Reply = %v\n", r.finalAcceptRPC, r.finalAcceptReplyRPC)
-  r.coordResponseRPC = r.RegisterRPC(new(mdlinproto.CoordinationResponse), r.coordReqReplyChan)
+  //r.coordResponseRPC = r.RegisterRPC(new(mdlinproto.CoordinationResponse), r.coordReqReplyChan)
 
 	go r.run(masterAddr, masterPort)
 
@@ -308,10 +308,10 @@ func (r *Replica) replyAccept(replicaId int32, reply *mdlinproto.AcceptReply) {
 func (r *Replica) replyCoord(replicaId int32, reply *mdlinproto.CoordinationResponse) {
 	if replicaId == int32(r.ShardId) {
 		dlog.Printf("Sending response to same shard!")
-		r.coordReqReplyChan <- reply
+		//r.coordReqReplyChan <- reply
 	} else {
 		dlog.Printf("Sending response to DIFFERENT shard: %v", reply)
-		r.SendISMsg(replicaId, r.coordResponseRPC, reply)
+		//r.SendISMsg(replicaId, r.coordResponseRPC, reply)
 	}
 }
 
@@ -827,10 +827,11 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	prepareTags := make([]mdlinproto.Tag, batchSize)
 	cmdIds := make([]int32, batchSize)*/
 
-	cmdsFA := make([]state.Command, batchSize)
+	/*cmdsFA := make([]state.Command, batchSize)
 	proposalsFA := make([]*genericsmr.MDLPropose, batchSize)
 	pidFA := make([]int64, batchSize)
 	seqnoFA := make([]int64, batchSize)
+	*/
 	prepareTagsFA := make([]mdlinproto.Tag, batchSize)
 	cmdIdsFA := make([]int32, batchSize)
 
@@ -840,7 +841,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 
 	found := 0
 	foundFA := 0
-	var expectedSeqno int64
+	//var expectedSeqno int64
 	prop := propose
 	i := 1
         // We need a loop like this to lag behind pulling values off the channel,
@@ -849,12 +850,14 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	// i, numProposals = i is a for loop from 1 to numProposals
 	// found, batchsize = we use found to bound the number of entries added to batchsize=1 (and flushing buffer)
 	for found < batchSize && i <= numProposals {
-		expectedSeqno = 0
+		/*expectedSeqno = 0
 		if val, ok := r.nextSeqNo[prop.PID]; ok {
 			expectedSeqno = val
 		}
 		//dlog.Printf("map = %v, prop.PID = %v, prop.SeqNo = %v, expectedSeqno = %v, predecessor = %v\n", r.nextSeqNo, prop.PID, prop.SeqNo, expectedSeqno, prop.Predecessor)
-		if prop.SeqNo != expectedSeqno {
+		*/
+		//if prop.SeqNo != expectedSeqno {
+		if false {
 			// Add to buffer
 			panic("We shouldn't be getting OoO reqs per client")
 			if _, ok := r.outstandingInst[prop.PID]; !ok {
@@ -878,13 +881,13 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			//if (prop.Predecessor.SeqNo == -1) {
                           // I should also be able to delete anything in the seen map that has the same PID and smaller SeqNo
 			  //coord = int8(1)
-			  pidFA[foundFA] = prop.PID
-                          seqnoFA[foundFA] = prop.SeqNo
-                          cmdsFA[foundFA] = prop.Command
-                          proposalsFA[foundFA] = prop
+			  pidFA := prop.PID
+			  seqnoFA := prop.SeqNo
+			  cmdsFA := prop.Command
+			  proposalsFA := prop
                           cmdIdsFA[foundFA] = prop.CommandId
                           prepareTagsFA[foundFA] = t
-                          r.addEntryToBuffLog(cmdsFA[foundFA], proposalsFA[foundFA], pidFA[foundFA], seqnoFA[foundFA])
+                          r.addEntryToBuffLog(cmdsFA, proposalsFA, pidFA, seqnoFA)
 			  foundFA++
                         } else {
                           /*pid[found-foundFA] = prop.PID
@@ -896,7 +899,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			  r.addEntryToBuffLog(cmds[found-foundFA], proposals[found-foundFA], pid[found-foundFA], seqno[found-foundFA], coord, &prop.Predecessor, r.epoch)
 			  */
 			}
-			r.nextSeqNo[prop.PID]++
+			//r.nextSeqNo[prop.PID]++
 			found++
 
 			// Check if any others are ready

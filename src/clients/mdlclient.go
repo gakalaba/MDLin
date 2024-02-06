@@ -39,6 +39,7 @@ func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 	pc.propose.PID = int64(id) // only need to set this once per client
 	pc.RegisterRPC(new(mdlinproto.ProposeReply), clientproto.MDL_PROPOSE_REPLY, pc.proposeReplyChan)
 
+	pc.seqnos[0] = -1
 	return pc
 }
 
@@ -46,18 +47,19 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 	fanout := len(keys)
 	startTimes := make([]time.Time, fanout)
 	startIdx := c.opCount
-	var prevTag mdlinproto.Tag
+	//var prevTag mdlinproto.Tag
         // Doing this for the sake of cleaning the r.seen list in implementation
         //n := len(opTypes)
 	for i, opType := range opTypes {
 		k := keys[i]
 		l := c.GetShardFromKey(state.Key(k))
 		// Figure out the sequence number
-		if _, ok := c.seqnos[l]; !ok {
+		/*if _, ok := c.seqnos[l]; !ok {
 			c.seqnos[l] = 0
 		} else {
 			c.seqnos[l]++
-		}
+		}*/
+		c.seqnos[l]++
 		// Assign the sequence number and batch dependencies for this request
 		c.setSeqno(c.seqnos[l])
                 //c.setTimestamp(i, n)
@@ -76,13 +78,13 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		} else {
 			c.CompareAndSwap(k, int64(k-1), int64(k))
 		}
-		if (i > 0 && !c.SSA) {
+		/*if (i > 0 && !c.SSA) {
 			// Send the coordination request
 			// (Keep this after sending the request for now, since
 			// logic in the send function assumes request was send)
 			c.sendCoordinationRequest(prevTag, l)
 		}
-		prevTag = mdlinproto.Tag{K: state.Key(k), PID: int64(c.id), SeqNo: c.seqnos[l]}
+		prevTag = mdlinproto.Tag{K: state.Key(k), PID: int64(c.id), SeqNo: c.seqnos[l]}*/
 	}
 	success, _ := c.readReplies(startIdx, fanout, opTypes, keys, startTimes)
 	if !success {
