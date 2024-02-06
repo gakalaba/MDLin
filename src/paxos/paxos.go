@@ -1,19 +1,19 @@
 package paxos
 
 import (
-	"dlog"
+	//"dlog"
 	"encoding/binary"
 	"fastrpc"
 	"genericsmr"
 	"genericsmrproto"
 	"io"
-	"log"
+	//"log"
 	"paxosproto"
 	"state"
 	"time"
   "net/rpc"
   "fmt"
-  "runtime"
+  //"runtime"
   "masterproto"
 )
 
@@ -101,7 +101,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		epochLength}
 
 
-	log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
+	//log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
 	r.Beacon = beacon
 	r.Durable = durable
 
@@ -113,7 +113,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 	r.acceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.acceptReplyChan)
 	go r.run(masterAddr, masterPort)
 
-	dlog.Printf("GO PMAPRICOS %v\n", runtime.GOMAXPROCS(0))
+	//dlog.Printf("GO PMAPRICOS %v\n", runtime.GOMAXPROCS(0))
 	return r
 }
 
@@ -185,7 +185,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		r.IsLeader = true
 	}
 	r.setupShards(masterAddr, masterPort)
-	log.Println("Waiting for client connections")
+	//log.Println("Waiting for client connections")
 
 	go r.WaitForClientConnections()
 
@@ -222,14 +222,14 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case prepareS := <-r.prepareChan:
 			prepare := prepareS.(*paxosproto.Prepare)
 			//got a Prepare message
-			dlog.Printf("Received Prepare from replica %d, for instance %d\n", prepare.LeaderId, prepare.Instance)
+			//dlog.Printf("Received Prepare from replica %d, for instance %d\n", prepare.LeaderId, prepare.Instance)
 			r.handlePrepare(prepare)
 			break
 
 		case acceptS := <-r.acceptChan:
 			accept := acceptS.(*paxosproto.Accept)
 			//got an Accept message
-			dlog.Printf("Received Accept from replica %d, for instance %d\n", accept.LeaderId, accept.Instance)
+			//dlog.Printf("Received Accept from replica %d, for instance %d\n", accept.LeaderId, accept.Instance)
 			r.handleAccept(accept)
 			break
 
@@ -250,14 +250,14 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case prepareReplyS := <-r.prepareReplyChan:
 			prepareReply := prepareReplyS.(*paxosproto.PrepareReply)
 			//got a Prepare reply
-			dlog.Printf("Received PrepareReply for instance %d\n", prepareReply.Instance)
+			//dlog.Printf("Received PrepareReply for instance %d\n", prepareReply.Instance)
 			r.handlePrepareReply(prepareReply)
 			break
 
 		case acceptReplyS := <-r.acceptReplyChan:
 			acceptReply := acceptReplyS.(*paxosproto.AcceptReply)
 			//got an Accept reply
-			dlog.Printf("Received AcceptReply for instance %d\n", acceptReply.Instance)
+			//dlog.Printf("Received AcceptReply for instance %d\n", acceptReply.Instance)
 			r.handleAcceptReply(acceptReply)
 			break
 
@@ -299,10 +299,10 @@ func (r *Replica) setupShards(masterAddr string, masterPort int) {
         done = true
         break
       } else {
-        log.Printf("%v", err)
+        //log.Printf("%v", err)
       }
     } else {
-      log.Printf("%v", err)
+      //log.Printf("%v", err)
     }
   }
 }
@@ -321,7 +321,7 @@ func (r *Replica) updateCommittedUpTo() {
 func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Println("Prepare bcast failed:", err)
+			//log.Println("Prepare bcast failed:", err)
 		}
 	}()
 	ti := FALSE
@@ -354,7 +354,7 @@ var pa paxosproto.Accept
 func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Command) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Println("Accept bcast failed:", err)
+			//log.Println("Accept bcast failed:", err)
 		}
 	}()
 	pa.LeaderId = r.Id
@@ -388,7 +388,7 @@ var pcs paxosproto.CommitShort
 func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Command) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Println("Commit bcast failed:", err)
+			//log.Println("Commit bcast failed:", err)
 		}
 	}()
 	pc.LeaderId = r.Id
@@ -440,7 +440,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
 
-	dlog.Printf("got handlePropose for CommandID %v at time %v\n", propose.CommandId, time.Now().UnixNano())
+	//dlog.Printf("got handlePropose for CommandID %v at time %v\n", propose.CommandId, time.Now().UnixNano())
 	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)
 	if !r.IsLeader {
 		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL, 0}
@@ -464,7 +464,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	//	batchSize = MAX_BATCH
 	//}
 
-	dlog.Printf("Batched %d, LENGTH of propose channel = %v\n", batchSize, len(r.ProposeChan))
+	//dlog.Printf("Batched %d, LENGTH of propose channel = %v\n", batchSize, len(r.ProposeChan))
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.Propose, batchSize)
@@ -499,7 +499,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		r.bcastAccept(instNo, r.defaultBallot, cmds)
 		//dlog.Printf("Fast round for instance %d\n", instNo)
 	}
-	dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
+	//dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }
 
 func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
@@ -723,7 +723,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 			r.updateCommittedUpTo()
 
 			//r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
-			dlog.Printf("This Command %v got accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
+			//dlog.Printf("This Command %v got accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
 		}
 	} else {
 		// TODO: there is probably another active leader
@@ -749,7 +749,7 @@ func (r *Replica) executeCommands() {
 					val := inst.cmds[j].Execute(r.State)
 					//dlog.Printf("command %v got EXECUTED at time %v\n", inst.lb.clientProposals[j].CommandId, time.Now().UnixNano())
 					if inst.lb != nil && inst.lb.clientProposals != nil {
-						dlog.Printf("BBB\n")
+						//dlog.Printf("BBB\n")
 						propreply := &genericsmrproto.ProposeReplyTS{
 							TRUE,
 							inst.lb.clientProposals[j].CommandId,
