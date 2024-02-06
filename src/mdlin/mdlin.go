@@ -551,8 +551,6 @@ func (r *Replica) processCCEntry(p *Instance) {
 
   b := make([]state.Command, 1) // Command to execute
   bp := make([]*genericsmr.MDLPropose, 1) // Client we are responding to
-  pp := make([]int64, 1)
-  sn := make([]int64, 1)
   //crs := make([]*genericsmr.MDLCoordReq, 1)
   cmdids := make([]mdlinproto.Tag, 1)
   j := 0
@@ -561,8 +559,8 @@ func (r *Replica) processCCEntry(p *Instance) {
   bp[j] = p.lb.clientProposals[0]
   cmdids[j] = mdlinproto.Tag{K: p.cmds[0].K, PID: p.pid, SeqNo: p.seqno}
   delete(r.bufferedLog, cmdids[j])
-  pp[j] = p.pid
-  sn[j] = p.seqno
+  pp := p.pid
+  sn := p.seqno
   // Get the lamport clocks ordered
   //pred_epoch := p.epoch[0]
   //p.epoch[0] = int64(math.Max(float64(r.epoch), float64(pred_epoch + 1)))
@@ -579,7 +577,7 @@ func (r *Replica) processCCEntry(p *Instance) {
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
   dlog.Printf("calling bcastFinalAccept, seen SIZE = %v, bufferedLog = %v\n", len(r.seen), r.bufferedLog)
-  r.bcastFinalAccept(instNo, r.defaultBallot, bp[0].CommandId, cmdids, b, pp, sn)
+  r.bcastFinalAccept(instNo, r.defaultBallot, bp[0].CommandId, cmdids, b)
 }
 
 func (r *Replica) updateCommittedUpTo() {
@@ -629,7 +627,7 @@ func (r *Replica) bcastPrepare(instance []mdlinproto.Tag, ballot int32, toInfini
 
 var fpa mdlinproto.FinalAccept
 
-func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cmdids []mdlinproto.Tag, command []state.Command, pids []int64, seqnos []int64) {
+func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cmdids []mdlinproto.Tag, command []state.Command) {
 	defer func() {
 		if err := recover(); err != nil {
 			//NewPrintf(LEVEL0, "Accept bcast failed: %v", err)
@@ -1030,23 +1028,23 @@ func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MD
 }
 
 
-func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, cPs []*genericsmr.MDLPropose, status InstanceStatus, pid []int64, seqno []int64) int32 {
+func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, cPs []*genericsmr.MDLPropose, status InstanceStatus, pid int64, seqno int64) int32 {
 	// Add entry to log
 	//NewPrintf(LEVEL0, "Flushing ready entries buffLog --> orderedLog at END OF EPOCH!")
 
-        var p int64 = -1
+        /*var p int64 = -1
         var s int64 = -1
         if (pid != nil) {
           p = pid[0]
           s = seqno[0]
-        }
+        }*/
 	r.instanceSpace[index] = &Instance{
 		cmds,
 		r.defaultBallot,
 		status,
     &LeaderBookkeeping{cPs, 0, 0, 0, 0}, // Need this to track acceptOKs
-		p,
-		s}
+		pid,
+		seqno}
   return index
 }
 
@@ -1309,7 +1307,7 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
           delete(r.bufferedLog, k)
         }
       }
-      r.addEntryToOrderedLog(faccept.Instance, b, nil, ACCEPTED, nil, nil) //TODO For now we're not replicating predecessors or pids/seqnos.. this wouldn't work in event of failover
+      r.addEntryToOrderedLog(faccept.Instance, b, nil, ACCEPTED, -1, -1) //TODO For now we're not replicating predecessors or pids/seqnos.. this wouldn't work in event of failover
       fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, faccept.CmdTags[0].PID, faccept.CommandId}
     }
   }
@@ -1330,7 +1328,7 @@ func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
 	inst := r.instanceSpace[commit.Instance]
 
 	if inst == nil {
-r.addEntryToOrderedLog(commit.Instance, commit.Command, nil, COMMITTED, nil, nil)
+r.addEntryToOrderedLog(commit.Instance, commit.Command, nil, COMMITTED, -1, -1)
 	} else {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
@@ -1358,7 +1356,7 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 
 	//NewPrintf(LEVEL0, "Replica %d is getting handleCommitShort", r.Id)
 	if inst == nil {
-    r.addEntryToOrderedLog(commit.Instance, nil, nil, COMMITTED, nil, nil)
+    r.addEntryToOrderedLog(commit.Instance, nil, nil, COMMITTED, -1, -1)
 	} else {
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
