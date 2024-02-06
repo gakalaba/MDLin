@@ -349,7 +349,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	go r.executeCommands()
 	proposeChan := r.MDLProposeChan
 	proposeDone := make(chan bool, 1)
-	if r.batchingEnabled && r.IsLeader {
+	/*if r.batchingEnabled && r.IsLeader {
 		proposeChan = nil
 		dlog.Printf("proposeChan = nil\n");
 		go r.batchClock(&proposeDone)
@@ -361,7 +361,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		epochChan = make(chan bool, 1)
 		dlog.Printf("IS THIS THING ON????\n")
 		go r.epochClock(&epochChan, &epochDone)
-	}
+	}*/
 
 	for !r.Shutdown {
 		//dlog.Printf("A\n")
@@ -408,7 +408,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			r.handleFinalAccept(finalAccept)
 			break
 
-		case commitS := <-r.commitChan:
+		/*case commitS := <-r.commitChan:
 			dlog.Printf("5\n")
 			commit := commitS.(*mdlinproto.Commit)
 			//got a Commit message
@@ -420,7 +420,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			commit := commitS.(*mdlinproto.CommitShort)
 			//got a Commit message
 			r.handleCommitShort(commit)
-			break
+			break*/
 
 		case prepareReplyS := <-r.prepareReplyChan:
 			dlog.Printf("7 handlePrepareReply\n")
@@ -1201,7 +1201,7 @@ func (r *Replica) readyToCommit(instance int32) {
 
 	r.updateCommittedUpTo()
 
-	r.bcastCommit(instance, inst.ballot, inst.cmds, inst.pid, inst.seqno, COMMITTED)
+	//r.bcastCommit(instance, inst.ballot, inst.cmds, inst.pid, inst.seqno, COMMITTED)
 }
 
 func commandToStr(c state.Command) string {
@@ -1573,8 +1573,7 @@ func (r *Replica) executeCommands() {
 						dlog.Printf("EXECUTING --> CLIENT:OK = TRUE, CommandID = %d, val = %v, key = %d, seqno = %d, PID = %dHA", inst.lb.clientProposals[j].CommandId, val, inst.lb.clientProposals[j].Command.K, inst.lb.clientProposals[j].SeqNo, inst.lb.clientProposals[j].PID)
 
             r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
-					} else {
-          }
+					}
 				}
 				i++
 				//executed = true

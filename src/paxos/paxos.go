@@ -189,9 +189,9 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 	go r.WaitForClientConnections()
 
-	if r.Exec {
-		go r.executeCommands()
-	}
+	//if r.Exec {
+	go r.executeCommands()
+	//}
 
 	//slowClockChan := make(chan bool, 1)
 	//go r.SlowClock(slowClockChan)
@@ -201,11 +201,11 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	//}
 	proposeChan := r.ProposeChan
 	proposeDone := make(chan bool, 1)
-	if r.batchingEnabled {
+	/*if r.batchingEnabled {
 		log.Printf("batching neabledddddddddddddddddddddddddddddn\n")
 		proposeChan = nil
 		go r.batchClock(&proposeDone)
-	}
+	}*/
 
 	for !r.Shutdown {
 		select {
@@ -233,7 +233,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			r.handleAccept(accept)
 			break
 
-		case commitS := <-r.commitChan:
+		/*case commitS := <-r.commitChan:
 			commit := commitS.(*paxosproto.Commit)
 			//got a Commit message
 			dlog.Printf("Received Commit from replica %d, for instance %d\n", commit.LeaderId, commit.Instance)
@@ -245,7 +245,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			//got a Commit message
 			dlog.Printf("Received Commit from replica %d, for instance %d\n", commit.LeaderId, commit.Instance)
 			r.handleCommitShort(commit)
-			break
+			break*/
 
 		case prepareReplyS := <-r.prepareReplyChan:
 			prepareReply := prepareReplyS.(*paxosproto.PrepareReply)
@@ -722,7 +722,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 
 			r.updateCommittedUpTo()
 
-			r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
+			//r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
 			dlog.Printf("This Command %v got accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
 		}
 	} else {
