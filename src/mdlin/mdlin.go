@@ -117,9 +117,7 @@ type Instance struct {
 	lb         *LeaderBookkeeping
 	pid        int64
 	seqno      int64
-  pred       *mdlinproto.Tag
   epoch      []int64
-  absoluteEpoch int
 }
 
 type LeaderBookkeeping struct {
@@ -128,7 +126,7 @@ type LeaderBookkeeping struct {
 	prepareOKs      int
 	acceptOKs       int
 	nacks           int
-  coordinated     int8
+  //coordinated     int8
 }
 
 func tagtostring(t mdlinproto.Tag) string {
@@ -471,7 +469,7 @@ func (r *Replica) makeUniqueBallot(ballot int32) int32 {
 }
 
 // indexOL, orderedLog, bufferedLog
-func (r *Replica) processEpoch() {
+/*func (r *Replica) processEpoch() {
   // TODO garbage collection :)
   // create an entry from the readyBuff
   p := r.readyBuff.Front()
@@ -539,7 +537,7 @@ func (r *Replica) processEpoch() {
 	  dlog.Printf("didn't take out the right amount of elements in buffLog, len(r.bufferedLog) = %v, oldLen-n+naught_count = %v, oldLen %v, n %v, naught_count %v", len(r.bufferedLog), oldLen-n+naught_count, oldLen, n, naught_count)
 	  panic ("didn't take out the right amount of elements in buffLog, len(r.bufferedLog) = %v, oldLen-n+naught_count = %v")
   }
-}
+}*/
 
 // indexOL, orderedLog, bufferedLog
 func (r *Replica) processCCEntry(p *Instance) {
@@ -890,7 +888,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
                           proposalsFA[foundFA] = prop
                           cmdIdsFA[foundFA] = prop.CommandId
                           prepareTagsFA[foundFA] = t
-                          r.addEntryToBuffLog(cmdsFA[foundFA], proposalsFA[foundFA], pidFA[foundFA], seqnoFA[foundFA], coord, nil, r.epoch)
+                          r.addEntryToBuffLog(cmdsFA[foundFA], proposalsFA[foundFA], pidFA[foundFA], seqnoFA[foundFA], coord, r.epoch)
 			  foundFA++
                         } else {
                           /*pid[found-foundFA] = prop.PID
@@ -998,7 +996,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 }
 
 func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MDLPropose, pid int64,
-  seqno int64, coord int8, pred *mdlinproto.Tag, ep int64) *Instance {
+  seqno int64, coord int8, ep int64) *Instance {
 
 	// Add entry to log
   //NewPrintf(LEVEL0, "addEntryToBuffLog --> Shard Leader Creating Log Entry{%s, PID: %d, SeqNo: %d, coord: %d, thisCr: %v, pred: %v, epoch: %v",
@@ -1023,12 +1021,10 @@ func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MD
       com,
       ball,
       stat,
-      &LeaderBookkeeping{props, 0, 0, 0, 0, coord},
+      &LeaderBookkeeping{props, 0, 0, 0, 0},
       pid,
       seqno,
-      pred,
-      thisEpoch,
-      r.totalEpochs}
+      thisEpoch}
 
   t := mdlinproto.Tag{K: cmds.K, PID: pid, SeqNo: seqno}
   // Insert into map
@@ -1051,12 +1047,10 @@ func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, epochS
 		cmds,
 		r.defaultBallot,
 		status,
-    &LeaderBookkeeping{cPs, 0, 0, 0, 0, int8(TRUE)}, // Need this to track acceptOKs
+    &LeaderBookkeeping{cPs, 0, 0, 0, 0}, // Need this to track acceptOKs
 		p,
 		s,
-    nil,
-    epochSizes,
-    0}
+    epochSizes}
   return index
 }
 
@@ -1092,7 +1086,8 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
   dlog.Printf("the predecessor OK, coord, ts = %v, %v, %v\n", OK, coord, ts)
   if (e != nil && OK) {
     // Naught requests cannot respond to successors until they are committed
-    if (e.pred == nil && e.status != COMMITTED) {
+    if (e.status != COMMITTED) {
+    //if (e.pred == nil && e.status != COMMITTED) {
       dlog.Printf("naught request not responding yet...")
       return
     }
@@ -1130,7 +1125,7 @@ func (r *Replica) checkCoordination(e *Instance) (bool, int8, int64) {
   if (e == nil) {
     return false, 0, 0
   }
-  coord := e.lb.coordinated
+  coord := int8(1)
   committed := (e.lb.acceptOKs+1) > (r.N>>1)
   ts := e.epoch[0]
   // if the instance has not yet been coordinated, it cannot be committed^coordinate
@@ -1159,7 +1154,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
     r.outstandingCRR[crr.AskerTag] = crr
   } else {
     // Update my status
-    e.lb.coordinated = int8(crr.OK)
+    //e.lb.coordinated = int8(crr.OK)
     e.epoch[0] = crr.AskeeEpoch
     dlog.Printf("status getting updated to coord = %v, epoch = %v\n", crr.OK, crr.AskeeEpoch)
     // if NOW i'm committed and coordinated, then I must add myself 
@@ -1248,7 +1243,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
     t := make([]mdlinproto.Tag, len(accept.Command))
     for i := 0; i < len(accept.Command); i++ {
       t[i] = mdlinproto.Tag{K: accept.Command[i].K, PID: accept.PIDs[i], SeqNo: accept.SeqNos[i]}
-      r.addEntryToBuffLog(accept.Command[i], nil, accept.PIDs[i], accept.SeqNos[i], -1, nil, accept.Epoch)
+      r.addEntryToBuffLog(accept.Command[i], nil, accept.PIDs[i], accept.SeqNos[i], -1, accept.Epoch)
     }
     areply = &mdlinproto.AcceptReply{TRUE, r.defaultBallot, t}
   }
@@ -1421,7 +1416,8 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 		if inst.lb.prepareOKs+1 > r.N>>1 {
 			b := inst.ballot
 			e := inst.epoch[0]
-                        naught := (inst.pred == nil)
+                        //naught := (inst.pred == nil)
+                        naught := true
 			dlog.Printf("naught = %v", naught)
 			numacks := inst.lb.prepareOKs
 			cmds := make([]state.Command, len(preply.Instance))
