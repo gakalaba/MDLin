@@ -540,33 +540,15 @@ func (r *Replica) makeUniqueBallot(ballot int32) int32 {
 }*/
 
 // indexOL, orderedLog, bufferedLog
-func (r *Replica) processCCEntry(p *Instance) {
-  if p == nil {
-    return
-  }
-  // TODO garbage collection :)
-  if (r.readyBuff.Len() != 0) {
-    panic("Should only be adding one thing at a time")
-  }
-
-  b := make([]state.Command, 1) // Command to execute
-  bp := make([]*genericsmr.MDLPropose, 1) // Client we are responding to
-  //crs := make([]*genericsmr.MDLCoordReq, 1)
-  cmdids := make([]mdlinproto.Tag, 1)
-  j := 0
-  //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
-  b[j] = p.cmds[0]
-  bp[j] = p.lb.clientProposals[0]
-  cmdids[j] = mdlinproto.Tag{K: p.cmds[0].K, PID: p.pid, SeqNo: p.seqno}
-  delete(r.bufferedLog, cmdids[j])
-  pp := p.pid
-  sn := p.seqno
+func (r *Replica) processCCEntry(t mdlinproto.Tag) {
+  p := r.bufferedLog[t]
+  delete(r.bufferedLog, t)
   // Get the lamport clocks ordered
   //pred_epoch := p.epoch[0]
   //p.epoch[0] = int64(math.Max(float64(r.epoch), float64(pred_epoch + 1)))
   //r.epoch = int64(math.Max(float64(r.epoch), float64(p.epoch[0]))) + 1
   // Add to ordered log
-  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bp, ACCEPTED, pp, sn)
+  instNo := r.addEntryToOrderedLog(r.crtInstance, p.cmds, p.lb.clientProposals, ACCEPTED, p.pid, p.seqno)
   r.crtInstance++
   // Add to seen map
   /*if (p.lb.clientProposals[0].Timestamp == 1) {
@@ -574,10 +556,12 @@ func (r *Replica) processCCEntry(p *Instance) {
     r.seen[cmdids[0]] = r.instanceSpace[instNo]
   }*/
 
+  cmdids := make([]mdlinproto.Tag, 1)
+  cmdids[0] = t
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
   //dlog*.Printf("calling bcastFinalAccept, seen SIZE = %v, bufferedLog = %v\n", len(r.seen), r.bufferedLog)
-  r.bcastFinalAccept(instNo, r.defaultBallot, bp[0].CommandId, cmdids, b)
+  r.bcastFinalAccept(instNo, r.defaultBallot, p.lb.clientProposals[0].CommandId, cmdids, p.cmds)
 }
 
 func (r *Replica) updateCommittedUpTo() {
@@ -807,9 +791,13 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		return
 	}
 
+	for r.instanceSpace[r.crtInstance] != nil {
+		r.crtInstance++
+	}
 	// Get batch size
 	batchSize := 1
 	numProposals := len(r.MDLProposeChan) + 1
+
 	//dlog*.Printf("length of the MDLProposeChan = %v\n", len(r.MDLProposeChan)+1)
 	//dlog*.Printf("Batched %d, LENGTH of propose channel = %v\n", batchSize, len(r.ProposeChan))
 	if r.batchingEnabled {
@@ -834,10 +822,6 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	*/
 	prepareTagsFA := make([]mdlinproto.Tag, batchSize)
 	cmdIdsFA := make([]int32, batchSize)
-
-	for r.instanceSpace[r.crtInstance] != nil {
-		r.crtInstance++
-	}
 
 	found := 0
 	foundFA := 0
@@ -983,13 +967,11 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		if (len(prepareTagsFA) > 0) {
                   e = r.bufferedLog[prepareTagsFA[0]]
 		  r.recordInstanceMetadata(e)
-                  cmdRecord := make([]state.Command, 1)
-                  cmdRecord[0] = e.cmds[0]
-                  r.recordCommands(cmdRecord)
+                  r.recordCommands(e.cmds)
 		  r.sync()
                 }
 		//r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
-		r.processCCEntry(e)
+		r.processCCEntry(prepareTagsFA[0])
 	}
 	//dlog*.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }
@@ -1160,7 +1142,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
     OK, coord, ts := r.checkCoordination(e)
     if OK {
       if (!r.epochBatching && coord==1) {
-        r.processCCEntry(e)
+        r.processCCEntry(crr.AskerTag)
       }
       r.replyToSuccessorIfExists(crr.AskerTag, ts, coord)
     }
@@ -1444,7 +1426,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 				r.bcastAccept(b, cmds, pids, seqnos, e, cmdIds)
 			} else {
 				//dlog*.Printf("here??, inst = %v", inst)
-				r.processCCEntry(inst)
+				r.processCCEntry(preply.Instance[0])
 			}
 		}
 	} else {
@@ -1497,7 +1479,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
       OK, coord, ts := r.checkCoordination(inst)
       if OK {
         if (!r.epochBatching && coord==1) {
-          r.processCCEntry(inst)
+          r.processCCEntry(areply.IdTag[0])
         }
         r.replyToSuccessorIfExists(areply.IdTag[i], ts, coord)
       }
