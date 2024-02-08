@@ -540,15 +540,15 @@ func (r *Replica) makeUniqueBallot(ballot int32) int32 {
 }*/
 
 // indexOL, orderedLog, bufferedLog
-func (r *Replica) processCCEntry(t mdlinproto.Tag) {
-  p := r.bufferedLog[t]
-  delete(r.bufferedLog, t)
+func (r *Replica) processCCEntry(cmds []state.Command, cps []*genericsmr.MDLPropose, pid int64, seqno int64) {
+  //p := r.bufferedLog[t]
+  //delete(r.bufferedLog, t)
   // Get the lamport clocks ordered
   //pred_epoch := p.epoch[0]
   //p.epoch[0] = int64(math.Max(float64(r.epoch), float64(pred_epoch + 1)))
   //r.epoch = int64(math.Max(float64(r.epoch), float64(p.epoch[0]))) + 1
   // Add to ordered log
-  instNo := r.addEntryToOrderedLog(r.crtInstance, p.cmds, p.lb.clientProposals, ACCEPTED, p.pid, p.seqno)
+  instNo := r.addEntryToOrderedLog(r.crtInstance, cmds, cps, ACCEPTED, pid, seqno)
   r.crtInstance++
   // Add to seen map
   /*if (p.lb.clientProposals[0].Timestamp == 1) {
@@ -557,11 +557,11 @@ func (r *Replica) processCCEntry(t mdlinproto.Tag) {
   }*/
 
   cmdids := make([]mdlinproto.Tag, 1)
-  cmdids[0] = t
+  cmdids[0] = mdlinproto.Tag{K: cmds[0].K, PID: pid, SeqNo: seqno}
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
   //dlog*.Printf("calling bcastFinalAccept, seen SIZE = %v, bufferedLog = %v\n", len(r.seen), r.bufferedLog)
-  r.bcastFinalAccept(instNo, r.defaultBallot, p.lb.clientProposals[0].CommandId, cmdids, p.cmds)
+  r.bcastFinalAccept(instNo, r.defaultBallot, cps[0].CommandId, cmdids, cmds)
 }
 
 func (r *Replica) updateCommittedUpTo() {
@@ -823,6 +823,12 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	prepareTagsFA := make([]mdlinproto.Tag, batchSize)
 	cmdIdsFA := make([]int32, batchSize)
 
+	var pidFA int64
+        var seqnoFA int64
+	cmdsFA := make([]state.Command, 1)
+	proposalsFA := make([]*genericsmr.MDLPropose, 1)
+
+
 	found := 0
 	foundFA := 0
 	//var expectedSeqno int64
@@ -865,13 +871,13 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			//if (prop.Predecessor.SeqNo == -1) {
                           // I should also be able to delete anything in the seen map that has the same PID and smaller SeqNo
 			  //coord = int8(1)
-			  pidFA := prop.PID
-			  seqnoFA := prop.SeqNo
-			  cmdsFA := prop.Command
-			  proposalsFA := prop
+			  pidFA = prop.PID
+			  seqnoFA = prop.SeqNo
+			  cmdsFA[0] = prop.Command
+			  proposalsFA[0] = prop
                           cmdIdsFA[foundFA] = prop.CommandId
                           prepareTagsFA[foundFA] = t
-                          r.addEntryToBuffLog(cmdsFA, proposalsFA, pidFA, seqnoFA)
+                          //r.addEntryToBuffLog(cmdsFA, proposalsFA, pidFA, seqnoFA)
 			  foundFA++
                         } else {
                           /*pid[found-foundFA] = prop.PID
@@ -960,6 +966,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		////dlog*.Printf("bcasting nonnaughts")
 		//r.bcastPrepare(prepareTags, r.makeUniqueBallot(0), true)
 		//dlog*.Printf("bcasting naughts")
+		r.addEntryToBuffLog(cmdsFA[0], proposalsFA[0], pidFA, seqnoFA)
 		r.bcastPrepare(prepareTagsFA, r.makeUniqueBallot(0), true)
 	} else {
 		//NewPrintf(DEBUG_LEVEL, "    Step2. (candidate) leader broadcasting accepts!....")
@@ -971,7 +978,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		  r.sync()
                 }*/
 		//r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
-		r.processCCEntry(prepareTagsFA[0])
+		r.processCCEntry(cmdsFA, proposalsFA, pidFA, seqnoFA)
 	}
 	//dlog*.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }
@@ -1142,7 +1149,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
     OK, coord, ts := r.checkCoordination(e)
     if OK {
       if (!r.epochBatching && coord==1) {
-        r.processCCEntry(crr.AskerTag)
+        //r.processCCEntry(crr.AskerTag)
       }
       r.replyToSuccessorIfExists(crr.AskerTag, ts, coord)
     }
@@ -1273,7 +1280,7 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       if (n != 1) {
 	      panic("whattt")
       }
-      for i, k := range faccept.CmdTags {
+      /*for i, k := range faccept.CmdTags {
         if v, ok := r.bufferedLog[k]; !ok {
 	  // naught request
 	  if (faccept.CmdTags[i].PID != -1 && faccept.CmdTags[i].SeqNo != -1) {
@@ -1291,7 +1298,7 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
           //bi[i] = 0
           delete(r.bufferedLog, k)
         }
-      }
+      }*/
       r.addEntryToOrderedLog(faccept.Instance, b, nil, ACCEPTED, -1, -1) //TODO For now we're not replicating predecessors or pids/seqnos.. this wouldn't work in event of failover
       fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, faccept.CmdTags[0].PID, faccept.CommandId}
     }
@@ -1426,7 +1433,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 				r.bcastAccept(b, cmds, pids, seqnos, e, cmdIds)
 			} else {
 				//dlog*.Printf("here??, inst = %v", inst)
-				r.processCCEntry(preply.Instance[0])
+				//r.processCCEntry(preply.Instance[0])
 			}
 		}
 	} else {
@@ -1479,7 +1486,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
       OK, coord, ts := r.checkCoordination(inst)
       if OK {
         if (!r.epochBatching && coord==1) {
-          r.processCCEntry(areply.IdTag[0])
+          //r.processCCEntry(areply.IdTag[0])
         }
         r.replyToSuccessorIfExists(areply.IdTag[i], ts, coord)
       }

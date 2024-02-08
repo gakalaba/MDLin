@@ -1,7 +1,7 @@
 package paxos
 
 import (
-	//"dlog"
+	"dlog"
 	"encoding/binary"
 	"fastrpc"
 	"genericsmr"
@@ -111,6 +111,34 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 	r.commitShortRPC = r.RegisterRPC(new(paxosproto.CommitShort), r.commitShortChan)
 	r.prepareReplyRPC = r.RegisterRPC(new(paxosproto.PrepareReply), r.prepareReplyChan)
 	r.acceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.acceptReplyChan)
+	MM := make(map[int]int)
+	AA := make([]int, 5000)
+	i := 0
+	for i < 5000 {
+		MM[i] = i
+		AA[i] = i
+		i++
+	}
+	var x int
+	x = 0
+	x++
+	i = 0
+	a := time.Now().UnixNano()
+	for i < 5000 {
+		x = AA[i]
+		i++
+	}
+	b := time.Now().UnixNano()
+
+	x = 0
+	i = 0
+	aa := time.Now().UnixNano()
+	for i < 5000 {
+		x = MM[i]
+		i++
+	}
+	bb := time.Now().UnixNano()
+	dlog.Printf("The array indexing took %v --> %v time and the MAP indexing took %v --> %v time\n", a, b, aa, bb)
 	go r.run(masterAddr, masterPort)
 
 	//dlog.Printf("GO PMAPRICOS %v\n", runtime.GOMAXPROCS(0))
