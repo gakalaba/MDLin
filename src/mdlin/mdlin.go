@@ -963,13 +963,13 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		r.bcastPrepare(prepareTagsFA, r.makeUniqueBallot(0), true)
 	} else {
 		//NewPrintf(DEBUG_LEVEL, "    Step2. (candidate) leader broadcasting accepts!....")
-		var e *Instance = nil
+		/*var e *Instance = nil
 		if (len(prepareTagsFA) > 0) {
                   e = r.bufferedLog[prepareTagsFA[0]]
 		  r.recordInstanceMetadata(e)
                   r.recordCommands(e.cmds)
 		  r.sync()
-                }
+                }*/
 		//r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
 		r.processCCEntry(prepareTagsFA[0])
 	}
@@ -1178,8 +1178,8 @@ func (r *Replica) readyToCommit(instance int32) {
 	inst := r.instanceSpace[instance]
 	inst.status = COMMITTED
 
-	r.recordInstanceMetadata(inst)
-	r.sync() //is this necessary?
+	/*r.recordInstanceMetadata(inst)
+	r.sync() //is this necessary?*/
 
 	r.updateCommittedUpTo()
 

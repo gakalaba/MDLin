@@ -492,9 +492,9 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 			PREPARED,
 			&LeaderBookkeeping{proposals, 0, 0, 0, 0}}
 
-		r.recordInstanceMetadata(r.instanceSpace[instNo])
+		/*r.recordInstanceMetadata(r.instanceSpace[instNo])
 		r.recordCommands(cmds)
-		r.sync()
+		r.sync()*/
 
 		r.bcastAccept(instNo, r.defaultBallot, cmds)
 		//dlog.Printf("Fast round for instance %d\n", instNo)
@@ -717,8 +717,8 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 				}
 			}*/
 
-			r.recordInstanceMetadata(r.instanceSpace[areply.Instance])
-			r.sync() //is this necessary?
+			//r.recordInstanceMetadata(r.instanceSpace[areply.Instance])
+			//r.sync() //is this necessary?
 
 			r.updateCommittedUpTo()
 
