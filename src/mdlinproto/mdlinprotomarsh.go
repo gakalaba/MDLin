@@ -956,7 +956,7 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 
 	// PID array
 	var tmp64 int64
-  bs = b[:]
+  /*bs = b[:]
   alen1 = int64(len(t.PIDs))
   if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
     wire.Write(b[0:wlen])
@@ -993,11 +993,11 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 	  bs[6] = byte(tmp64 >> 48)
 	  bs[7] = byte(tmp64 >> 56)
 	  wire.Write(bs)
-  }
+  }*/
 
 
 	// Expected Sequence Numbers Map
-	bs = b[:]
+	/*bs = b[:]
 	alen1 = int64(len(t.ExpectedSeqs)) * 2 // Since we're entering (k,v) pairs
 	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
 		wire.Write(b[0:wlen])
@@ -1027,7 +1027,7 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 		bs[6] = byte(tmp64 >> 48)
 		bs[7] = byte(tmp64 >> 56)
 		wire.Write(bs)
-	}
+	}*/
 
   // EpochSize
   bs = b[:]
@@ -1087,7 +1087,7 @@ func (t *FinalAccept) Unmarshal(rr io.Reader) error {
 	}
 
 	// PIDs
-  alen1, err = binary.ReadVarint(wire)
+  /*alen1, err = binary.ReadVarint(wire)
   if err != nil {
     return err
   }
@@ -1112,10 +1112,10 @@ func (t *FinalAccept) Unmarshal(rr io.Reader) error {
 		  return err
 	  }
 	  t.SeqNos[i] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-  }
+  }*/
 
 	// ExpectedSeqs Map
-	alen1, err = binary.ReadVarint(wire)
+	/*alen1, err = binary.ReadVarint(wire)
 	if err != nil {
 		return err
 	}
@@ -1136,7 +1136,7 @@ func (t *FinalAccept) Unmarshal(rr io.Reader) error {
 		v = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
 
 		t.ExpectedSeqs[k] = v
-	}
+	}*/
 
   // EpochSize
   alen1, err = binary.ReadVarint(wire)

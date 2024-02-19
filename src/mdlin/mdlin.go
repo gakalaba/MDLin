@@ -645,8 +645,8 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cm
 	fpa.CommandId = cmdID
 	fpa.CmdTags = cmdids
 	fpa.Command = command
-	fpa.PIDs = pids
-	fpa.SeqNos = seqnos
+	//fpa.PIDs = pids
+	//fpa.SeqNos = seqnos
 	// Make a copy of the nextSeqNo map
 	//expectedSeqs := make(map[int64]int64)
 	//copyMap(expectedSeqs, r.nextSeqNo)
@@ -656,16 +656,16 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cm
   // sending the epochs.. which it needs to do because they are
   // updated values from what the replicas have since the entries
   // changed them once they got coordinated!
-  n := len(pids)
+  /*n := len(pids)
   fpa.ExpectedSeqs = make(map[int64]int64, n)
   for i := 0; i < n; i++ {
 	  fpa.ExpectedSeqs[pids[i]] = seqnos[i]
-  }
+  }*/
   fpa.EpochSize = es
 	args := &fpa
 
   //NewPrintf(LEVELALL, "Broadcasting accept with message %v", fpa)
-	n = r.N - 1
+  n := r.N - 1
 	if r.Thrifty {
 		n = r.N >> 1 //n = n//2
 	}
@@ -715,7 +715,7 @@ func (r *Replica) bcastAccept(ballot int32, command []state.Command, pids []int6
   n := len(pids)
   pa.ExpectedSeqs = make(map[int64]int64, n)
   for i := 0; i < n; i++ {
-          fpa.ExpectedSeqs[pids[i]] = seqnos[i]
+          pa.ExpectedSeqs[pids[i]] = seqnos[i]
   }
   pa.Epoch = es
 	args := &pa
@@ -824,13 +824,13 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	}
 	dlog.Printf("batchsize = %v\n", batchSize)
 
-	cmds := make([]state.Command, batchSize)
+	/*cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.MDLPropose, batchSize)
 	pid := make([]int64, batchSize)
 	seqno := make([]int64, batchSize)
 	prepareTags := make([]mdlinproto.Tag, batchSize)
 	cmdIds := make([]int32, batchSize)
-
+*/
 	cmdsFA := make([]state.Command, batchSize)
 	proposalsFA := make([]*genericsmr.MDLPropose, batchSize)
 	pidFA := make([]int64, batchSize)
@@ -873,10 +873,10 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			var coord int8 = -1
 			t := mdlinproto.Tag{K: prop.Command.K, PID: prop.PID, SeqNo: prop.SeqNo}
                         // Coordination responses that arrived before we did
-			if v, ok2 := r.outstandingCRR[t]; ok2 {
+			/*if v, ok2 := r.outstandingCRR[t]; ok2 {
 				coord = int8(v.OK)
 				delete(r.outstandingCRR, t)
-			}
+			}*/
 			dlog.Printf("t = %v, coord = %v, naught = %v\n", t, coord, prop.Predecessor.SeqNo == -1)
 			if (prop.Predecessor.SeqNo == -1) {
                           // I should also be able to delete anything in the seen map that has the same PID and smaller SeqNo
@@ -890,14 +890,15 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
                           r.addEntryToBuffLog(cmdsFA[foundFA], proposalsFA[foundFA], pidFA[foundFA], seqnoFA[foundFA], coord, nil, r.epoch)
 			  foundFA++
                         } else {
-                          pid[found-foundFA] = prop.PID
+                          /*pid[found-foundFA] = prop.PID
 			  seqno[found-foundFA] = prop.SeqNo
 			  cmds[found-foundFA] = prop.Command
 			  proposals[found-foundFA] = prop
 			  cmdIds[found-foundFA] = prop.CommandId
 			  prepareTags[found-foundFA] = t
 			  r.addEntryToBuffLog(cmds[found-foundFA], proposals[found-foundFA], pid[found-foundFA], seqno[found-foundFA], coord, &prop.Predecessor, r.epoch)
-			}
+			*/
+		  	}
 			r.nextSeqNo[prop.PID]++
 			found++
 
@@ -958,7 +959,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	r.noProposalsReady = false
 
 	// Resize all the arrays to hold the actual amount we found
-	prepareTagsFA = append([]mdlinproto.Tag(nil), prepareTagsFA[:foundFA]...)
+	/*prepareTagsFA = append([]mdlinproto.Tag(nil), prepareTagsFA[:foundFA]...)
 	cmdsFA = append([]state.Command(nil), cmdsFA[:foundFA]...)
 	pidFA = append([]int64(nil), pidFA[:foundFA]...)
 	seqnoFA = append([]int64(nil), seqnoFA[:foundFA]...)
@@ -968,12 +969,12 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	cmds = append([]state.Command(nil), cmds[:found-foundFA]...)
 	pid = append([]int64(nil), pid[:found-foundFA]...)
 	seqno = append([]int64(nil), seqno[:found-foundFA]...)
-	cmdIds = append([]int32(nil), cmdIds[:found-foundFA]...)
+	cmdIds = append([]int32(nil), cmdIds[:found-foundFA]...)*/
 	//dlog.Printf("ended up finding %d entries for this batch, %d of which WERE naught ones", found)
 	//NewPrintf(LEVEL0, "handlePropose: CurrInst Pushed back entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
 	if r.defaultBallot == -1 {
 		dlog.Printf("bcasting nonnaughts")
-		r.bcastPrepare(prepareTags, r.makeUniqueBallot(0), true)
+		//r.bcastPrepare(prepareTags, r.makeUniqueBallot(0), true)
 		dlog.Printf("bcasting naughts")
 		r.bcastPrepare(prepareTagsFA, r.makeUniqueBallot(0), true)
 	} else {
@@ -987,7 +988,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
                   r.recordCommands(cmdRecord)
 		  r.sync()
                 }
-		r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
+		//r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
 		r.processCCEntry(e)
 	}
 	dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
@@ -1282,11 +1283,11 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       if r.instanceSpace[faccept.Instance].status != COMMITTED {
         r.instanceSpace[faccept.Instance].status = ACCEPTED
       }
-      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, r.defaultBallot, faccept.PIDs[0], faccept.CommandId}
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, r.defaultBallot, 0, faccept.CommandId}
     }
   } else {
     if faccept.Ballot < r.defaultBallot {
-      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, r.defaultBallot, faccept.PIDs[0], faccept.CommandId}
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, r.defaultBallot, 0, faccept.CommandId}
     } else {
       n := len(faccept.CmdTags)
       b := make([]state.Command, n)
@@ -1294,7 +1295,7 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       result := true
       for i, k := range faccept.CmdTags {
         if v, ok := r.bufferedLog[k]; !ok {
-	  if (faccept.PIDs[i] != -1 && faccept.SeqNos[i] != -1) {
+	  if (faccept.CmdTags[i].PID != -1 && faccept.CmdTags[i].SeqNo != -1) {
 		  //dlog.Printf("Expected Map: %v\n", faccept.ExpectedSeqs)
 		  b[i] = faccept.Command[i]
 		  bi[i] = faccept.EpochSize[i]
@@ -1311,10 +1312,10 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       }
       if result {
         r.addEntryToOrderedLog(faccept.Instance, b, bi, nil, ACCEPTED, nil, nil, nil) //TODO For now we're not replicating predecessors or pids/seqnos.. this wouldn't work in event of failover
-        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, faccept.PIDs[0], faccept.CommandId}
+        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, 0, faccept.CommandId}
       } else {
         panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
-        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, faccept.Ballot, faccept.PIDs[0], faccept.CommandId}
+        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, faccept.Ballot, 0, faccept.CommandId}
       }
     }
   }
@@ -1325,7 +1326,7 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
 		r.recordCommands(r.instanceSpace[faccept.Instance].cmds)
 		r.sync()
 		// If we are to accep the Proposal from the leader, we also need to bump up our nextSeqNo
-		copyMap(r.nextSeqNo, faccept.ExpectedSeqs)
+		//copyMap(r.nextSeqNo, faccept.ExpectedSeqs)
 	}
 
 	r.replyFinalAccept(faccept.LeaderId, fareply)
@@ -1525,7 +1526,7 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
     inst.lb.acceptOKs++
     if inst.lb.acceptOKs+1 > r.N>>1 {
       r.readyToCommit(fareply.Instance)
-      /*t := mdlinproto.Tag{K: inst.cmds[0].K, PID: inst.pid, SeqNo: inst.seqno}
+      t := mdlinproto.Tag{K: inst.cmds[0].K, PID: inst.pid, SeqNo: inst.seqno}
       _, in := r.seen[t]
       _, crin := r.outstandingCR[t]
       // ASSERT
@@ -1535,7 +1536,6 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
       dlog.Printf("handleFinalAccept on %v calling reply to successor", t)
       r.replyToSuccessorIfExists(t, inst.epoch[0], inst.lb.coordinated)
       dlog.Printf("This Command %v got FINAL accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
-    */
     }
   } else {
     // TODO: there is probably another active leader
@@ -1566,7 +1566,7 @@ func (r *Replica) executeCommands() {
 					// they will get executed in sorted order.
 					// This maintains MDL
 					val := inst.cmds[j].Execute(r.State)
-					if inst.lb.clientProposals != nil {
+					if inst.lb != nil && inst.lb.clientProposals != nil {
 						propreply := &mdlinproto.ProposeReply{
 							TRUE,
 							inst.lb.clientProposals[j].CommandId,
