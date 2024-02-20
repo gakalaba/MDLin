@@ -50,9 +50,7 @@ type Accept struct {
 	LeaderId     int32
 	Ballot       int32
 	Command      []state.Command
-  PIDs         []int64
-	SeqNos       []int64
-	ExpectedSeqs map[int64]int64
+	CmdTags      []Tag
   Epoch        int64
   CommandId    []int32
 }

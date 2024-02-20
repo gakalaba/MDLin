@@ -383,9 +383,6 @@ func (t *Accept) Marshal(wire io.Writer) {
 	// LeaderId       int32
 	// Ballot         int32
 	// Command        []state.Command
-	// PIDs           []int64
-	// SeqNos         []int64
-  // ExpectedSeqs   map[int64]int64
 	// Epoch          int64
   var b [12]byte
 	var bs []byte
@@ -413,83 +410,9 @@ func (t *Accept) Marshal(wire io.Writer) {
 		t.Command[i].Marshal(wire)
 	}
 
-	// PID array
-	var tmp64 int64
-  bs = b[:]
-  alen1 = int64(len(t.PIDs))
-  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
-    wire.Write(b[0:wlen])
-  }
-  for i := int64(0); i < alen1; i++ {
-	  bs = b[:8]
-	  tmp64 = t.PIDs[i]
-	  bs[0] = byte(tmp64)
-	  bs[1] = byte(tmp64 >> 8)
-	  bs[2] = byte(tmp64 >> 16)
-	  bs[3] = byte(tmp64 >> 24)
-	  bs[4] = byte(tmp64 >> 32)
-	  bs[5] = byte(tmp64 >> 40)
-	  bs[6] = byte(tmp64 >> 48)
-	  bs[7] = byte(tmp64 >> 56)
-	  wire.Write(bs)
-  }
-
-	// SeqNo array
-  bs = b[:]
-  alen1 = int64(len(t.SeqNos))
-  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
-    wire.Write(b[0:wlen])
-  }
-  for i := int64(0); i < alen1; i++ {
-	  bs = b[:8]
-	  tmp64 = t.SeqNos[i]
-	  bs[0] = byte(tmp64)
-	  bs[1] = byte(tmp64 >> 8)
-	  bs[2] = byte(tmp64 >> 16)
-	  bs[3] = byte(tmp64 >> 24)
-	  bs[4] = byte(tmp64 >> 32)
-	  bs[5] = byte(tmp64 >> 40)
-	  bs[6] = byte(tmp64 >> 48)
-	  bs[7] = byte(tmp64 >> 56)
-	  wire.Write(bs)
-  }
-
-	// Expected Sequence Numbers Map
-	bs = b[:]
-	alen1 = int64(len(t.ExpectedSeqs)) * 2 // Since we're entering (k,v) pairs
-	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
-		wire.Write(b[0:wlen])
-	}
-	for k, v := range t.ExpectedSeqs {
-		// Let's just interleave (k,v) pairs as separate bytes
-		bs = b[:8]
-		tmp64 = k
-		bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
-
-		bs = b[:8]
-		tmp64 = v
-		bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
-	}
-
   // Epoch
   bs = b[:8]
-  tmp64 = t.Epoch
+  tmp64 := t.Epoch
   bs[0] = byte(tmp64)
 	bs[1] = byte(tmp64 >> 8)
 	bs[2] = byte(tmp64 >> 16)
@@ -540,57 +463,6 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
 	t.Command = make([]state.Command, alen1)
 	for i := int64(0); i < alen1; i++ {
 		t.Command[i].Unmarshal(wire)
-	}
-
-	// PIDs
-  alen1, err = binary.ReadVarint(wire)
-  if err != nil {
-    return err
-  }
-  t.PIDs = make([]int64, alen1)
-  for i := int64(0); i < alen1; i++ {
-	  bs = b[:8]
-	  if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-		  return err
-	  }
-	  t.PIDs[i] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-  }
-
-	// SeqNos
-  alen1, err = binary.ReadVarint(wire)
-  if err != nil {
-    return err
-  }
-  t.SeqNos = make([]int64, alen1)
-  for i := int64(0); i < alen1; i++ {
-	  bs = b[:8]
-	  if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-		  return err
-	  }
-	  t.SeqNos[i] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-  }
-	// ExpectedSeqs Map
-	alen1, err = binary.ReadVarint(wire)
-	if err != nil {
-		return err
-	}
-	t.ExpectedSeqs = make(map[int64]int64, alen1/2)
-	var k int64
-	var v int64
-	for i := int64(0); i < alen1; i += 2 {
-		bs = b[:8]
-		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-			return err
-		}
-		k = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-		bs = b[:8]
-		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-			return err
-		}
-		v = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-		t.ExpectedSeqs[k] = v
 	}
 
   // Epoch

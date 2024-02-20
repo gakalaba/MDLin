@@ -669,7 +669,7 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cm
 }
 var pa mdlinproto.Accept
 
-func (r *Replica) bcastAccept(ballot int32, command []state.Command, pids []int64, seqnos []int64, es int64, removethis []int32) {
+func (r *Replica) bcastAccept(ballot int32, command []state.Command, cmdTags []mdlinproto.Tag , es int64, removethis []int32) {
 	defer func() {
 		if err := recover(); err != nil {
 			//NewPrintf(LEVEL0, "Accept bcast failed: %v", err)
@@ -688,24 +688,13 @@ func (r *Replica) bcastAccept(ballot int32, command []state.Command, pids []int6
 	pa.LeaderId = r.Id
 	pa.Ballot = ballot
 	pa.Command = command
-	pa.PIDs = pids
-	pa.SeqNos = seqnos
 	pa.CommandId = removethis
-	// Make a copy of the nextSeqNo map
-	//expectedSeqs := make(map[int64]int64)
-	//copyMap(expectedSeqs, r.nextSeqNo)
-  //pa.ExpectedSeqs = expectedMap
-  //TODO what other maps..?
-  n := len(pids)
-  pa.ExpectedSeqs = make(map[int64]int64, n)
-  for i := 0; i < n; i++ {
-          pa.ExpectedSeqs[pids[i]] = seqnos[i]
-  }
+	pa.CmdTags = cmdTags
   pa.Epoch = es
 	args := &pa
 
   //NewPrintf(LEVELALL, "Broadcasting accept with message %v", pa)
-	n = r.N - 1
+  n := r.N - 1
 	if r.Thrifty {
 		n = r.N >> 1 //n = n//2
 	}
@@ -972,7 +961,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
                   r.recordCommands(cmdRecord)
 		  r.sync()
                 }
-		//r.bcastAccept(r.defaultBallot, cmds, pid, seqno, r.epoch, cmdIds)
+		//r.bcastAccept(r.defaultBallot, cmds, prepareTags, r.epoch, cmdIds)
 		r.processCCEntry(e)
 	}
 	dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
@@ -1226,17 +1215,15 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
     areply = &mdlinproto.AcceptReply{FALSE, r.defaultBallot, nil}
   } else {
     // could add predecessor Req to Accept message type so that new elected leader can issue coordReq!
-    t := make([]mdlinproto.Tag, len(accept.Command))
     for i := 0; i < len(accept.Command); i++ {
-      t[i] = mdlinproto.Tag{K: accept.Command[i].K, PID: accept.PIDs[i], SeqNo: accept.SeqNos[i]}
-      r.addEntryToBuffLog(accept.Command[i], nil, accept.PIDs[i], accept.SeqNos[i], -1, nil, accept.Epoch)
+      r.addEntryToBuffLog(accept.Command[i], nil, accept.CmdTags[i].PID, accept.CmdTags[i].SeqNo, -1, nil, accept.Epoch)
     }
-    areply = &mdlinproto.AcceptReply{TRUE, r.defaultBallot, t}
+    areply = &mdlinproto.AcceptReply{TRUE, r.defaultBallot, accept.CmdTags}
   }
 
   if areply.OK == TRUE {
     //NewPrintf(LEVEL0, "Replica %v added this request to buffLog", r.Id)
-    copyMap(r.nextSeqNo, accept.ExpectedSeqs)
+    //copyMap(r.nextSeqNo, accept.ExpectedSeqs)
   }
 	r.replyAccept(accept.LeaderId, areply)
 }
@@ -1428,7 +1415,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 				seqnos = append([]int64(nil), seqnos[:1]...)
 				cmdIds = append([]int32(nil), cmdIds[:1]...)
 				dlog.Printf("here.... of")
-				r.bcastAccept(b, cmds, pids, seqnos, e, cmdIds)
+				r.bcastAccept(b, cmds, preply.Instance, e, cmdIds)
 			} else {
 				dlog.Printf("here??, inst = %v", inst)
 				r.processCCEntry(inst)
