@@ -92,10 +92,9 @@ type Commit struct {
 	Instance  int32
 	Ballot    int32
 	Command   []state.Command
-	PIDs      int64
-	SeqNos      int64
+	CmdTags   []Tag
 	Status    uint8
-  EpochSize []int64
+  EpochSize int64
 }
 
 type CommitShort struct {

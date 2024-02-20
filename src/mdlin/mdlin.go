@@ -723,10 +723,8 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 	pc.Instance = instance
 	pc.Ballot = ballot
 	pc.Command = command
-	pc.PIDs = pids
-	pc.SeqNos = seqnos
 	pc.Status = uint8(status)
-  pc.EpochSize = es
+  pc.EpochSize = es[0]
 	args := &pc
 	pcs.LeaderId = r.Id
 	pcs.Instance = instance
@@ -1285,13 +1283,15 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
 func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
 	inst := r.instanceSpace[commit.Instance]
 
+	es := make([]int64, 1)
+	es[0] = commit.EpochSize
 	if inst == nil {
-    r.addEntryToOrderedLog(commit.Instance, commit.Command, commit.EpochSize, nil, COMMITTED, nil, nil, nil)
+    r.addEntryToOrderedLog(commit.Instance, commit.Command, es, nil, COMMITTED, nil, nil, nil)
 	} else {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
-    r.instanceSpace[commit.Instance].epoch = commit.EpochSize[0]
+    r.instanceSpace[commit.Instance].epoch = commit.EpochSize
 		if inst.lb != nil && inst.lb.clientProposals != nil {
 			for i := 0; i < len(inst.lb.clientProposals); i++ {
 				r.MDLProposeChan <- inst.lb.clientProposals[i]

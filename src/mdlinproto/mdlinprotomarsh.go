@@ -990,47 +990,24 @@ func (t *Commit) Marshal(wire io.Writer) {
 	for i := int64(0); i < alen1; i++ {
 		t.Command[i].Marshal(wire)
 	}
-	// PID array
-	var tmp64 int64
-  bs = b[:8]
-	tmp64 = t.PIDs
-	bs[0] = byte(tmp64)
-	bs[1] = byte(tmp64 >> 8)
-	bs[2] = byte(tmp64 >> 16)
-	bs[3] = byte(tmp64 >> 24)
-	bs[4] = byte(tmp64 >> 32)
-	bs[5] = byte(tmp64 >> 40)
-	bs[6] = byte(tmp64 >> 48)
-	bs[7] = byte(tmp64 >> 56)
-	wire.Write(bs)
 
-	// SeqNo array
-	bs = b[:8]
-	tmp64 = t.SeqNos
-	bs[0] = byte(tmp64)
-	bs[1] = byte(tmp64 >> 8)
-	bs[2] = byte(tmp64 >> 16)
-	bs[3] = byte(tmp64 >> 24)
-	bs[4] = byte(tmp64 >> 32)
-	bs[5] = byte(tmp64 >> 40)
-	bs[6] = byte(tmp64 >> 48)
-	bs[7] = byte(tmp64 >> 56)
-	wire.Write(bs)
-
+  // CmdTags
+  bs = b[:]
+  alen1 = int64(len(t.CmdTags))
+  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
+    wire.Write(b[0:wlen])
+  }
+  for i := int64(0); i < alen1; i++ {
+    t.CmdTags[i].Marshal(wire)
+  }
   // Status
   bs = b[:1]
   bs[0] = byte(t.Status)
   wire.Write(bs)
 
   // EpochSize
-  bs = b[:]
-  alen1 = int64(len(t.EpochSize))
-  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
-    wire.Write(b[0:wlen])
-  }
-  for i := int64(0); i < alen1; i++ {
     bs = b[:8]
-    tmp64 = t.EpochSize[i]
+    tmp64 := t.EpochSize
     bs[0] = byte(tmp64)
     bs[1] = byte(tmp64 >> 8)
     bs[2] = byte(tmp64 >> 16)
@@ -1040,8 +1017,6 @@ func (t *Commit) Marshal(wire io.Writer) {
     bs[6] = byte(tmp64 >> 48)
     bs[7] = byte(tmp64 >> 56)
     wire.Write(bs)
-  }
-
 }
 
 func (t *Commit) Unmarshal(rr io.Reader) error {
@@ -1067,37 +1042,24 @@ func (t *Commit) Unmarshal(rr io.Reader) error {
 	for i := int64(0); i < alen1; i++ {
 		t.Command[i].Unmarshal(wire)
 	}
-
-	//PIDs
-	bs = b[:8]
-	if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-		return err
-	}
-	t.PIDs = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-	//SeqNos
-	bs = b[:9]
-	if _, err := io.ReadAtLeast(wire, bs, 9); err != nil {
-		return err
-	}
-	t.SeqNos = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
-  // Status
-  t.Status = uint8(uint8(bs[8]) << 64)
-
-  // EpochSize
+// CmdTags
   alen1, err = binary.ReadVarint(wire)
   if err != nil {
     return err
   }
-  t.EpochSize = make([]int64, alen1)
+  t.CmdTags = make([]Tag, alen1)
   for i := int64(0); i < alen1; i++ {
+    t.CmdTags[i].Unmarshal(wire)
+  }
+
+  // Status
+  t.Status = uint8(uint8(bs[8]) << 64)
+
     bs = b[:8]
     if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
       return err
     }
-    t.EpochSize[i] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-  }
+    t.EpochSize = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
 
   return nil
 }
