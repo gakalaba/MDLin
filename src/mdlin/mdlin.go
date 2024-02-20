@@ -1031,9 +1031,9 @@ func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, epochS
 }
 
 // Helper to copy contents of map2 to map1
-func copyMap(map1 map[int64]int64, map2 map[int64]int64) {
-	for k, v := range map2 {
-		map1[k] = v
+func copyMap(map1 map[int64]int64, map2 []mdlinproto.Tag) {
+	for _, t := range map2 {
+		map1[t.PID] = t.SeqNo+1
 	}
 }
 
@@ -1223,7 +1223,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
 
   if areply.OK == TRUE {
     //NewPrintf(LEVEL0, "Replica %v added this request to buffLog", r.Id)
-    //copyMap(r.nextSeqNo, accept.ExpectedSeqs)
+    copyMap(r.nextSeqNo, accept.CmdTags)
   }
 	r.replyAccept(accept.LeaderId, areply)
 }
@@ -1296,7 +1296,7 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
 		r.recordCommands(r.instanceSpace[faccept.Instance].cmds)
 		r.sync()
 		// If we are to accep the Proposal from the leader, we also need to bump up our nextSeqNo
-		//copyMap(r.nextSeqNo, faccept.ExpectedSeqs)
+		copyMap(r.nextSeqNo, faccept.CmdTags)
 	}
 
 	r.replyFinalAccept(faccept.LeaderId, fareply)
