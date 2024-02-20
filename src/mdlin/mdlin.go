@@ -645,22 +645,6 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cm
 	fpa.CommandId = cmdID
 	fpa.CmdTags = cmdids
 	fpa.Command = command
-	//fpa.PIDs = pids
-	//fpa.SeqNos = seqnos
-	// Make a copy of the nextSeqNo map
-	//expectedSeqs := make(map[int64]int64)
-	//copyMap(expectedSeqs, r.nextSeqNo)
-  //pa.ExpectedSeqs = expectedMap
-  //TODO what other maps..?
-  //TODO this is broken cuz rn the leader isn't (but should)
-  // sending the epochs.. which it needs to do because they are
-  // updated values from what the replicas have since the entries
-  // changed them once they got coordinated!
-  /*n := len(pids)
-  fpa.ExpectedSeqs = make(map[int64]int64, n)
-  for i := 0; i < n; i++ {
-	  fpa.ExpectedSeqs[pids[i]] = seqnos[i]
-  }*/
   fpa.EpochSize = es
 	args := &fpa
 
@@ -1264,11 +1248,11 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
   if inst != nil {
     panic("No failures happening yet, so we shouldn't be hitting this case")
     if inst.ballot > faccept.Ballot {
-      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, inst.ballot, -1, -1}
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, inst.ballot}
     } else if inst.ballot < faccept.Ballot {
       inst.ballot = faccept.Ballot
       inst.status = ACCEPTED
-      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, -1, -1}
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot}
       if inst.lb != nil && inst.lb.clientProposals != nil {
         //TODO: is this correct?
         // try the proposal in a different instance
@@ -1283,11 +1267,11 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       if r.instanceSpace[faccept.Instance].status != COMMITTED {
         r.instanceSpace[faccept.Instance].status = ACCEPTED
       }
-      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, r.defaultBallot, 0, faccept.CommandId}
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, r.defaultBallot}
     }
   } else {
     if faccept.Ballot < r.defaultBallot {
-      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, r.defaultBallot, 0, faccept.CommandId}
+      fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, r.defaultBallot}
     } else {
       n := len(faccept.CmdTags)
       b := make([]state.Command, n)
@@ -1296,7 +1280,6 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       for i, k := range faccept.CmdTags {
         if v, ok := r.bufferedLog[k]; !ok {
 	  if (faccept.CmdTags[i].PID != -1 && faccept.CmdTags[i].SeqNo != -1) {
-		  //dlog.Printf("Expected Map: %v\n", faccept.ExpectedSeqs)
 		  b[i] = faccept.Command[i]
 		  bi[i] = faccept.EpochSize[i]
 	  } else {
@@ -1312,10 +1295,10 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       }
       if result {
         r.addEntryToOrderedLog(faccept.Instance, b, bi, nil, ACCEPTED, nil, nil, nil) //TODO For now we're not replicating predecessors or pids/seqnos.. this wouldn't work in event of failover
-        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot, 0, faccept.CommandId}
+        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot}
       } else {
         panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
-        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, faccept.Ballot, 0, faccept.CommandId}
+        fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, faccept.Ballot}
       }
     }
   }

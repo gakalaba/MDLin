@@ -10,7 +10,6 @@ import (
 	"gryff"
 	"log"
 	"mdlin"
-	"ssmdlin"
 	"mencius"
 	"net/rpc"
 	"os"
@@ -102,7 +101,7 @@ func main() {
 	if *doMDLin {
 		if (*doSSAware) {
 			log.Println("Starting SS-MD Linearizability replica...")
-			rep = ssmdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *statsFile, *numShards)
+			//rep = ssmdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *statsFile, *numShards)
 		} else {
 			log.Println("Starting MD Linearizability replica...")
 			rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *epBatch, *statsFile, *numShards, *epochLength, *fanout)

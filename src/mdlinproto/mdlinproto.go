@@ -70,9 +70,6 @@ type FinalAccept struct {
   CommandId int32
   CmdTags   []Tag
   Command []state.Command
-  //PIDs []int64
-  //SeqNos []int64
-  //ExpectedSeqs  map[int64]int64
   EpochSize []int64
 }
 
@@ -80,8 +77,6 @@ type FinalAcceptReply struct {
   Instance  int32
   OK        uint8
   Ballot    int32
-  PID int64
-  CommandId int32
 }
 
 type OldAccept struct {
