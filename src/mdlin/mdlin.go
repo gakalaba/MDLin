@@ -527,7 +527,7 @@ func (r *Replica) processEpoch() {
   r.crtInstance++
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
-  r.bcastFinalAccept(instNo, r.defaultBallot, -1, cmdids, b, ps, sn, bi)
+  r.bcastFinalAccept(instNo, r.defaultBallot, -1, cmdids, b, bi)
 
   r.epoch++
   r.totalEpochs++
@@ -581,7 +581,7 @@ func (r *Replica) processCCEntry(p *Instance) {
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
   dlog.Printf("calling bcastFinalAccept, seen SIZE = %v, bufferedLog = %v\n", len(r.seen), r.bufferedLog)
-  r.bcastFinalAccept(instNo, r.defaultBallot, bp[0].CommandId, cmdids, b, pp, sn, bi)
+  r.bcastFinalAccept(instNo, r.defaultBallot, bp[0].CommandId, cmdids, b, bi)
 }
 
 func (r *Replica) updateCommittedUpTo() {
@@ -631,7 +631,7 @@ func (r *Replica) bcastPrepare(instance []mdlinproto.Tag, ballot int32, toInfini
 
 var fpa mdlinproto.FinalAccept
 
-func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cmdids []mdlinproto.Tag, command []state.Command, pids []int64, seqnos []int64, es []int64) {
+func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cmdids []mdlinproto.Tag, command []state.Command, es []int64) {
 	defer func() {
 		if err := recover(); err != nil {
 			//NewPrintf(LEVEL0, "Accept bcast failed: %v", err)
