@@ -481,7 +481,6 @@ func (r *Replica) processEpoch() {
   cmdids := make([]mdlinproto.Tag, n)
   ps := make([]int64, n)
   sn := make([]int64, n)
-  crs := make([]*genericsmr.MDLCoordReq, n)
   j := 0
   naught_count := 0
   //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
@@ -519,7 +518,7 @@ func (r *Replica) processEpoch() {
   // increment the epoch
   // add all ordered entries to the ordered log
 
-  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, PREPARED, crs, ps, sn)
+  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi[0], bp, PREPARED)
   r.crtInstance++
   // do last paxos roundtrip with this whole batch you just added
   //NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
@@ -551,7 +550,6 @@ func (r *Replica) processCCEntry(p *Instance) {
   bp := make([]*genericsmr.MDLPropose, 1) // Client we are responding to
   pp := make([]int64, 1)
   sn := make([]int64, 1)
-  crs := make([]*genericsmr.MDLCoordReq, 1)
   cmdids := make([]mdlinproto.Tag, 1)
   j := 0
   //NewPrintf(LEVEL0, "There are %v ready entries to add!", n)
@@ -567,7 +565,7 @@ func (r *Replica) processCCEntry(p *Instance) {
   p.epoch = int64(math.Max(float64(r.epoch), float64(pred_epoch + 1)))
   r.epoch = int64(math.Max(float64(r.epoch), float64(p.epoch))) + 1
   // Add to ordered log
-  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi, bp, ACCEPTED, crs, pp, sn)
+  instNo := r.addEntryToOrderedLog(r.crtInstance, b, bi[0], bp, ACCEPTED)
   r.crtInstance++
   // Add to seen map
   if (p.lb.clientProposals[0].Timestamp == 1) {
@@ -995,14 +993,14 @@ func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MD
 }
 
 
-func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, epochSizes []int64, cPs []*genericsmr.MDLPropose, status InstanceStatus, cr []*genericsmr.MDLCoordReq, pid []int64, seqno []int64) int32 {
+func (r *Replica) addEntryToOrderedLog(index int32, cmds []state.Command, epochSizes int64, cPs []*genericsmr.MDLPropose, status InstanceStatus) int32 {
 	// Add entry to log
 	r.instanceSpace[index] = &Instance{
 		cmds,
 		r.defaultBallot,
 		status,
     &LeaderBookkeeping{cPs, 0, 0, 0, 0, int8(TRUE)}, // Need this to track acceptOKs
-    epochSizes[0]}
+    epochSizes}
   return index
 }
 
@@ -1238,28 +1236,20 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
     if faccept.Ballot < r.defaultBallot {
       fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, r.defaultBallot}
     } else {
-      n := len(faccept.CmdTags)
-      b := make([]state.Command, n)
-      bi := make([]int64, n)
       result := true
       for i, k := range faccept.CmdTags {
-        if v, ok := r.bufferedLog[k]; !ok {
-	  if (faccept.CmdTags[i].PID != -1 && faccept.CmdTags[i].SeqNo != -1) {
-		  b[i] = faccept.Command[i]
-		  bi[i] = faccept.EpochSize
-	  } else {
+        if _, ok := r.bufferedLog[k]; !ok {
+	  if (faccept.CmdTags[i].PID == -1 || faccept.CmdTags[i].SeqNo == -1) {
 		  panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
 		  result = false
 		  break
 	  }
         } else {
-          b[i] = v.cmds[0]
-          bi[i] = faccept.EpochSize
           delete(r.bufferedLog, k)
         }
       }
       if result {
-        r.addEntryToOrderedLog(faccept.Instance, b, bi, nil, ACCEPTED, nil, nil, nil) //TODO For now we're not replicating predecessors or pids/seqnos.. this wouldn't work in event of failover
+        r.addEntryToOrderedLog(faccept.Instance, faccept.Command, faccept.EpochSize, nil, ACCEPTED) //TODO For now we're not replicating predecessors or pids/seqnos.. this wouldn't work in event of failover
         fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot}
       } else {
         panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
@@ -1283,10 +1273,8 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
 func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
 	inst := r.instanceSpace[commit.Instance]
 
-	es := make([]int64, 1)
-	es[0] = commit.EpochSize
 	if inst == nil {
-    r.addEntryToOrderedLog(commit.Instance, commit.Command, es, nil, COMMITTED, nil, nil, nil)
+    r.addEntryToOrderedLog(commit.Instance, commit.Command, commit.EpochSize, nil, COMMITTED)
 	} else {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
@@ -1315,7 +1303,7 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 
 	//NewPrintf(LEVEL0, "Replica %d is getting handleCommitShort", r.Id)
 	if inst == nil {
-    r.addEntryToOrderedLog(commit.Instance, nil, nil, nil, COMMITTED, nil, nil, nil)
+    r.addEntryToOrderedLog(commit.Instance, nil, -1, nil, COMMITTED)
 	} else {
 		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
