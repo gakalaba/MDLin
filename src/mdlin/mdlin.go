@@ -852,7 +852,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
                           proposalsFA[foundFA] = prop
                           cmdIdsFA[foundFA] = prop.CommandId
                           prepareTagsFA[foundFA] = t
-                          r.addEntryToBuffLog(cmdsFA[foundFA], proposalsFA[foundFA], pidFA[foundFA], seqnoFA[foundFA], coord, nil, r.epoch)
+                          r.addEntryToBuffLog(prop.Command, prop, coord, r.epoch, prop.PID, prop.SeqNo)
 			  foundFA++
                         } else {
                           /*pid[found-foundFA] = prop.PID
@@ -959,8 +959,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }
 
-func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MDLPropose, pid int64,
-  seqno int64, coord int8, pred *mdlinproto.Tag, ep int64) *Instance {
+func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MDLPropose, coord int8, ep int64, pid int64, seqno int64) *Instance {
 
 	// Add entry to log
   //NewPrintf(LEVEL0, "addEntryToBuffLog --> Shard Leader Creating Log Entry{%s, PID: %d, SeqNo: %d, coord: %d, thisCr: %v, pred: %v, epoch: %v",
@@ -1192,7 +1191,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
   } else {
     // could add predecessor Req to Accept message type so that new elected leader can issue coordReq!
     for i := 0; i < len(accept.Command); i++ {
-      r.addEntryToBuffLog(accept.Command[i], nil, accept.CmdTags[i].PID, accept.CmdTags[i].SeqNo, -1, nil, accept.Epoch)
+      r.addEntryToBuffLog(accept.Command[i], nil, -1, accept.Epoch, accept.CmdTags[i].PID, accept.CmdTags[i].SeqNo)
     }
     areply = &mdlinproto.AcceptReply{TRUE, r.defaultBallot, accept.CmdTags}
   }
