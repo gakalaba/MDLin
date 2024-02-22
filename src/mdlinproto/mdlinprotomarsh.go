@@ -394,6 +394,15 @@ func (t *Accept) Marshal(wire io.Writer) {
 		t.Command[i].Marshal(wire)
 	}
 
+	//CmdTags
+  bs = b[:]
+  alen1 = int64(len(t.CmdTags))
+  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
+    wire.Write(b[0:wlen])
+  }
+  for i := int64(0); i < alen1; i++ {
+    t.CmdTags[i].Marshal(wire)
+  }
   // Epoch
   bs = b[:]
   alen1 = int64(len(t.Epoch))
@@ -415,7 +424,7 @@ func (t *Accept) Marshal(wire io.Writer) {
   }
 
   // CommandId
-  bs = b[:]
+  /*bs = b[:]
   alen1 = int64(len(t.CommandId))
   if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
     wire.Write(b[0:wlen])
@@ -428,7 +437,7 @@ func (t *Accept) Marshal(wire io.Writer) {
     bs[2] = byte(tmp32 >> 16)
     bs[3] = byte(tmp32 >> 24)
 	  wire.Write(bs)
-  }
+  }*/
 }
 
 func (t *Accept) Unmarshal(rr io.Reader) error {
@@ -455,7 +464,15 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
 	for i := int64(0); i < alen1; i++ {
 		t.Command[i].Unmarshal(wire)
 	}
-
+// CmdTags
+  alen1, err = binary.ReadVarint(wire)
+  if err != nil {
+    return err
+  }
+  t.CmdTags = make([]Tag, alen1)
+  for i := int64(0); i < alen1; i++ {
+    t.CmdTags[i].Unmarshal(wire)
+  }
   // Epoch
   alen1, err = binary.ReadVarint(wire)
   if err != nil {
@@ -471,7 +488,7 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
   }
 
   // CommandId
-  alen1, err = binary.ReadVarint(wire)
+  /*alen1, err = binary.ReadVarint(wire)
   if err != nil {
     return err
   }
@@ -482,7 +499,7 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
       return err
     }
     t.CommandId[i] = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-  }
+  }*/
   return nil
 }
 

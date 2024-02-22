@@ -510,7 +510,6 @@ func (r *Replica) processEpoch() {
 	    sn[j] = p.Value.(*Instance).lb.clientProposals[0].SeqNo
     }
     j++
-    //NewPrintf(LEVEL0, "ProcessEpoch: adding entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
     dlog.Printf("Ordering CommandID %v PID %v\n", p.Value.(*Instance).lb.clientProposals[0].SeqNo, p.Value.(*Instance).lb.clientProposals[0].PID)
     p = next
   }
@@ -618,7 +617,6 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cm
 	fpa.LeaderId = r.Id
 	fpa.Instance = instance
 	fpa.Ballot = ballot
-	fpa.CommandId = cmdID
 	fpa.CmdTags = cmdids
 	fpa.Command = command
   fpa.EpochSize = es
@@ -645,7 +643,7 @@ func (r *Replica) bcastFinalAccept(instance int32, ballot int32, cmdID int32, cm
 }
 var pa mdlinproto.Accept
 
-func (r *Replica) bcastAccept(ballot int32, command []state.Command, cmdTags []mdlinproto.Tag , es []int64, removethis []int32) {
+func (r *Replica) bcastAccept(ballot int32, command []state.Command, cmdTags []mdlinproto.Tag , es []int64) {
 	defer func() {
 		if err := recover(); err != nil {
 			//NewPrintf(LEVEL0, "Accept bcast failed: %v", err)
@@ -664,7 +662,6 @@ func (r *Replica) bcastAccept(ballot int32, command []state.Command, cmdTags []m
 	pa.LeaderId = r.Id
 	pa.Ballot = ballot
 	pa.Command = command
-	pa.CommandId = removethis
 	pa.CmdTags = cmdTags
   pa.Epoch = es
 	args := &pa
@@ -902,7 +899,6 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	//prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found-foundFA]...)
 	cmds = append([]state.Command(nil), cmds[:found-foundFA]...)
 	//dlog.Printf("ended up finding %d entries for this batch, %d of which WERE naught ones", found)
-	//NewPrintf(LEVEL0, "handlePropose: CurrInst Pushed back entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
 	if r.defaultBallot == -1 {
 		dlog.Printf("bcasting nonnaughts, prepareTags = %v, found = %v, foundFA = %v", prepareTags, found, foundFA)
 		if ((found-foundFA) > 0) {
@@ -925,7 +921,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
                 }
 		dlog.Printf("found = %v, foundFA = %v", found, foundFA)
 		if ((found-foundFA) > 0) {
-			r.bcastAccept(r.defaultBallot, cmds, prepareTags, eps, nil)
+			dlog.Printf("nonNaughts prepareTags = %v", prepareTags)
+			r.bcastAccept(r.defaultBallot, cmds, prepareTags, eps)
 		}
 		if (foundFA > 0) {
 			r.processCCEntry(cmdsFA, prepareTagsFA)
@@ -1167,6 +1164,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
     //t := mdlinproto.Tag{K: -1, PID: -1, SeqNo: -1}
     areply = &mdlinproto.AcceptReply{FALSE, r.defaultBallot, nil}
   } else {
+	  dlog.Printf("the accept RPC looks like this %v", accept)
     // could add predecessor Req to Accept message type so that new elected leader can issue coordReq!
     for i := 0; i < len(accept.Command); i++ {
       r.addEntryToBuffLog(accept.Command[i], nil, -1, accept.Epoch[i], accept.CmdTags[i].PID, accept.CmdTags[i].SeqNo)
@@ -1335,12 +1333,8 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 			b := inst.ballot
 			e := inst.epoch
                         naught := (inst.lb.clientProposals[0].Predecessor.PID == -1)
-			dlog.Printf("naught = %v", naught)
+			dlog.Printf("naught = %v, inst = %v", naught, inst)
 			numacks := inst.lb.prepareOKs
-			cmds := make([]state.Command, len(preply.Instance))
-			pids := make([]int64, len(preply.Instance))
-			seqnos := make([]int64, len(preply.Instance))
-			cmdIds := make([]int32, len(preply.Instance))
 
 			inst.lb.prepareOKs = numacks
 			inst.status = PREPARED
@@ -1350,17 +1344,10 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 			}
 			r.recordInstanceMetadata(inst)
 			r.sync()
-			cmds[0] = inst.cmds[0]
-			pids[0] = inst.lb.clientProposals[0].PID
-			seqnos[0] = inst.lb.clientProposals[0].SeqNo
-			cmdIds[0] = inst.lb.clientProposals[0].CommandId
 			if (!naught) {
-				cmds = append([]state.Command(nil), cmds[:1]...)
-				pids = append([]int64(nil), pids[:1]...)
-				seqnos = append([]int64(nil), seqnos[:1]...)
-				cmdIds = append([]int32(nil), cmdIds[:1]...)
-				dlog.Printf("here.... of")
-				r.bcastAccept(b, cmds, preply.Instance, e, cmdIds)
+				dlog.Printf("here.... of... the size of shit in bcastAccept is %v", len(inst.cmds))
+				dlog.Printf("preply.Instance = %v", preply.Instance)
+				r.bcastAccept(b, inst.cmds, preply.Instance, e)
 			} else {
 				dlog.Printf("here??, inst = %v", inst)
 				r.processCCEntry(inst.cmds, preply.Instance)

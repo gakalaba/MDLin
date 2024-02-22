@@ -51,7 +51,6 @@ type Accept struct {
 	Command      []state.Command
 	CmdTags      []Tag
   Epoch        []int64
-  CommandId    []int32
 }
 
 type AcceptReply struct {
@@ -64,7 +63,6 @@ type FinalAccept struct {
   LeaderId  int32
   Instance  int32
   Ballot    int32
-  CommandId int32
   CmdTags   []Tag
   Command []state.Command
   EpochSize []int64
