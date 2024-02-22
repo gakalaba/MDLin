@@ -298,14 +298,6 @@ func (t *PrepareReply) Marshal(wire io.Writer) {
 	bs[4] = byte(t.OK)
 	wire.Write(bs)
 
-	bs = b[:]
-	alen1 = int64(len(t.Command))
-	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
-		wire.Write(b[0:wlen])
-	}
-	for i := int64(0); i < alen1; i++ {
-		t.Command[i].Marshal(wire)
-	}
 }
 
 func (t *PrepareReply) Unmarshal(rr io.Reader) error {
@@ -332,14 +324,6 @@ func (t *PrepareReply) Unmarshal(rr io.Reader) error {
 	t.Ballot = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	t.OK = uint8(bs[4])
 
-  alen1, err = binary.ReadVarint(wire)
-	if err != nil {
-		return err
-	}
-	t.Command = make([]state.Command, alen1)
-	for i := int64(0); i < alen1; i++ {
-		t.Command[i].Unmarshal(wire)
-	}
 	return nil
 }
 

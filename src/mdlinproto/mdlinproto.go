@@ -43,7 +43,6 @@ type PrepareReply struct {
 	Instance []Tag
   Ballot   int32
 	OK       uint8
-	Command  []state.Command
 }
 
 type Accept struct {

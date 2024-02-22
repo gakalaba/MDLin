@@ -1144,7 +1144,7 @@ func (r *Replica) handlePrepare(prepare *mdlinproto.Prepare) {
 	if r.defaultBallot > prepare.Ballot {
     ok = FALSE
 	}
-	preply = &mdlinproto.PrepareReply{prepare.Instance, r.defaultBallot, ok, make([]state.Command, 0)}
+	preply = &mdlinproto.PrepareReply{prepare.Instance, r.defaultBallot, ok}
 	r.replyPrepare(prepare.LeaderId, preply)
 
 	if prepare.ToInfinity == TRUE && prepare.Ballot > r.defaultBallot {
@@ -1308,7 +1308,6 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 
 		if preply.Ballot > inst.lb.maxRecvBallot {
 			panic("This shouldn't be happening rn")
-			inst.cmds = preply.Command
 			inst.lb.maxRecvBallot = preply.Ballot
 			if inst.lb.clientProposals != nil {
 				// there is already a competing command for this instance,
