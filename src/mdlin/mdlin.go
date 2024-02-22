@@ -824,7 +824,9 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
                           cmdsFA[foundFA] = prop.Command
                           prepareTagsFA[foundFA] = t
 			  epsFA[foundFA] = ep
+			  dlog.Printf("adding this to log! %v, and now looks like %v", t, r.bufferedLog)
                           r.addEntryToBuffLog(prop.Command, prop, coord, ep, prop.PID, prop.SeqNo)
+			  dlog.Printf("adding this to log! %v, and now looks like %v", t, r.bufferedLog)
 			  foundFA++
                         } else {
 			  cmds[found-foundFA] = prop.Command
@@ -911,12 +913,11 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	} else {
 		//NewPrintf(DEBUG_LEVEL, "    Step2. (candidate) leader broadcasting accepts!....")
 		var e *Instance = nil
-		if (len(prepareTagsFA) > 0) {
+		if (foundFA > 0) {
                   e = r.bufferedLog[prepareTagsFA[0]]
 		  r.recordInstanceMetadata(e)
-                  cmdRecord := make([]state.Command, 1)
-                  cmdRecord[0] = e.cmds[0]
-                  r.recordCommands(cmdRecord)
+		  dlog.Printf("syncing instance %v", e)
+                  r.recordCommands(e.cmds)
 		  r.sync()
                 }
 		dlog.Printf("found = %v, foundFA = %v", found, foundFA)
