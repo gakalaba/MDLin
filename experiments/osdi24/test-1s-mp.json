@@ -85,7 +85,7 @@
   "client_write_percentage": 1000,
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
-  "client_fanout": 1,
+  "client_fanout": 2,
   "server_epoch": 500,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
@@ -191,7 +191,7 @@
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
   "server_rpc_port": 8087,
-  "src_commit_hash": "rn",
+  "src_commit_hash": "faster",
   "src_directory": "/users/akalaba/MDLin",
   "codebase_name": "mdl",
   "remote_bin_directory_nfs_enabled": false,
