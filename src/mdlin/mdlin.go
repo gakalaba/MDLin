@@ -536,11 +536,9 @@ func (r *Replica) processEpoch() {
 }
 
 // indexOL, orderedLog, bufferedLog
-func (r *Replica) processCCEntry(cmds []state.Command, tags []mdlinproto.Tag, proposals []*genericsmr.MDLPropose) {
-  // Remove from bufflog
-  if proposals == nil {
-	  proposals = r.bufferedLog[tags[0]].lb.clientProposals
-  }
+func (r *Replica) processCCEntry(cmds []state.Command, tags []mdlinproto.Tag) {
+  // Remove from bufflo
+  proposals := r.bufferedLog[tags[0]].lb.clientProposals
   delete(r.bufferedLog, tags[0])
   // Get the lamport clocks ordered
   ep := r.epoch
@@ -771,19 +769,11 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	}
 	dlog.Printf("batchsize = %v\n", batchSize)
 
-	/*cmds := make([]state.Command, batchSize)
-	proposals := make([]*genericsmr.MDLPropose, batchSize)
-	pid := make([]int64, batchSize)
-	seqno := make([]int64, batchSize)
+	cmds := make([]state.Command, batchSize)
 	prepareTags := make([]mdlinproto.Tag, batchSize)
-	cmdIds := make([]int32, batchSize)
-*/
+
 	cmdsFA := make([]state.Command, batchSize)
-	proposalsFA := make([]*genericsmr.MDLPropose, batchSize)
-	pidFA := make([]int64, batchSize)
-	seqnoFA := make([]int64, batchSize)
 	prepareTagsFA := make([]mdlinproto.Tag, batchSize)
-	cmdIdsFA := make([]int32, batchSize)
 
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
@@ -820,32 +810,23 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			var coord int8 = -1
 			t := mdlinproto.Tag{K: prop.Command.K, PID: prop.PID, SeqNo: prop.SeqNo}
                         // Coordination responses that arrived before we did
-			/*if v, ok2 := r.outstandingCRR[t]; ok2 {
+			if v, ok2 := r.outstandingCRR[t]; ok2 {
 				coord = int8(v.OK)
 				delete(r.outstandingCRR, t)
-			}*/
+			}
 			dlog.Printf("t = %v, coord = %v, naught = %v\n", t, coord, prop.Predecessor.SeqNo == -1)
 			if (prop.Predecessor.SeqNo == -1) {
                           // I should also be able to delete anything in the seen map that has the same PID and smaller SeqNo
 			  coord = int8(1)
-			  pidFA[foundFA] = prop.PID
-                          seqnoFA[foundFA] = prop.SeqNo
                           cmdsFA[foundFA] = prop.Command
-                          proposalsFA[foundFA] = prop
-                          cmdIdsFA[foundFA] = prop.CommandId
                           prepareTagsFA[foundFA] = t
                           r.addEntryToBuffLog(prop.Command, prop, coord, r.epoch, prop.PID, prop.SeqNo)
 			  foundFA++
                         } else {
-                          /*pid[found-foundFA] = prop.PID
-			  seqno[found-foundFA] = prop.SeqNo
 			  cmds[found-foundFA] = prop.Command
-			  proposals[found-foundFA] = prop
-			  cmdIds[found-foundFA] = prop.CommandId
 			  prepareTags[found-foundFA] = t
-			  r.addEntryToBuffLog(cmds[found-foundFA], proposals[found-foundFA], pid[found-foundFA], seqno[found-foundFA], coord, &prop.Predecessor, r.epoch)
-			*/
-		  	}
+			  r.addEntryToBuffLog(prop.Command, prop, coord, r.epoch, prop.PID, prop.SeqNo)
+			}
 			r.nextSeqNo[prop.PID]++
 			found++
 
@@ -906,24 +887,22 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	r.noProposalsReady = false
 
 	// Resize all the arrays to hold the actual amount we found
-	/*prepareTagsFA = append([]mdlinproto.Tag(nil), prepareTagsFA[:foundFA]...)
-	cmdsFA = append([]state.Command(nil), cmdsFA[:foundFA]...)
-	pidFA = append([]int64(nil), pidFA[:foundFA]...)
-	seqnoFA = append([]int64(nil), seqnoFA[:foundFA]...)
-	cmdIdsFA = append([]int32(nil), cmdIdsFA[:foundFA]...)
+	//prepareTagsFA = append([]mdlinproto.Tag(nil), prepareTagsFA[:foundFA]...)
+	//cmdsFA = append([]state.Command(nil), cmdsFA[:foundFA]...)
 
-	prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found-foundFA]...)
+	//prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found-foundFA]...)
 	cmds = append([]state.Command(nil), cmds[:found-foundFA]...)
-	pid = append([]int64(nil), pid[:found-foundFA]...)
-	seqno = append([]int64(nil), seqno[:found-foundFA]...)
-	cmdIds = append([]int32(nil), cmdIds[:found-foundFA]...)*/
 	//dlog.Printf("ended up finding %d entries for this batch, %d of which WERE naught ones", found)
 	//NewPrintf(LEVEL0, "handlePropose: CurrInst Pushed back entry with CommandId %v, Seqno %v", p.Value.(*Instance).lb.clientProposals[0].CommandId, p.Value.(*Instance).seqno)
 	if r.defaultBallot == -1 {
-		dlog.Printf("bcasting nonnaughts")
-		//r.bcastPrepare(prepareTags, r.makeUniqueBallot(0), true)
-		dlog.Printf("bcasting naughts")
-		r.bcastPrepare(prepareTagsFA, r.makeUniqueBallot(0), true)
+		dlog.Printf("bcasting nonnaughts, prepareTags = %v, found = %v, foundFA = %v", prepareTags, found, foundFA)
+		if ((found-foundFA) > 0) {
+			r.bcastPrepare(prepareTags, r.makeUniqueBallot(0), true)
+		}
+		dlog.Printf("bcasting naughts, prepareTagsFA = %v", prepareTagsFA)
+		if (foundFA > 0) {
+			r.bcastPrepare(prepareTagsFA, r.makeUniqueBallot(0), true)
+		}
 	} else {
 		//NewPrintf(DEBUG_LEVEL, "    Step2. (candidate) leader broadcasting accepts!....")
 		var e *Instance = nil
@@ -935,8 +914,13 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
                   r.recordCommands(cmdRecord)
 		  r.sync()
                 }
-		//r.bcastAccept(r.defaultBallot, cmds, prepareTags, r.epoch, cmdIds)
-		r.processCCEntry(cmdsFA, prepareTagsFA, proposalsFA)
+		dlog.Printf("found = %v, foundFA = %v", found, foundFA)
+		if ((found-foundFA) > 0) {
+			r.bcastAccept(r.defaultBallot, cmds, prepareTags, r.epoch, nil)
+		}
+		if (foundFA > 0) {
+			r.processCCEntry(cmdsFA, prepareTagsFA)
+		}
 	}
 	dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }
@@ -1094,7 +1078,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
       if (!r.epochBatching && coord==1) {
 	t := make([]mdlinproto.Tag, 1)
 	t[0] = crr.AskerTag
-        r.processCCEntry(e.cmds, t, nil)
+        r.processCCEntry(e.cmds, t)
       }
       r.replyToSuccessorIfExists(crr.AskerTag, ts, coord)
     }
@@ -1155,6 +1139,7 @@ func (r *Replica) handlePrepare(prepare *mdlinproto.Prepare) {
   //NewPrintf(LEVELALL, "Replica at handlePrepare with prepare.Instance == %v", prepare.Instance)
 	var preply *mdlinproto.PrepareReply
 
+	dlog.Printf("got Instance = %v", prepare.Instance)
 	ok := TRUE
 	if r.defaultBallot > prepare.Ballot {
     ok = FALSE
@@ -1306,6 +1291,7 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 	//NewPrintf(LEVELALL, "handlePrepareReply, prepare.Instance = %v", preply.Instance)
 	// Because we've grouped together naught requests and others, we gotta do this
+	dlog.Printf("inside handlePrepareReply, got prepply.Instance = %v, bufferedLog = %v", preply.Instance, r.bufferedLog)
 	inst, ok := r.bufferedLog[preply.Instance[0]]
 	if !ok {
 		panic("Got index out of bounds at leader in prepareReply")
@@ -1369,7 +1355,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 				r.bcastAccept(b, cmds, preply.Instance, e, cmdIds)
 			} else {
 				dlog.Printf("here??, inst = %v", inst)
-				r.processCCEntry(inst.cmds, preply.Instance, inst.lb.clientProposals)
+				r.processCCEntry(inst.cmds, preply.Instance)
 			}
 		}
 	} else {
@@ -1422,7 +1408,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
       OK, coord, ts := r.checkCoordination(inst)
       if OK {
         if (!r.epochBatching && coord==1) {
-          r.processCCEntry(inst.cmds, areply.IdTag, nil)
+          r.processCCEntry(inst.cmds, areply.IdTag)
         }
         r.replyToSuccessorIfExists(areply.IdTag[i], ts, coord)
       }
