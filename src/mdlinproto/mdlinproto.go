@@ -50,7 +50,7 @@ type Accept struct {
 	Ballot       int32
 	Command      []state.Command
 	CmdTags      []Tag
-  Epoch        int64
+  Epoch        []int64
   CommandId    []int32
 }
 
@@ -67,7 +67,7 @@ type FinalAccept struct {
   CommandId int32
   CmdTags   []Tag
   Command []state.Command
-  EpochSize int64
+  EpochSize []int64
 }
 
 type FinalAcceptReply struct {
@@ -93,7 +93,7 @@ type Commit struct {
 	Command   []state.Command
 	CmdTags   []Tag
 	Status    uint8
-  EpochSize int64
+  EpochSize []int64
 }
 
 type CommitShort struct {

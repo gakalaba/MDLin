@@ -395,8 +395,14 @@ func (t *Accept) Marshal(wire io.Writer) {
 	}
 
   // Epoch
+  bs = b[:]
+  alen1 = int64(len(t.Epoch))
+  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
+    wire.Write(b[0:wlen])
+  }
+  for i := int64(0); i < alen1; i++ {
   bs = b[:8]
-  tmp64 := t.Epoch
+  tmp64 := t.Epoch[i]
   bs[0] = byte(tmp64)
 	bs[1] = byte(tmp64 >> 8)
 	bs[2] = byte(tmp64 >> 16)
@@ -406,6 +412,7 @@ func (t *Accept) Marshal(wire io.Writer) {
 	bs[6] = byte(tmp64 >> 48)
 	bs[7] = byte(tmp64 >> 56)
   wire.Write(bs)
+  }
 
   // CommandId
   bs = b[:]
@@ -450,11 +457,18 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
 	}
 
   // Epoch
+  alen1, err = binary.ReadVarint(wire)
+  if err != nil {
+    return err
+  }
+  t.Epoch = make([]int64, alen1)
+  for i := int64(0); i < alen1; i++ {
   bs = b[:8]
   if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
     return err
   }
-  t.Epoch = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+  t.Epoch[i] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+  }
 
   // CommandId
   alen1, err = binary.ReadVarint(wire)
@@ -809,11 +823,16 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 		t.Command[i].Marshal(wire)
 	}
 
-	// PID array
 	var tmp64 int64
+	bs = b[:]
+        alen1 = int64(len(t.EpochSize))
+        if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
+                wire.Write(b[0:wlen])
+        }
+        for i := int64(0); i < alen1; i++ {
   // EpochSize
     bs = b[:8]
-    tmp64 = t.EpochSize
+    tmp64 = t.EpochSize[i]
     bs[0] = byte(tmp64)
     bs[1] = byte(tmp64 >> 8)
     bs[2] = byte(tmp64 >> 16)
@@ -823,6 +842,7 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
     bs[6] = byte(tmp64 >> 48)
     bs[7] = byte(tmp64 >> 56)
     wire.Write(bs)
+    }
 }
 
 func (t *FinalAccept) Unmarshal(rr io.Reader) error {
@@ -863,10 +883,18 @@ func (t *FinalAccept) Unmarshal(rr io.Reader) error {
 
 
   // EpochSize
+  alen1, err = binary.ReadVarint(wire)
+        if err != nil {
+                return err
+        }
+        t.EpochSize = make([]int64, alen1)
+        for i := int64(0); i < alen1; i++ {
+
     bs = b[:8]
     if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
       return err
-    t.EpochSize = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+    t.EpochSize[i] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+  }
   }
   return nil
 }
@@ -990,8 +1018,14 @@ func (t *Commit) Marshal(wire io.Writer) {
   wire.Write(bs)
 
   // EpochSize
+  bs = b[:]
+  alen1 = int64(len(t.EpochSize))
+  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
+    wire.Write(b[0:wlen])
+  }
+  for i := int64(0); i < alen1; i++ {
     bs = b[:8]
-    tmp64 := t.EpochSize
+    tmp64 := t.EpochSize[i]
     bs[0] = byte(tmp64)
     bs[1] = byte(tmp64 >> 8)
     bs[2] = byte(tmp64 >> 16)
@@ -1001,6 +1035,7 @@ func (t *Commit) Marshal(wire io.Writer) {
     bs[6] = byte(tmp64 >> 48)
     bs[7] = byte(tmp64 >> 56)
     wire.Write(bs)
+    }
 }
 
 func (t *Commit) Unmarshal(rr io.Reader) error {
@@ -1039,12 +1074,20 @@ func (t *Commit) Unmarshal(rr io.Reader) error {
   // Status
   t.Status = uint8(uint8(bs[8]) << 64)
 
+  //EpochSize
+  alen1, err = binary.ReadVarint(wire)
+  if err != nil {
+    return err
+  }
+  t.EpochSize = make([]int64, alen1)
+  for i := int64(0); i < alen1; i++ {
+
     bs = b[:8]
     if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
       return err
     }
-    t.EpochSize = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-
+    t.EpochSize[i] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+}
   return nil
 }
 
