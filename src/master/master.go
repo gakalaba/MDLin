@@ -256,8 +256,8 @@ func registerWithCoordinator(coordAddr string) []string {
 }
 
 func sendLeaderToCoord(coordAddr string, leader string) {
-	log.Printf("Registering Leader %s with Coordinator", leader)
-	args := &coordinatorproto.RegisterLeaderArgs{leader, fmt.Sprintf("%s:%d", *myAddr, *portnum)}
+	log.Printf("Registering Leader %s with Coordinator and my shardID = %d", leader, int32(*myShardId))
+	args := &coordinatorproto.RegisterLeaderArgs{leader, fmt.Sprintf("%s:%d", *myAddr, *portnum), int32(*myShardId)}
 	var reply coordinatorproto.RegisterLeaderReply
 
 	for true {
@@ -305,6 +305,7 @@ func (master *Master) GetShardList(args *masterproto.GetShardListArgs, reply *ma
 
 	reply.ShardList = master.shards
 	reply.ShardId = master.shardId
+	log.Printf("Master sending shardslist to server %v, %v\n", reply.ShardId, reply.ShardList)
 	return nil
 }
 

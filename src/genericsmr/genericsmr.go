@@ -328,7 +328,7 @@ func (r *Replica) ConnectToShards() {
 	done := make(chan bool)
 
 	//log.Printf("Shard %v sees shardAddrList as %v", r.ShardId, r.ShardAddrList)
-	go r.waitForShardConnections(done)
+	r.waitForShardConnections(done)
 
 	log.Printf("Beginning to connect to shardLeaders...\n")
 	//connect to shardLeaders
@@ -354,7 +354,7 @@ func (r *Replica) ConnectToShards() {
 		}
 		r.ShardWriters[i].Flush()
 	}
-	<-done
+	//<-done
 	log.Printf("Shard Leader %d: Done connecting to all shard leaders\n", r.ShardId)
 	for shid, reader := range r.ShardReaders {
 		if int32(shid) == r.ShardId {
@@ -467,7 +467,7 @@ func (r *Replica) waitForShardConnections(done chan bool) {
 		log.Printf("Successfully established connection with shardLeader %d\n", id)
 	}
 
-	done <- true
+	//done <- true
 }
 
 /* Client connections dispatcher */

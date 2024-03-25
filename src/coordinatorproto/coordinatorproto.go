@@ -13,6 +13,7 @@ type RegisterReply struct {
 type RegisterLeaderArgs struct {
 	LeaderAddr string
 	MasterAddr string
+	ShardId    int32
 }
 
 type RegisterLeaderReply struct {

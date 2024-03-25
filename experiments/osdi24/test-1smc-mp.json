@@ -189,12 +189,12 @@
       }
  },
   "client_total": [
-	  [8, 16, 32, 64],
-	  [8, 16, 32, 64]
+	  [4, 8, 16, 32, 64],
+	  [4, 8, 16, 32, 64]
   ],
   "client_processes_per_client_node": [
-	  [8, 16, 32, 64],
-	  [8, 16, 32, 64]
+	  [4, 8, 16, 32, 64],
+	  [4, 8, 16, 32, 64]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -274,7 +274,7 @@
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
   "client_debug_output": false,
-  "client_experiment_length": 30,
+  "client_experiment_length": 75,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 2,

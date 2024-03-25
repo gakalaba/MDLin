@@ -117,7 +117,7 @@ func (coordinator *Coordinator) run() {
 
 	log.Println("Shard setup complete!")
 	for true {
-		time.Sleep(3000 * 1000 * 1000)
+		time.Sleep(10000 * 1000 * 1000)
 		//TODO can add something for handling leader failure
 	}
 }
@@ -176,13 +176,20 @@ func (coordinator *Coordinator) Register(args *coordinatorproto.RegisterArgs, re
 func (coordinator *Coordinator) RegisterLeader(args *coordinatorproto.RegisterLeaderArgs, reply *coordinatorproto.RegisterLeaderReply) error {
 	coordinator.lock.Lock()
 	defer coordinator.lock.Unlock()
-	for i := 0; i < coordinator.numShards; i++ {
+	/*for i := 0; i < coordinator.numShards; i++ {
 		if coordinator.masterList[i] == args.MasterAddr {
 			if coordinator.shardLeaders[i] == "" {
 				coordinator.leadersConnected++
 			}
+			log.Printf("coordinator.shardLeaders[%v] = %v; the masterAddr was %v, the ShardId was %d", i, args.LeaderAddr, args.MasterAddr, args.ShardId)
 			coordinator.shardLeaders[i] = args.LeaderAddr
 		}
+	}*/
+	if coordinator.shardLeaders[args.ShardId] == "" {
+		coordinator.leadersConnected++
+		coordinator.shardLeaders[args.ShardId] = args.LeaderAddr
+	} else {
+		panic("got multiple shard leader addresses sent from different masters?")
 	}
 	return nil
 }

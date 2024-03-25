@@ -213,6 +213,7 @@ func (r *Replica) getShardsFromMaster(masterAddr string) []string {
 	}
 	r.ShardAddrList = reply.ShardList
 	r.ShardId = reply.ShardId
+	log.Printf("The Shard list ofr shard %v is %v", r.ShardId, r.ShardAddrList)
 	return reply.ShardList
 }
 
@@ -339,9 +340,11 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		//NewPrintf(LEVEL0, "I'm the leader")
 	}
 	r.ConnectToPeers()
+	time.Sleep(2000 * 1000 * 1000)
 	dlog.Printf("about to call setupshards\n")
 	r.setupShards(masterAddr, masterPort)
 	dlog.Printf("ANJA\n")
+	time.Sleep(2000 * 1000 * 1000)
 	go r.WaitForClientConnections()
 
 	go r.executeCommands()
