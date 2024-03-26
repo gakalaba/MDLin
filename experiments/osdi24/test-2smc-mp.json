@@ -27,9 +27,12 @@
   "server_names": [
       "us-west-1-0",
       "us-west-1-1",
-      "us-west-1-2"
+      "us-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
   ],
-  "num_shards": 24,
+  "num_shards": 48,
   "shards": [
 	  [
       "us-west-1-0",
@@ -150,8 +153,127 @@
       "us-west-1-2",
       "us-west-1-0",
       "us-west-1-1"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
     ]
-
           ],
   "clients": [
 	  "client-0-0"
@@ -160,32 +282,74 @@
     "region1": ["us-west-1-0"],
     "region2": ["us-west-1-1"],
     "region3": ["us-west-1-2"],
-    "region4": ["client-0-0"]
+    "region4": ["client-0-0"],
+    "region5": ["eu-west-1-0"],
+    "region6": ["eu-west-1-1"],
+    "region7": ["eu-west-1-2"]
   },
   "region_rtt_latencies": {
       "region1": {
         "region1": 0,
         "region2": 90,
         "region3": 90,
-	"region4": 90
+	"region4": 90,
+	"region5": 0,
+	"region6": 0,
+	"region7": 0
       },
       "region2": {
         "region1": 90,
         "region2": 0,
         "region3": 90,
-        "region4": 90
+        "region4": 90,
+	"region5": 0,
+	        "region6": 0,
+		        "region7": 0
       },
       "region3": {
         "region1": 90,
         "region2": 90,
         "region3": 0,
-        "region4": 90
+        "region4": 90,
+	"region5": 0,
+	        "region6": 0,
+		        "region7": 0
       },
       "region4": {
         "region1": 90,
         "region2": 90,
         "region3": 90,
-        "region4": 0
+        "region4": 0,
+	"region5": 0,
+	        "region6": 0,
+		        "region7": 0
+      },
+      "region5": {
+        "region1": 90,
+        "region2": 90,
+        "region3": 90,
+        "region4": 0,
+	"region5": 0,
+	        "region6": 0,
+		        "region7": 0
+      },
+      "region6": {
+        "region1": 90,
+        "region2": 90,
+        "region3": 90,
+        "region4": 0,
+	"region5": 0,
+	        "region6": 0,
+		        "region7": 0
+      },
+      "region7": {
+        "region1": 90,
+        "region2": 90,
+        "region3": 90,
+        "region4": 0,
+	"region5": 0,
+	        "region6": 0,
+		        "region7": 0
       }
  },
   "client_total": [
