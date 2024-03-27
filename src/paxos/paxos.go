@@ -440,7 +440,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
 
-	dlog.Printf("got handlePropose for CommandID %v at time %v\n", propose.CommandId, time.Now().UnixNano())
+	//dlog.Printf("got handlePropose for CommandID %v at time %v\n", propose.CommandId, time.Now().UnixNano())
 	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)
 	if !r.IsLeader {
 		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL, 0}
@@ -499,7 +499,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		r.bcastAccept(instNo, r.defaultBallot, cmds)
 		//dlog.Printf("Fast round for instance %d\n", instNo)
 	}
-	dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
+	//dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }
 
 func (r *Replica) handlePrepare(prepare *paxosproto.Prepare) {
@@ -723,7 +723,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 			r.updateCommittedUpTo()
 
 			r.bcastCommit(areply.Instance, inst.ballot, inst.cmds)
-			dlog.Printf("This Command %v got accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
+			//dlog.Printf("This Command %v got accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
 		}
 	} else {
 		// TODO: there is probably another active leader
