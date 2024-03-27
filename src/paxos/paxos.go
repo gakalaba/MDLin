@@ -24,7 +24,7 @@ const FALSE = uint8(0)
 
 const MAX_BATCH = 5000
 const EPOCH_LENGTH = 500
-const BATCH_SIZE = 1
+const BATCH_SIZE = 8
 
 type Replica struct {
 	*genericsmr.Replica // extends a generic Paxos replica
@@ -451,9 +451,12 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		r.ReplyProposeTS(preply, propose.Reply)
 		return
 	}
+
+	r.readyBuff.PushBack(propose)
 	if r.batchingEnabled {
-		r.readyBuff.PushBack(propose)
+		dlog.Printf("length of readyBuff is %d\n", r.readyBuff.Len())
 		if (r.readyBuff.Len() < BATCH_SIZE) {
+			dlog.Printf("RETURNING")
 			return
 		}
 	}
@@ -468,20 +471,20 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	batchSize := 1
 	if r.batchingEnabled {
 		//batchSize = len(r.ProposeChan) + 1
+		dlog.Printf("setting batchSize = %v", BATCH_SIZE)
 		batchSize = BATCH_SIZE
 	}
 
-	dlog.Printf("Batched %d, LENGTH of propose channel = %v\n", batchSize, len(r.ProposeChan))
+	dlog.Printf("Batched %d, LENGTH of readyBuff = %v\n", batchSize, r.readyBuff.Len())
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.Propose, batchSize)
-	cmds[0] = propose.Command
-	proposals[0] = propose
 
 	prop := r.readyBuff.Front()
 	next := prop
 	i := 0
 	for prop != nil {
+		dlog.Printf("cmds[%v] = ...", i)
 		next = prop.Next()
 		r.readyBuff.Remove(prop)
 		cmds[i] = prop.Value.(*genericsmr.Propose).Command
