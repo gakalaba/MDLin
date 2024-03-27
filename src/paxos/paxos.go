@@ -15,6 +15,7 @@ import (
   "fmt"
   "runtime"
   "masterproto"
+  "container/list"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -23,6 +24,7 @@ const FALSE = uint8(0)
 
 const MAX_BATCH = 5000
 const EPOCH_LENGTH = 500
+const BATCH_SIZE = 1
 
 type Replica struct {
 	*genericsmr.Replica // extends a generic Paxos replica
@@ -50,6 +52,7 @@ type Replica struct {
 	after		    time.Time
 	batchingEnabled     bool
 	epochlen	    int
+	readyBuff           *list.List
 }
 
 type InstanceStatus int
@@ -98,7 +101,8 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		time.Now(),
 		time.Now(),
 		batch,
-		epochLength}
+		epochLength,
+		list.New()}
 
 
 	log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
@@ -199,25 +203,25 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	//if r.Beacon {
 	//	go r.StopAdapting()
 	//}
-	proposeChan := r.ProposeChan
-	proposeDone := make(chan bool, 1)
+	//proposeChan := r.ProposeChan
+	//proposeDone := make(chan bool, 1)
 	if r.batchingEnabled {
 		log.Printf("batching neabledddddddddddddddddddddddddddddn\n")
-		proposeChan = nil
-		go r.batchClock(&proposeDone)
+		//proposeChan = nil
+		//go r.batchClock(&proposeDone)
 	}
 
 	for !r.Shutdown {
 		select {
-		case <-proposeDone:
-			proposeChan = r.ProposeChan
-			break
-		case proposal := <-proposeChan:
+		//case <-proposeDone:
+		//	proposeChan = r.ProposeChan
+		//	break
+		case proposal := <-r.ProposeChan:
 			//got a Propose from a client
 			r.handlePropose(proposal)
-			if r.batchingEnabled {
-				proposeChan = nil
-			}
+			//if r.batchingEnabled {
+			//	proposeChan = nil
+			//}
 			break
 		case prepareS := <-r.prepareChan:
 			prepare := prepareS.(*paxosproto.Prepare)
@@ -447,6 +451,12 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		r.ReplyProposeTS(preply, propose.Reply)
 		return
 	}
+	if r.batchingEnabled {
+		r.readyBuff.PushBack(propose)
+		if (r.readyBuff.Len() < BATCH_SIZE) {
+			return
+		}
+	}
 
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
@@ -457,12 +467,9 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
 	batchSize := 1
 	if r.batchingEnabled {
-		batchSize = len(r.ProposeChan) + 1
+		//batchSize = len(r.ProposeChan) + 1
+		batchSize = BATCH_SIZE
 	}
-
-	//if batchSize > MAX_BATCH {
-	//	batchSize = MAX_BATCH
-	//}
 
 	dlog.Printf("Batched %d, LENGTH of propose channel = %v\n", batchSize, len(r.ProposeChan))
 
@@ -471,10 +478,19 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	cmds[0] = propose.Command
 	proposals[0] = propose
 
-	for i := 1; i < batchSize; i++ {
-		prop := <-r.ProposeChan
-		cmds[i] = prop.Command
-		proposals[i] = prop
+	prop := r.readyBuff.Front()
+	next := prop
+	i := 0
+	for prop != nil {
+		next = prop.Next()
+		r.readyBuff.Remove(prop)
+		cmds[i] = prop.Value.(*genericsmr.Propose).Command
+		proposals[i] = prop.Value.(*genericsmr.Propose)
+		prop = next
+		i++
+	}
+	if (r.readyBuff.Len() != 0) {
+		panic("looped wrong, should have consumed full batchedqueue")
 	}
 
 	if r.defaultBallot == -1 {

@@ -4,20 +4,20 @@
 	  ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol":[
-	  "mdl", "multi_paxos"
+	  "multi_paxos", "mdl"
   ],
   "replication_protocol_settings": [
     {
-	    "first_round_batching": false,
-	    "second_round_batching": false,
+	    "first_round_batching": true,
+	    "second_round_batching": true,
             "server_delay_reply": true,
 	    "single_shard_aware": false,
       "server_execute_commands": true,
       "server_thrifty": true
     },
 	  {
-	    "first_round_batching": false,
-	    "second_round_batching": false,
+	    "first_round_batching": true,
+	    "second_round_batching": true,
             "server_delay_reply": true,
 	    "single_shard_aware": false,
       "server_execute_commands": true,
@@ -74,11 +74,11 @@
  },
   "client_total": [
 	  [4, 8, 16, 32, 64],
-	  [4, 8, 16, 32, 64]
+	  []
   ],
   "client_processes_per_client_node": [
 	  [4, 8, 16, 32, 64],
-	  [4, 8, 16, 32, 64]
+	  []
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
