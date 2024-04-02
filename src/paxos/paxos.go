@@ -24,7 +24,6 @@ const FALSE = uint8(0)
 
 const MAX_BATCH = 5000
 const EPOCH_LENGTH = 500
-const BATCH_SIZE = 8
 
 type Replica struct {
 	*genericsmr.Replica // extends a generic Paxos replica
@@ -51,7 +50,7 @@ type Replica struct {
 	before		    time.Time
 	after		    time.Time
 	batchingEnabled     bool
-	epochlen	    int
+	batchSize	    int
 	readyBuff           *list.List
 }
 
@@ -80,7 +79,7 @@ type LeaderBookkeeping struct {
 }
 
 func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
-    exec bool, dreply bool, beacon bool, durable bool, statsFile string, batch bool, epochLength int) *Replica {
+    exec bool, dreply bool, beacon bool, durable bool, statsFile string, batch bool, batchSize int) *Replica {
 	// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
 	r := &Replica{genericsmr.NewReplica(id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -101,7 +100,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		time.Now(),
 		time.Now(),
 		batch,
-		epochLength,
+		batchSize,
 		list.New()}
 
 
@@ -174,12 +173,12 @@ func (r *Replica) replyAccept(replicaId int32, reply *paxosproto.AcceptReply) {
 /* ============= */
 /* Main event processing loop */
 
-func (r *Replica) batchClock(proposeDone *(chan bool)) {
+/*func (r *Replica) batchClock(proposeDone *(chan bool)) {
   for !r.Shutdown {
     time.Sleep(time.Duration(r.epochlen) * time.Microsecond)
     (*proposeDone) <- true
   }
-}
+}*/
 
 
 func (r *Replica) run(masterAddr string, masterPort int) {
@@ -455,7 +454,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	r.readyBuff.PushBack(propose)
 	if r.batchingEnabled {
 		dlog.Printf("length of readyBuff is %d\n", r.readyBuff.Len())
-		if (r.readyBuff.Len() < BATCH_SIZE) {
+		if (r.readyBuff.Len() < r.batchSize) {
 			dlog.Printf("RETURNING")
 			return
 		}
@@ -471,8 +470,8 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	batchSize := 1
 	if r.batchingEnabled {
 		//batchSize = len(r.ProposeChan) + 1
-		dlog.Printf("setting batchSize = %v", BATCH_SIZE)
-		batchSize = BATCH_SIZE
+		dlog.Printf("setting batchSize = %v", r.batchSize)
+		batchSize = r.batchSize
 	}
 
 	dlog.Printf("Batched %d, LENGTH of readyBuff = %v\n", batchSize, r.readyBuff.Len())
