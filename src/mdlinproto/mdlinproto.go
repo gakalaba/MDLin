@@ -64,7 +64,7 @@ type FinalAccept struct {
   Ballot    int32
   CmdTags   []Tag
   Command []state.Command
-  TimestampChain []int64
+  TimestampChain [][]int64
 }
 
 type FinalAcceptReply struct {
