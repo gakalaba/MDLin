@@ -88,9 +88,9 @@ type Commit struct {
 	Instance  int32
 	Ballot    int32
 	Command   []state.Command
-	CmdTags   []Tag
-	Status    uint8
-  TimestampChain []int64
+	//CmdTags   []Tag
+	//Status    uint8
+  TimestampChain [][]int64
 }
 
 type CommitShort struct {
@@ -109,11 +109,11 @@ type CoordinationRequest struct {
 }
 
 type CoordinationResponse struct {
-	AskerTag        Tag
-	AskeeTag        Tag
-  TimestampChain      []int64
-	From            int32
-  OK              uint8
+	AskerTag        []Tag
+	//AskeeTag        []Tag
+  TimestampChain      [][]int64
+	//From            []int32
+  OK              []uint8
 }
 
 // Marshalling and Unmarshalling helpers for Tag type
