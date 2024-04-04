@@ -807,12 +807,18 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			  coord = int8(1)
                           prepareTagsFA[foundFA] = t
 			  dlog.Printf("adding this to log! %v, and now looks like %v", t, r.bufferedLog)
-                          r.finalAcceptBatch.PushBack(r.addEntryToBuffLog(prop.Value.(*genericsmr.MDLPropose).Command, prop.Value.(*genericsmr.MDLPropose), coord, ts_chain, prop.Value.(*genericsmr.MDLPropose).PID, prop.Value.(*genericsmr.MDLPropose).SeqNo))
+                          newE := r.addEntryToBuffLog(prop.Value.(*genericsmr.MDLPropose).Command, prop.Value.(*genericsmr.MDLPropose), coord, ts_chain, prop.Value.(*genericsmr.MDLPropose).PID, prop.Value.(*genericsmr.MDLPropose).SeqNo)
+			  if r.defaultBallot != -1 {
+				  r.finalAcceptBatch.PushBack(newE)
+			  }
 			  dlog.Printf("adding this to log! %v, and now looks like %v", t, r.bufferedLog)
 			  foundFA++
                         } else {
 			  prepareTags[found-foundFA] = t
-			  r.acceptBatch.PushBack(r.addEntryToBuffLog(prop.Value.(*genericsmr.MDLPropose).Command, prop.Value.(*genericsmr.MDLPropose), coord, ts_chain, prop.Value.(*genericsmr.MDLPropose).PID, prop.Value.(*genericsmr.MDLPropose).SeqNo))
+			  newE := r.addEntryToBuffLog(prop.Value.(*genericsmr.MDLPropose).Command, prop.Value.(*genericsmr.MDLPropose), coord, ts_chain, prop.Value.(*genericsmr.MDLPropose).PID, prop.Value.(*genericsmr.MDLPropose).SeqNo)
+			  if r.defaultBallot != -1 {
+				  r.acceptBatch.PushBack(newE)
+			  }
 			}
 			r.nextSeqNo[prop.Value.(*genericsmr.MDLPropose).PID]++
 			ts_chain = nil
@@ -901,8 +907,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			p := r.acceptBatch.Front()
 			next := p
 			i := 0
-			tags := make([]mdlinproto.Tag, batchSize)
-			cmds := make([]state.Command, batchSize)
+			tags := make([]mdlinproto.Tag, r.acceptBatch.Len())
+			cmds := make([]state.Command, r.acceptBatch.Len())
 			for p != nil {
 				next = p.Next()
 				r.acceptBatch.Remove(p)
@@ -1376,12 +1382,13 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 				if (!naught) {
 					dlog.Printf("here.... of... the size of shit in bcastAccept is %v", len(inst.cmds))
 					dlog.Printf("preply.Instance = %v", preply.Instance)
+					r.acceptBatch.PushBack(inst)
 					if (r.acceptBatch.Len() >= r.batchSize) {
 						p := r.acceptBatch.Front()
 						next := p
 						i := 0
-						tags := make([]mdlinproto.Tag, r.batchSize)
-						cmds := make([]state.Command, r.batchSize)
+						tags := make([]mdlinproto.Tag, r.acceptBatch.Len())
+						cmds := make([]state.Command, r.acceptBatch.Len())
 						for p != nil {
 							next = p.Next()
 							r.acceptBatch.Remove(p)
@@ -1394,6 +1401,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 					}
 				} else {
 					dlog.Printf("here??, inst = %v", inst)
+					r.finalAcceptBatch.PushBack(inst)
 					if (r.finalAcceptBatch.Len() >= r.batchSize) {
 						r.processCCEntry()
 					}

@@ -4,7 +4,7 @@
 	  ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol":[
-	  "multi_paxos", "mdl"
+	  "mdl", "multi_paxos"
   ],
   "replication_protocol_settings": [
     {
@@ -73,11 +73,11 @@
       }
  },
   "client_total": [
-	  [4, 8, 16, 32, 64],
+	  [1, 2],
 	  []
   ],
   "client_processes_per_client_node": [
-	  [4, 8, 16, 32, 64],
+	  [1, 2],
 	  []
   ],
   "client_threads_per_process": 1,
@@ -85,8 +85,8 @@
   "client_write_percentage": 1000,
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
-  "client_fanout": 8,
-  "server_epoch": 500,
+  "client_fanout": 1,
+  "batchsize": 1,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,
@@ -157,7 +157,7 @@
   "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
-  "client_debug_output": false,
+  "client_debug_output": true,
   "client_experiment_length": 30,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
@@ -186,7 +186,7 @@
   "server_bin_name": "server",
   "server_cpuprofile": false,
   "server_blockprofile": false,
-  "server_debug_output": false,
+  "server_debug_output": true,
   "server_durable": false,
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
