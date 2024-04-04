@@ -1043,7 +1043,12 @@ func (r *Replica) checkCoordination(e *Instance) (bool, int8, []int64) {
     return false, 0, nil
   }
   coord := e.lb.coordinated
-  committed := (e.lb.acceptOKs+1) > (r.N>>1)
+  var committed bool
+  if (e.lb.clientProposals[0].K == -1 && e.lb.clientProposals[0].PID == -1 && e.lb.clientProposals[0].SeqNo == -1) {
+	  committed = (e.lb.finalOKs+1) > (r.N>>1)
+  } else {
+	  committed = (e.lb.acceptOKs+1) > (r.N>>1)
+  }
   ts_chain := e.timestampChain
   // if the instance has not yet been coordinated, it cannot be committed^coordinate
   if coord == -1 {
