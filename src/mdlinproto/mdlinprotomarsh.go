@@ -906,9 +906,10 @@ func (t *FinalAcceptReply) Marshal(wire io.Writer) {
   // Instance  int32
   // OK        uint8
   // Ballot    int32
-  var b [9]byte
+  // Total	int32
+  var b [13]byte
 	var bs []byte
-	bs = b[:9]
+	bs = b[:13]
 	tmp32 := t.Instance
 	bs[0] = byte(tmp32)
 	bs[1] = byte(tmp32 >> 8)
@@ -920,19 +921,25 @@ func (t *FinalAcceptReply) Marshal(wire io.Writer) {
 	bs[6] = byte(tmp32 >> 8)
 	bs[7] = byte(tmp32 >> 16)
 	bs[8] = byte(tmp32 >> 24)
+	tmp32 = t.Total
+	bs[9] = byte(tmp32)
+        bs[10] = byte(tmp32 >> 8)
+        bs[11] = byte(tmp32 >> 16)
+        bs[12] = byte(tmp32 >> 24)
 	wire.Write(bs)
 }
 
 func (t *FinalAcceptReply) Unmarshal(wire io.Reader) error {
-  var b [9]byte
+  var b [13]byte
 	var bs []byte
-	bs = b[:9]
-	if _, err := io.ReadAtLeast(wire, bs, 9); err != nil {
+	bs = b[:13]
+	if _, err := io.ReadAtLeast(wire, bs, 13); err != nil {
 		return err
 	}
 	t.Instance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	t.OK = uint8(bs[4])
 	t.Ballot = int32((uint32(bs[5]) | (uint32(bs[6]) << 8) | (uint32(bs[7]) << 16) | (uint32(bs[8]) << 24)))
+	t.Total = int32((uint32(bs[9]) | (uint32(bs[10]) << 8) | (uint32(bs[11]) << 16) | (uint32(bs[12]) << 24)))
 	return nil
 }
 

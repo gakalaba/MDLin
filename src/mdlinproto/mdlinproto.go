@@ -71,6 +71,7 @@ type FinalAcceptReply struct {
   Instance  int32
   OK        uint8
   Ballot    int32
+  Total     int32
 }
 
 type OldAccept struct {
@@ -114,6 +115,12 @@ type CoordinationResponse struct {
   TimestampChain      [][]int64
 	//From            []int32
   OK              []uint8
+}
+
+type CoordinationResponseMini struct {
+	AskerTag        Tag
+	TimestampChain      []int64
+	OK		uint8
 }
 
 // Marshalling and Unmarshalling helpers for Tag type
