@@ -71,7 +71,7 @@ type FinalAcceptReply struct {
   Instance  int32
   OK        uint8
   Ballot    int32
-  Total     int32
+  //Total     int32
 }
 
 type OldAccept struct {
