@@ -382,6 +382,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		case proposal := <-r.MDLProposeChan:
 			NewPrintf(LEVELALL, "---------ProposalChan---------")
 			dlog.Printf("1\n")
+			dlog.Printf("the proposal = %v", proposal)
 			r.handlePropose(proposal)
 			//if r.batchingEnabled {
 			//	proposeChan = nil
@@ -1123,6 +1124,7 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance) {
 
 
   r.coordsBatch.PushBack(e)
+  dlog.Printf("The coordsBatch LL is %v long", r.coordsBatch.Len())
   if (r.coordsBatch.Len() < r.batchSize) {
 	  return
   }
@@ -1133,6 +1135,7 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance) {
 	next = inst.Next()
 	r.coordsBatch.Remove(inst)
 	e = inst.Value.(*Instance)
+	dlog.Printf("Predecessor: ts_chain = %v, numFinalAcks = %v, coordBit = %v", e.timestampChain, e.lb.finalOKs, e.lb.coordinated)
 	t := mdlinproto.Tag{K: e.cmds[0].K, PID: e.lb.clientProposals[0].PID, SeqNo: e.lb.clientProposals[0].SeqNo}
 	succ, _ := r.outstandingCR[t]
 
@@ -1140,11 +1143,13 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance) {
 
 	msg, in := perShard[shardTo]
 	if (!in) {
+		dlog.Printf("Hadn't yet made the bulk coordresponse")
 		msg = &mdlinproto.CoordinationResponse{make([]mdlinproto.Tag, 0), make([][]int64, 0), make([]uint8, 0)}
 	}
 	msg.AskerTag = append(msg.AskerTag, succ.AskerTag)
 	msg.TimestampChain = append(msg.TimestampChain, e.timestampChain)
 	msg.OK = append(msg.OK, uint8(e.lb.coordinated))
+	dlog.Printf("the coord response looks like this %v", msg)
 	perShard[shardTo] = msg
 	//r.replyCoord(shardTo, msg)
 	delete(r.outstandingCR, t)
@@ -1159,7 +1164,9 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance) {
 	dlog.Printf("oustandingCR = %v, SIZE(r.seen) = %v", r.outstandingCR, len(r.seen))
 	inst = next
   }
+  dlog.Printf("the perShard large message dictionary looks like this %v", perShard)
   for k, v := range perShard {
+	  dlog.Printf("sending %v to shard %v", v, k)
 	  r.replyCoord(k, v)
   }
 }
@@ -1249,6 +1256,7 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
         //TODO: is this correct?
         // try the proposal in a different instance
         for i := 0; i < len(inst.lb.clientProposals); i++ {
+		dlog.Printf("is this happening?")
           r.MDLProposeChan <- inst.lb.clientProposals[i]
         }
         inst.lb.clientProposals = nil
@@ -1266,14 +1274,15 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, r.defaultBallot, int32(len(faccept.CmdTags))}
     } else {
       for i, k := range faccept.CmdTags {
-        if e, ok := r.bufferedLog[k]; !ok {
+        if _, ok := r.bufferedLog[k]; !ok {
 	  if (faccept.CmdTags[i].PID == -1 || faccept.CmdTags[i].SeqNo == -1) {
 		  panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
 		  break
 	  }
         } else {
           delete(r.bufferedLog, k)
-          r.moveEntryFromBuffToOrdered(faccept.Instance+int32(i), e, faccept.TimestampChain[i], ACCEPTED) //TODO For now we're not replicating predecessors or pids/seqnos.. this wouldn't work in event of failover
+	  r.addNewEntryToOrderedLog(faccept.Instance+int32(i), faccept.Command[i], faccept.TimestampChain[i], nil, ACCEPTED)
+          //r.moveEntryFromBuffToOrdered(faccept.Instance+int32(i), e, faccept.TimestampChain[i], ACCEPTED) //TODO For now we're not replicating predecessors or pids/seqnos.. this wouldn't work in event of failover
           r.recordInstanceMetadata(r.instanceSpace[faccept.Instance+int32(i)])
 	  r.recordCommands(r.instanceSpace[faccept.Instance+int32(i)].cmds)
 	  r.sync()
@@ -1307,6 +1316,7 @@ func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
 			r.instanceSpace[commit.Instance+int32(i)].timestampChain = commit.TimestampChain[i]
 			if inst.lb != nil && inst.lb.clientProposals != nil {
 				for i := 0; i < len(inst.lb.clientProposals); i++ {
+					dlog.Printf("is this happening?")
 					r.MDLProposeChan <- inst.lb.clientProposals[i]
 				}
 				inst.lb.clientProposals = nil
@@ -1333,8 +1343,13 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 		} else {
 			r.instanceSpace[commit.Instance+int32(i)].status = COMMITTED
 			r.instanceSpace[commit.Instance+int32(i)].ballot = commit.Ballot
+			dlog.Printf("why does the instance have a leaderbookeeping??")
+			dlog.Printf("inst = %v", inst)
+			dlog.Printf("inst.lb = %v", inst.lb)
+			dlog.Printf("inst.lb.clientProposals = %v", inst.lb.clientProposals)
 			if inst.lb != nil && inst.lb.clientProposals != nil {
 				for i := 0; i < len(inst.lb.clientProposals); i++ {
+					dlog.Printf("is this happening AHHH")
 					r.MDLProposeChan <- inst.lb.clientProposals[i]
 				}
 				inst.lb.clientProposals = nil
@@ -1435,6 +1450,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 			if inst.lb.clientProposals != nil {
 				// try the proposals in another instance
 				for i := 0; i < len(inst.lb.clientProposals); i++ {
+					dlog.Printf("all the prepares... happening?")
 					r.MDLProposeChan <- inst.lb.clientProposals[i]
 				}
 				inst.lb.clientProposals = nil
