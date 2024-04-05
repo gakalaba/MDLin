@@ -129,6 +129,7 @@ type LeaderBookkeeping struct {
 	finalOKs	int
 	nacks           int
   coordinated     int8
+  inCoordsList  int8
 }
 
 func tagtostring(t mdlinproto.Tag) string {
@@ -952,7 +953,7 @@ func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MD
       com,
       ball,
       stat,
-      &LeaderBookkeeping{props, 0, 0, 0, 0, 0, coord},
+      &LeaderBookkeeping{props, 0, 0, 0, 0, 0, coord, 0},
       ts_chain}
 
   t := mdlinproto.Tag{K: cmds.K, PID: pid, SeqNo: seqno}
@@ -969,7 +970,7 @@ func (r *Replica) addNewEntryToOrderedLog(index int32, cmds state.Command, times
 		c,
 		r.defaultBallot,
 		status,
-    &LeaderBookkeeping{cPs, 0, 0, 0, 0, 0, int8(TRUE)}, // Need this to track acceptOKs
+    &LeaderBookkeeping{cPs, 0, 0, 0, 0, 0, int8(TRUE), 0}, // Need this to track acceptOKs
     timestampChain}
   return index
 }
@@ -1021,6 +1022,7 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
       dlog.Printf("naught request not responding yet...")
       return
     }
+    dlog.Printf("RTS from coordREQ")
     r.replyToSuccessorIfExists(e)
   }
 }
@@ -1104,6 +1106,7 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
 		      r.processCCEntry()
 	      }
 	    }
+	    dlog.Printf("RTS from coordRESP")
 	    r.replyToSuccessorIfExists(e)
 	  }
 	  // Otherwise, this will be handled by handleAcceptReply()
@@ -1122,8 +1125,10 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance) {
   }
   dlog.Printf("responding now\n")
 
-
-  r.coordsBatch.PushBack(e)
+  if (e.lb.inCoordsList != int8(1)) {
+	  r.coordsBatch.PushBack(e)
+	  e.lb.inCoordsList = int8(1)
+  }
   dlog.Printf("The coordsBatch LL is %v long", r.coordsBatch.Len())
   if (r.coordsBatch.Len() < r.batchSize) {
 	  return
@@ -1498,6 +1503,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
         } else {
 		// Remove from the buffLog!
 	}
+	dlog.Printf("RTS from handleACCEPTReply")
         r.replyToSuccessorIfExists(inst)
       }
     }
@@ -1532,7 +1538,7 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
 		    if (!in && crin && ((int(inst.lb.clientProposals[0].SeqNo) + 1) % r.fanout != 0)) {
 			    panic("Request should be in r.seen from r.handleFinalAcceptReply, was supposed to be added from processCCEntry")
 		    }
-		    dlog.Printf("handleFinalAccept on %v calling reply to successor", t)
+		    dlog.Printf("RTS from handleFINALReply")
 		    r.replyToSuccessorIfExists(inst)
 		    dlog.Printf("This Command %v got FINAL accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
 	    }
