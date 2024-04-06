@@ -126,6 +126,12 @@ type FullInstance struct {
 	index int
 }
 
+type CoordInfo struct {
+	tag mdlinproto.Tag
+	coord int8
+	ts_chain []int64
+}
+
 type LeaderBookkeeping struct {
 	clientProposals []*genericsmr.MDLPropose
 	maxRecvBallot   int32
@@ -1128,34 +1134,34 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
 
 // t: tag of the request r on this shard, shard_r. We want to reply to r's successor s on shard_s
 func (r *Replica) replyToSuccessorIfExists(e *Instance) {
-  t := mdlinproto.Tag{K: e.cmds[0].K, PID: e.lb.clientProposals[0].PID, SeqNo: e.lb.clientProposals[0].SeqNo}
-  succ, _ := r.outstandingCR[t]
-  dlog.Printf("inside replyToSuccessor... outstandingCR = %v, t = %v, ts_chain = %v, coord = %v\n", r.outstandingCR, t, e.timestampChain, e.lb.coordinated)
-  if (succ == nil) {
-    dlog.Printf("the sucessor was nil??")
-    return
-  }
-  dlog.Printf("responding now\n")
+  for i, _ := range e.cmds {
+	t := mdlinproto.Tag{K: e.cmds[i].K, PID: e.lb.clientProposals[i].PID, SeqNo: e.lb.clientProposals[i].SeqNo}
+	succ, _ := r.outstandingCR[t]
+	dlog.Printf("inside replyToSuccessor... outstandingCR = %v, t = %v, ts_chain = %v, coord = %v\n", r.outstandingCR, t, e.timestampChain[i], e.lb.coordinated)
+	if (succ == nil) {
+	  dlog.Printf("the sucessor was nil??")
+	  continue
+	}
 
-  if (e.lb.inCoordsList != int8(1)) {
-	  r.coordsBatch.PushBack(e)
-	  e.lb.inCoordsList = int8(1)
+	if (e.lb.inCoordsList[i] != int8(1)) {
+		r.coordsBatch.PushBack(CoordInfo{tag: t, coord: e.lb.coordinated, ts_chain: e.timestampChain[i]})
+	        e.lb.inCoordsList[i] = int8(1)
+	}
   }
   dlog.Printf("The coordsBatch LL is %v long", r.coordsBatch.Len())
   if (r.coordsBatch.Len() < r.batchSize) {
 	  return
   }
-  inst := r.coordsBatch.Front()
-  next := inst
+  dlog.Printf("responding now\n")
+  info := r.coordsBatch.Front()
+  next := info
   perShard := make(map[int32]*mdlinproto.CoordinationResponse)
-  for inst != nil {
-	next = inst.Next()
-	r.coordsBatch.Remove(inst)
-	e = inst.Value.(*Instance)
-	dlog.Printf("Predecessor: ts_chain = %v, numFinalAcks = %v, coordBit = %v", e.timestampChain, e.lb.finalOKs, e.lb.coordinated)
-	t := mdlinproto.Tag{K: e.cmds[0].K, PID: e.lb.clientProposals[0].PID, SeqNo: e.lb.clientProposals[0].SeqNo}
-	succ, _ := r.outstandingCR[t]
+  for info != nil {
+	next = info.Next()
+	r.coordsBatch.Remove(info)
+	//dlog.Printf("Predecessor: ts_chain = %v, numFinalAcks = %v, coordBit = %v", e.timestampChain, e.lb.finalOKs, e.lb.coordinated)
 
+	succ, _ := r.outstandingCR[info.Value.(CoordInfo).tag]
 	shardTo := succ.From
 
 	msg, in := perShard[shardTo]
@@ -1164,22 +1170,22 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance) {
 		msg = &mdlinproto.CoordinationResponse{make([]mdlinproto.Tag, 0), make([][]int64, 0), make([]uint8, 0)}
 	}
 	msg.AskerTag = append(msg.AskerTag, succ.AskerTag)
-	msg.TimestampChain = append(msg.TimestampChain, e.timestampChain)
-	msg.OK = append(msg.OK, uint8(e.lb.coordinated))
+	msg.TimestampChain = append(msg.TimestampChain, info.Value.(CoordInfo).ts_chain)
+	msg.OK = append(msg.OK, uint8(info.Value.(CoordInfo).coord))
 	dlog.Printf("the coord response looks like this %v", msg)
 	perShard[shardTo] = msg
 	//r.replyCoord(shardTo, msg)
-	delete(r.outstandingCR, t)
+	delete(r.outstandingCR, info.Value.(CoordInfo).tag)
 	if (e.lb.coordinated == 1) {
-	  delete(r.seen, t)
+	  delete(r.seen, info.Value.(CoordInfo).tag)
 	} else {
-	  _, in := r.seen[t]
+	  _, in := r.seen[info.Value.(CoordInfo).tag]
 	  if in {
 	    panic("request shouldn't be in r.seen if value wasn't coordinated and thus never added to orderedLog")
 	  }
 	}
 	dlog.Printf("oustandingCR = %v, SIZE(r.seen) = %v", r.outstandingCR, len(r.seen))
-	inst = next
+	info = next
   }
   dlog.Printf("the perShard large message dictionary looks like this %v", perShard)
   for k, v := range perShard {
