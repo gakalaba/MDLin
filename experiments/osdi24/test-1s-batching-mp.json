@@ -29,22 +29,108 @@
       "us-west-1-1",
       "us-west-1-2"
   ],
-  "num_shards": 1,
+  "num_shards": 18,
   "shards": [
-	  [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
-    ]
-          ],
+[
+"us-west-1-0",
+"us-west-1-1",
+"us-west-1-2"
+],
+[
+"us-west-1-0",
+"us-west-1-1",
+"us-west-1-2"
+],
+[
+"us-west-1-0",
+"us-west-1-1",
+"us-west-1-2"
+],
+[
+"us-west-1-0",
+"us-west-1-1",
+"us-west-1-2"
+],
+[
+"us-west-1-0",
+"us-west-1-1",
+"us-west-1-2"
+],
+[
+"us-west-1-0",
+"us-west-1-1",
+"us-west-1-2"
+],
+[
+"us-west-1-1",
+"us-west-1-2",
+"us-west-1-0"
+],
+[
+"us-west-1-1",
+"us-west-1-2",
+"us-west-1-0"
+],
+[
+"us-west-1-1",
+"us-west-1-2",
+"us-west-1-0"
+],
+[
+"us-west-1-1",
+"us-west-1-2",
+"us-west-1-0"
+],
+[
+"us-west-1-1",
+"us-west-1-2",
+"us-west-1-0"
+],
+[
+"us-west-1-1",
+"us-west-1-2",
+"us-west-1-0"
+],
+[
+"us-west-1-2",
+"us-west-1-0",
+"us-west-1-1"
+],
+[
+"us-west-1-2",
+"us-west-1-0",
+"us-west-1-1"
+],
+[
+"us-west-1-2",
+"us-west-1-0",
+"us-west-1-1"
+],
+[
+"us-west-1-2",
+"us-west-1-0",
+"us-west-1-1"
+],
+[
+"us-west-1-2",
+"us-west-1-0",
+"us-west-1-1"
+],
+[
+"us-west-1-2",
+"us-west-1-0",
+"us-west-1-1"
+]
+
+  ],
   "clients": [
-	  "client-1-0"
+	  "client-0-0"
   ],
   "server_regions": {
     "region1": ["us-west-1-0"],
     "region2": ["us-west-1-1"],
     "region3": ["us-west-1-2"],
-    "region4": ["client-1-0"]
+    "region4": ["client-0-0"]
   },
   "region_rtt_latencies": {
       "region1": {
@@ -73,12 +159,12 @@
       }
  },
   "client_total": [
-	  [2, 4, 8, 16, 32, 64],
-	  [2, 4, 8, 16, 32, 64]
+	  [8, 16, 32, 64, 128, 256, 512],
+	  [8, 16, 32, 64, 128, 256, 512]
   ],
   "client_processes_per_client_node": [
-	  [2, 4, 8, 16, 32, 64],
-	  [2, 4, 8, 16, 32, 64]
+	  [8, 16, 32, 64, 128, 256, 512],
+	  [8, 16, 32, 64, 128, 256, 512]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -86,7 +172,7 @@
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
   "client_fanout": 1,
-  "batchsize": 2,
+  "batchsize": 1,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,
@@ -157,7 +243,7 @@
   "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
-  "client_debug_output": true,
+  "client_debug_output": false,
   "client_experiment_length": 30,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
@@ -186,7 +272,7 @@
   "server_bin_name": "server",
   "server_cpuprofile": false,
   "server_blockprofile": false,
-  "server_debug_output": true,
+  "server_debug_output": false,
   "server_durable": false,
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
