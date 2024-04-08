@@ -125,14 +125,99 @@
       "us-west-1-1"
     ],
 [
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
       "us-west-1-0",
       "us-west-1-1",
       "us-west-1-2"
-    ],
-[
-      "us-west-1-1",
-      "us-west-1-2",
-      "us-west-1-0"
     ],
 [
       "us-west-1-2",
@@ -140,14 +225,14 @@
       "us-west-1-1"
     ],
 [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
-    ],
-[
       "us-west-1-1",
       "us-west-1-2",
       "us-west-1-0"
+    ],
+[
+      "us-west-1-0",
+      "us-west-1-1",
+      "us-west-1-2"
     ],
 [
       "us-west-1-2",
@@ -155,9 +240,9 @@
       "us-west-1-1"
     ],
 [
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
+      "us-west-1-1",
+      "us-west-1-2",
+      "us-west-1-0"
     ],
 [
       "eu-west-1-0",
@@ -165,19 +250,14 @@
       "eu-west-1-2"
     ],
 [
+      "eu-west-1-2",
       "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
+      "eu-west-1-1"
     ],
 [
-      "eu-west-1-0",
       "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
+      "eu-west-1-2",
+      "eu-west-1-0"
     ],
 [
       "eu-west-1-0",
@@ -185,95 +265,16 @@
       "eu-west-1-2"
     ],
 [
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
       "eu-west-1-2",
       "eu-west-1-0",
       "eu-west-1-1"
     ],
 [
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
       "eu-west-1-1",
       "eu-west-1-2",
       "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
     ]
+
           ],
   "clients": [
 	  "client-0-0"
@@ -353,19 +354,19 @@
       }
  },
   "client_total": [
-	  [8, 16, 32, 64, 128, 256, 512],
-	  [8, 16, 32, 64, 128, 256, 512]
+	  [32, 64, 128, 256, 512],
+	  [32, 64, 128, 256, 512]
   ],
   "client_processes_per_client_node": [
-	  [8, 16, 32, 64, 128, 256, 512],
-	  [8, 16, 32, 64, 128, 256, 512]
+	  [32, 64, 128, 256, 512],
+	  [32, 64, 128, 256, 512]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
   "client_write_percentage": 1000,
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
-  "client_fanout": 32,
+  "client_fanout": 4,
   "server_epoch": 500,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
