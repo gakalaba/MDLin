@@ -40,13 +40,13 @@ var dreply = flag.Bool("dreply", false, "Reply to client only after command has 
 var beacon = flag.Bool("beacon", false, "Send beacons to other replicas to compare their relative speeds.")
 var durable = flag.Bool("durable", false, "Log to a stable store (i.e., a file in the current dir).")
 var doBatch = flag.Bool("batching", false, "Enables batching of first round inter-server messages")
-var epBatch = flag.Bool("epochBatching", false, "Enables batching of second round inter-server messages")
+var epBatch = flag.Bool("coordBatching", false, "Enables batching of second round inter-server messages")
 var doSSAware = flag.Bool("singleShardAware", false, "Enables single-shard optimizations")
 var rpcPort = flag.Int("rpcport", 8070, "Port # for RPC requests. Defaults to 8070")
 var proxy = flag.Bool("proxy", false, "Proxy client requests at nearest replica.")
 var epaxosMode = flag.Bool("epaxosMode", false, "Run Gryff with same message pattern as EPaxos.")
 var numShards = flag.Int("nshards", 1, "Number of shards.")
-var epochLength = flag.Int("epoch", 500, "Length between epochs")
+var batchSize = flag.Int("batchsize", 4, "number of requests per batch")
 var fanout = flag.Int("fanout", 1, "Fanout")
 
 var statsFile = flag.String("statsFile", "", "Name of file to which stats should be written.")
@@ -104,7 +104,7 @@ func main() {
 			//rep = ssmdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *statsFile, *numShards)
 		} else {
 			log.Println("Starting MD Linearizability replica...")
-			rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *epBatch, *statsFile, *numShards, *epochLength, *fanout)
+			rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *epBatch, *statsFile, *numShards, *batchSize, *fanout)
 		}
 	} else if *doGryff {
 		log.Println("Starting Gryff replica...")
@@ -143,7 +143,7 @@ func main() {
 	} else {
 		log.Println("Starting classic Paxos replica...")
 		rep = paxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
-			*beacon, *durable, *statsFile, *doBatch, *epochLength)
+			*beacon, *durable, *statsFile, *doBatch, *batchSize)
 	}
 
 	rpc.Register(rep)
