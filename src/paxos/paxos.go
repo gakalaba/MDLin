@@ -191,7 +191,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	log.Println("Waiting for client connections")
 
 	go r.WaitForClientConnections()
-
+	time.Sleep(3000 * 1000 * 1000)
 	if r.Exec {
 		go r.executeCommands()
 	}

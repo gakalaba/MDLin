@@ -103,6 +103,7 @@ func NewAbstractClient(id int32, coordinatorAddr string, coordinatorPort int, fo
 		make([]map[uint8]bool, 0), // delayRPC
 		make([]map[uint8]chan fastrpc.Serializable, 0), // delayedRPC
 	}
+	log.Printf("Num leaders = %v", c.numLeaders)
 	c.RegisterRPC(new(clientproto.PingReply), clientproto.GEN_PING_REPLY, c.pingReplyChan)
 
 	c.ConnectToCoordinator()
@@ -154,6 +155,7 @@ func (c *AbstractClient) ConnectToCoordinator() {
 	//       Then update data structures here to keep track of state for all of them.
 	c.leaderAddrs = llReply.LeaderList
 	c.numLeaders = len(c.leaderAddrs)
+	log.Printf("after getting list from coordinator, this client thinks there's %v leaders", c.numLeaders)
 	c.leaderAlive = make([]bool, c.numLeaders)
 	// c.replicaPing = make([]uint64, c.numLeaders)
 	// c.replicasByPingRank = make([]int32, c.numLeaders)
@@ -167,7 +169,7 @@ func (c *AbstractClient) ConnectToCoordinator() {
 }
 
 func (c *AbstractClient) ConnectToShards() {
-	log.Printf("Connecting to shards...\n")
+	log.Printf("Connecting to %v shards ANJAAAAA...\n", c.numLeaders)
 	c.leaders = make([]net.Conn, c.numLeaders)
 	c.readers = make([]*bufio.Reader, c.numLeaders)
 	c.writers = make([]*bufio.Writer, c.numLeaders)
