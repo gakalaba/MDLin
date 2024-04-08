@@ -64,13 +64,14 @@ type FinalAccept struct {
   Ballot    int32
   CmdTags   []Tag
   Command []state.Command
-  TimestampChain []int64
+  TimestampChain [][]int64
 }
 
 type FinalAcceptReply struct {
   Instance  int32
   OK        uint8
   Ballot    int32
+  //Total     int32
 }
 
 type OldAccept struct {
@@ -88,9 +89,9 @@ type Commit struct {
 	Instance  int32
 	Ballot    int32
 	Command   []state.Command
-	CmdTags   []Tag
-	Status    uint8
-  TimestampChain []int64
+	//CmdTags   []Tag
+	//Status    uint8
+  TimestampChain [][]int64
 }
 
 type CommitShort struct {
@@ -109,11 +110,17 @@ type CoordinationRequest struct {
 }
 
 type CoordinationResponse struct {
+	AskerTag        []Tag
+	//AskeeTag        []Tag
+  TimestampChain      [][]int64
+	//From            []int32
+  OK              []uint8
+}
+
+type CoordinationResponseMini struct {
 	AskerTag        Tag
-	AskeeTag        Tag
-  TimestampChain      []int64
-	From            int32
-  OK              uint8
+	TimestampChain      []int64
+	OK		uint8
 }
 
 // Marshalling and Unmarshalling helpers for Tag type

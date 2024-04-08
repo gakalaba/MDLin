@@ -15,6 +15,7 @@ import (
   "fmt"
   "runtime"
   "masterproto"
+  "container/list"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -49,7 +50,8 @@ type Replica struct {
 	before		    time.Time
 	after		    time.Time
 	batchingEnabled     bool
-	epochlen	    int
+	batchSize	    int
+	readyBuff           *list.List
 }
 
 type InstanceStatus int
@@ -77,7 +79,7 @@ type LeaderBookkeeping struct {
 }
 
 func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int, thrifty bool,
-    exec bool, dreply bool, beacon bool, durable bool, statsFile string, batch bool, epochLength int) *Replica {
+    exec bool, dreply bool, beacon bool, durable bool, statsFile string, batch bool, batchSize int) *Replica {
 	// Passing in 3rd argument (numShards) as 0 to genericsmr.NewReplica()
 	r := &Replica{genericsmr.NewReplica(id, peerAddrList, 0, thrifty, exec, dreply, false, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE),
@@ -98,7 +100,8 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		time.Now(),
 		time.Now(),
 		batch,
-		epochLength}
+		batchSize,
+		list.New()}
 
 
 	log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
@@ -170,12 +173,12 @@ func (r *Replica) replyAccept(replicaId int32, reply *paxosproto.AcceptReply) {
 /* ============= */
 /* Main event processing loop */
 
-func (r *Replica) batchClock(proposeDone *(chan bool)) {
+/*func (r *Replica) batchClock(proposeDone *(chan bool)) {
   for !r.Shutdown {
     time.Sleep(time.Duration(r.epochlen) * time.Microsecond)
     (*proposeDone) <- true
   }
-}
+}*/
 
 
 func (r *Replica) run(masterAddr string, masterPort int) {
@@ -199,25 +202,25 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	//if r.Beacon {
 	//	go r.StopAdapting()
 	//}
-	proposeChan := r.ProposeChan
-	proposeDone := make(chan bool, 1)
+	//proposeChan := r.ProposeChan
+	//proposeDone := make(chan bool, 1)
 	if r.batchingEnabled {
 		log.Printf("batching neabledddddddddddddddddddddddddddddn\n")
-		proposeChan = nil
-		go r.batchClock(&proposeDone)
+		//proposeChan = nil
+		//go r.batchClock(&proposeDone)
 	}
 
 	for !r.Shutdown {
 		select {
-		case <-proposeDone:
-			proposeChan = r.ProposeChan
-			break
-		case proposal := <-proposeChan:
+		//case <-proposeDone:
+		//	proposeChan = r.ProposeChan
+		//	break
+		case proposal := <-r.ProposeChan:
 			//got a Propose from a client
 			r.handlePropose(proposal)
-			if r.batchingEnabled {
-				proposeChan = nil
-			}
+			//if r.batchingEnabled {
+			//	proposeChan = nil
+			//}
 			break
 		case prepareS := <-r.prepareChan:
 			prepare := prepareS.(*paxosproto.Prepare)
@@ -448,6 +451,15 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		return
 	}
 
+	r.readyBuff.PushBack(propose)
+	if r.batchingEnabled {
+		dlog.Printf("length of readyBuff is %d\n", r.readyBuff.Len())
+		if (r.readyBuff.Len() < r.batchSize) {
+			dlog.Printf("RETURNING")
+			return
+		}
+	}
+
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
 	}
@@ -457,24 +469,30 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 
 	batchSize := 1
 	if r.batchingEnabled {
-		batchSize = len(r.ProposeChan) + 1
+		//batchSize = len(r.ProposeChan) + 1
+		dlog.Printf("setting batchSize = %v", r.batchSize)
+		batchSize = r.batchSize
 	}
 
-	//if batchSize > MAX_BATCH {
-	//	batchSize = MAX_BATCH
-	//}
-
-	dlog.Printf("Batched %d, LENGTH of propose channel = %v\n", batchSize, len(r.ProposeChan))
+	dlog.Printf("Batched %d, LENGTH of readyBuff = %v\n", batchSize, r.readyBuff.Len())
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.Propose, batchSize)
-	cmds[0] = propose.Command
-	proposals[0] = propose
 
-	for i := 1; i < batchSize; i++ {
-		prop := <-r.ProposeChan
-		cmds[i] = prop.Command
-		proposals[i] = prop
+	prop := r.readyBuff.Front()
+	next := prop
+	i := 0
+	for prop != nil {
+		dlog.Printf("cmds[%v] = ...", i)
+		next = prop.Next()
+		r.readyBuff.Remove(prop)
+		cmds[i] = prop.Value.(*genericsmr.Propose).Command
+		proposals[i] = prop.Value.(*genericsmr.Propose)
+		prop = next
+		i++
+	}
+	if (r.readyBuff.Len() != 0) {
+		panic("looped wrong, should have consumed full batchedqueue")
 	}
 
 	if r.defaultBallot == -1 {
