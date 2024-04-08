@@ -683,7 +683,10 @@ func (r *Replica) RegisterClientRPC(msgObj fastrpc.Serializable, opCode uint8, n
 }
 
 func (r *Replica) SendISMsg(leaderId int32, code uint8, msg fastrpc.Serializable) {
-  w := r.ShardWriters[leaderId]
+	dlog.Printf("inside SendISMsg")
+	dlog.Printf("sending to leader %v", leaderId)
+	dlog.Printf("The msg looks like %v", msg)
+	w := r.ShardWriters[leaderId]
 	w.WriteByte(code)
 	msg.Marshal(w)
 	w.Flush()

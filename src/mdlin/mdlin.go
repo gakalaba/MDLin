@@ -506,6 +506,7 @@ func (r *Replica) giveLamportTS(ts_chain []int64) []int64 {
 
 // indexOL, orderedLog, bufferedLog
 func (r *Replica) processCCEntry() {
+	dlog.Printf("Inside of processCCEntry!")
 	if (r.finalAcceptBatch.Len() < r.batchSize) {
 		return
 	}
@@ -558,7 +559,8 @@ dlog.Printf("PRINTING FINALACCEPTBATCH")
 		// Get the lamport clocks ordered
 		ts_chains[i] = ts_chain
 		dlog.Printf("New entry added has timestampChain = %v", ts_chains[i])
-		if (1 + e.lb.clientProposals[0].SeqNo % int64(r.fanout) != int64(len(ts_chain))) {
+		if (1 + e.lb.clientProposals[0].CommandId % int32(r.fanout) != int32(len(ts_chain))) {
+			dlog.Printf("it has a sequence number of %v", e.lb.clientProposals[0].SeqNo)
 			panic("Timestamp chain wrong length!!")
 		}
 		// Add to seen map
@@ -777,7 +779,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 
 // Client submitted a command to a server
 func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
-	dlog.Printf("got handlePropose for CommandID %v and PID = %v at time %v, the key = %v\n", propose.CommandId, propose.PID, propose.Command.K, time.Now().UnixNano())
+	dlog.Printf("got handlePropose for CommandID %v and PID = %v at time %v, the key = %v\n", propose.CommandId, propose.PID, time.Now().UnixNano(), propose.Command.K)
 	if !r.IsLeader {
 		preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.NIL, 0}
 		//NewPrintf(LEVELALL, "I'm not the leader... responding to client with OK = false (0)")
@@ -1249,7 +1251,7 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance, index int) {
 	}
 	msg.AskerTag = append(msg.AskerTag, succ.AskerTag)
 	msg.TimestampChain = append(msg.TimestampChain, predecessor.timestampChain[index])
-	if (1 + predecessor.lb.clientProposals[index].SeqNo % int64(r.fanout) != int64(len(predecessor.timestampChain[index]))) {
+	if (1 + predecessor.lb.clientProposals[index].CommandId % int32(r.fanout) != int32(len(predecessor.timestampChain[index]))) {
 		dlog.Printf("the sequence number is %v, the timestampchain is %v", predecessor.lb.clientProposals[index].SeqNo, predecessor.timestampChain[index])
 		dlog.Printf("The predecessor = %v", predecessor)
 		panic("replyToSuccessor error: responding to sucessor before fully caluculated own timestamp")

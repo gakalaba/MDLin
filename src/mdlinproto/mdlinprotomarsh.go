@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fastrpc"
+	"dlog"
 	"io"
 	"state"
 	"sync"
@@ -1260,6 +1261,9 @@ func (t *CoordinationResponse) Marshal(wire io.Writer) {
   var tmp64 int64
 
   alen1 := int64(len(t.AskerTag))
+  dlog.Printf("inside marshalling, the coordinationResponse looks like %v", t)
+  dlog.Printf("len of t.AskerTag = %v, %v", len(t.AskerTag), t.AskerTag)
+  bs = b[:]
   if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
 	  wire.Write(b[0:wlen])
   }

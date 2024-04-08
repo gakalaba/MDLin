@@ -29,7 +29,7 @@
       "us-west-1-1",
       "us-west-1-2"
   ],
-  "num_shards": 18,
+  "num_shards": 15,
   "shards": [
 [
 "us-west-1-0",
@@ -57,11 +57,6 @@
 "us-west-1-2"
 ],
 [
-"us-west-1-0",
-"us-west-1-1",
-"us-west-1-2"
-],
-[
 "us-west-1-1",
 "us-west-1-2",
 "us-west-1-0"
@@ -85,16 +80,6 @@
 "us-west-1-1",
 "us-west-1-2",
 "us-west-1-0"
-],
-[
-"us-west-1-1",
-"us-west-1-2",
-"us-west-1-0"
-],
-[
-"us-west-1-2",
-"us-west-1-0",
-"us-west-1-1"
 ],
 [
 "us-west-1-2",
@@ -244,7 +229,7 @@
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
   "client_debug_output": false,
-  "client_experiment_length": 30,
+  "client_experiment_length": 40,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 2,
@@ -277,7 +262,7 @@
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
   "server_rpc_port": 8087,
-  "src_commit_hash": "batching",
+  "src_commit_hash": "faster",
   "src_directory": "/users/akalaba/MDLin",
   "codebase_name": "mdl",
   "remote_bin_directory_nfs_enabled": false,
