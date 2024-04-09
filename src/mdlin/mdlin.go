@@ -1150,9 +1150,6 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
 	  if OK {
 	    e.timestampChain[0] = r.giveLamportTS(e.timestampChain[0])
 	    r.finalAcceptBatch.PushBack(e)
-	    if (r.finalAcceptBatch.Len() >= r.batchSize) {
-		    r.processCCEntry()
-	    }
 	  }
 	  // Otherwise, this will be handled by handleAcceptReply()
 	}
@@ -1526,9 +1523,6 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
 	      dlog.Printf("%v was CC!", areply.IdTag[i])
 	      inst.timestampChain[0] = r.giveLamportTS(inst.timestampChain[0])
 	      r.finalAcceptBatch.PushBack(inst)
-	      if (r.finalAcceptBatch.Len() >= r.batchSize) {
-		      r.processCCEntry()
-	      }
       }
     }
     dlog.Printf("This Command %v got accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
