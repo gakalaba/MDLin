@@ -530,15 +530,15 @@ func (r *Replica) processCCEntry() {
 	inst := r.finalAcceptBatch.Front()
 	next := inst
 	var e *Instance
-	cmds := make([]state.Command, r.finalAcceptBatch.Len())
-	tags := make([]mdlinproto.Tag, r.finalAcceptBatch.Len())
-	ts_chains := make([][]int64, r.finalAcceptBatch.Len())
-	proposals := make([]*genericsmr.MDLPropose, r.finalAcceptBatch.Len())
-	coordsList := make([]int8, r.finalAcceptBatch.Len())
+	cmds := make([]state.Command, r.batchSize)
+	tags := make([]mdlinproto.Tag, r.batchSize)
+	ts_chains := make([][]int64, r.batchSize)
+	proposals := make([]*genericsmr.MDLPropose, r.batchSize)
+	coordsList := make([]int8, r.batchSize)
 	i := 0
 	var t mdlinproto.Tag
 	instNo := r.crtInstance
-	for inst != nil {
+	for i < r.batchSize {
 		//if !inst.Value.(*Instance).lb.coordinated[0] {
 			//TODO right now we do not case on if coordinated is false...
 		//}
@@ -984,9 +984,9 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			p := r.acceptBatch.Front()
 			next := p
 			i := 0
-			tags := make([]mdlinproto.Tag, r.acceptBatch.Len())
-			cmds := make([]state.Command, r.acceptBatch.Len())
-			for p != nil {
+			tags := make([]mdlinproto.Tag, r.batchSize)
+			cmds := make([]state.Command, r.batchSize)
+			for i < r.batchSize {
 				next = p.Next()
 				r.acceptBatch.Remove(p)
 				cmds[i] = p.Value.(*Instance).cmds[0]
@@ -1206,7 +1206,7 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance, index int) {
   delete(r.outstandingCR, t)
 
   dlog.Printf("The coordsBatch LL is %v long", r.coordsBatch.Len())
-  if (r.coordsBatch.Len() < r.batchSize) {
+  if (r.coordsBatch.Len() < 1) {
 	  return
   }
   dlog.Printf("responding now\n")
@@ -1499,9 +1499,9 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 						p := r.acceptBatch.Front()
 						next := p
 						i := 0
-						tags := make([]mdlinproto.Tag, r.acceptBatch.Len())
-						cmds := make([]state.Command, r.acceptBatch.Len())
-						for p != nil {
+						tags := make([]mdlinproto.Tag, r.batchSize)
+						cmds := make([]state.Command, r.batchSize)
+						for i < r.batchSize {
 							next = p.Next()
 							r.acceptBatch.Remove(p)
 							cmds[i] = p.Value.(*Instance).cmds[0]
