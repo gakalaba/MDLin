@@ -507,10 +507,10 @@ func (r *Replica) giveLamportTS(ts_chain []int64) []int64 {
 // indexOL, orderedLog, bufferedLog
 func (r *Replica) processCCEntry() {
 	dlog.Printf("Inside of processCCEntry!")
-	if (r.finalAcceptBatch.Len() < r.batchSize) {
-		return
-	}
-dlog.Printf("PRINTING FINALACCEPTBATCH")
+	//if (r.finalAcceptBatch.Len() < r.batchSize) {
+	//	return
+	//}
+/*dlog.Printf("PRINTING FINALACCEPTBATCH")
   qq := r.finalAcceptBatch.Front()
   n := qq
   ii := 0
@@ -526,7 +526,7 @@ dlog.Printf("PRINTING FINALACCEPTBATCH")
 	  dlog.Printf("LL[%v] = %v = %v", ii, qq.Value, qq.Value.(*Instance).lb.clientProposals[0])
 	  qq = n
 	  ii++
-  }
+  }*/
 	inst := r.finalAcceptBatch.Front()
 	next := inst
 	var e *Instance
@@ -559,10 +559,10 @@ dlog.Printf("PRINTING FINALACCEPTBATCH")
 		// Get the lamport clocks ordered
 		ts_chains[i] = ts_chain
 		dlog.Printf("New entry added has timestampChain = %v", ts_chains[i])
-		if (1 + e.lb.clientProposals[0].CommandId % int32(r.fanout) != int32(len(ts_chain))) {
+		/*if (1 + e.lb.clientProposals[0].CommandId % int32(r.fanout) != int32(len(ts_chain))) {
 			dlog.Printf("it has a sequence number of %v", e.lb.clientProposals[0].SeqNo)
 			panic("Timestamp chain wrong length!!")
-		}
+		}*/
 		// Add to seen map
 		if (proposals[i].Timestamp == 1) {
 		  dlog.Printf("Adding t = %v to seen!\n", tags[i])
@@ -787,12 +787,10 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		return
 	}
 	r.proposeBatch.PushBack(propose)
-	if r.batchingEnabled {
-		dlog.Printf("length of readyBuff is %d\n", r.proposeBatch.Len())
-		if (r.proposeBatch.Len() < r.batchSize) {
-			dlog.Printf("RETURNING")
-			return
-		}
+	dlog.Printf("length of readyBuff is %d\n", r.proposeBatch.Len())
+	if (r.batchingEnabled && (r.proposeBatch.Len() < r.batchSize)) {
+		dlog.Printf("RETURNING")
+		return
 	}
 
 	for r.instanceSpace[r.crtInstance] != nil {
@@ -941,18 +939,17 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		return
 	}
 
-	if (r.proposeBatch.Len() != 0) {
+	/*if (r.proposeBatch.Len() != 0) {
 		panic("looped wrong, should have consumed full propsal batchedqueue")
-	}
+	}*/
 
 	r.noProposalsReady = false
 
-	// Resize all the arrays to hold the actual amount we found
-	prepareTagsFA = append([]mdlinproto.Tag(nil), prepareTagsFA[:foundFA]...)
-
-	prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found-foundFA]...)
 	//dlog.Printf("ended up finding %d entries for this batch, %d of which WERE naught ones", found)
 	if r.defaultBallot == -1 {
+		// Resize all the arrays to hold the actual amount we found
+		prepareTagsFA = append([]mdlinproto.Tag(nil), prepareTagsFA[:foundFA]...)
+		prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found-foundFA]...)
 		dlog.Printf("bcasting nonnaughts, prepareTags = %v, found = %v, foundFA = %v", prepareTags, found, foundFA)
 		if ((found-foundFA) > 0) {
 			r.bcastPrepare(prepareTags, r.makeUniqueBallot(0), true)
@@ -966,7 +963,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		dlog.Printf("found = %v, foundFA = %v", found, foundFA)
 		dlog.Printf("acceptBatch length = %v", r.acceptBatch.Len())
 		if (r.acceptBatch.Len() >= r.batchSize) {
-dlog.Printf("PRINTING ACCEPTBATCH")
+/*dlog.Printf("PRINTING ACCEPTBATCH")
   qq := r.acceptBatch.Front()
   n := qq
   ii := 0
@@ -982,8 +979,8 @@ dlog.Printf("PRINTING ACCEPTBATCH")
 	  dlog.Printf("LL[%v] = %v = %v", ii, qq.Value, qq.Value.(*Instance))
 	  qq = n
 	  ii++
-  }
-			dlog.Printf("nonNaughts prepareTags = %v", prepareTags)
+  }*/
+			//dlog.Printf("nonNaughts prepareTags = %v", prepareTags)
 			p := r.acceptBatch.Front()
 			next := p
 			i := 0
@@ -1095,9 +1092,9 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
   r.outstandingCR[cr.AskeeTag] = cr
   dlog.Printf("Successor %v looking for predecessor here %v, map = %v", cr.AskerTag, cr.AskeeTag, r.outstandingCR)
   dlog.Printf("the predecessor OK, coord, ts_chain = %v, %v, %v\n", OK, coord, ts_chain)
-  if (e != nil) {
+  /*if (e != nil) {
 	  dlog.Printf("acceptOKs = %v and finalOKs = %v AND naught = %v\n", e.lb.acceptOKs, e.lb.finalOKs, e.lb.clientProposals[index].Predecessor.PID == -1)
-  }
+  }*/
   if (e != nil && OK) {
     // Naught requests cannot respond to successors until they are committed
     if (e.lb.clientProposals[index].Predecessor.PID == -1 && e.status != COMMITTED) {
@@ -1165,10 +1162,10 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
   var in bool
   // assert that the instance is not in the orderedLog
   for i, _ := range crr.AskerTag {
-	_, in = r.seen[crr.AskerTag[i]]
+	/*_, in = r.seen[crr.AskerTag[i]]
 	if (in) {
 	  panic("Assert instance should not be in orderedLog for handleCoordinationReply")
-	}
+	}*/
 	e, in = r.bufferedLog[crr.AskerTag[i]]
 	// if the request hasn't arrived yet, then add it to the map
 	if (!in) {
@@ -1216,7 +1213,7 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance, index int) {
   info := r.coordsBatch.Front()
   next := info
   perShard := make(map[int32]*mdlinproto.CoordinationResponse)
-  dlog.Printf("PRINTING COORDSBATCH")
+  /*dlog.Printf("PRINTING COORDSBATCH")
   qq := r.coordsBatch.Front()
   n := qq
   i := 0
@@ -1232,7 +1229,7 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance, index int) {
 	  dlog.Printf("LL[%v] = %v = %v", i, qq.Value, qq.Value.(*CoordInfo))
 	  qq = n
 	  i++
-  }
+  }*/
   for info != nil {
 	next = info.Next()
 	r.coordsBatch.Remove(info)
@@ -1251,24 +1248,24 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance, index int) {
 	}
 	msg.AskerTag = append(msg.AskerTag, succ.AskerTag)
 	msg.TimestampChain = append(msg.TimestampChain, predecessor.timestampChain[index])
-	if (1 + predecessor.lb.clientProposals[index].CommandId % int32(r.fanout) != int32(len(predecessor.timestampChain[index]))) {
+	/*if (1 + predecessor.lb.clientProposals[index].CommandId % int32(r.fanout) != int32(len(predecessor.timestampChain[index]))) {
 		dlog.Printf("the sequence number is %v, the timestampchain is %v", predecessor.lb.clientProposals[index].SeqNo, predecessor.timestampChain[index])
 		dlog.Printf("The predecessor = %v", predecessor)
 		panic("replyToSuccessor error: responding to sucessor before fully caluculated own timestamp")
-	}
+	}*/
 	msg.OK = append(msg.OK, uint8(predecessor.lb.coordinated))
 	dlog.Printf("the coord response looks like this %v", msg)
 	perShard[shardTo] = msg
 	//r.replyCoord(shardTo, msg)
 	t := mdlinproto.Tag{K: predecessor.cmds[index].K, PID: predecessor.lb.clientProposals[index].PID, SeqNo: predecessor.lb.clientProposals[index].SeqNo}
-	if (predecessor.lb.coordinated == 1) {
-	  delete(r.seen, t)
-	} else {
+	//if (predecessor.lb.coordinated == 1) {
+	delete(r.seen, t)
+	/*} else {
 	  _, in := r.seen[t]
 	  if in {
 	    panic("request shouldn't be in r.seen if value wasn't coordinated and thus never added to orderedLog")
 	  }
-	}
+	}*/
 	dlog.Printf("oustandingCR = %v, SIZE(r.seen) = %v", r.outstandingCR, len(r.seen))
 	info = next
   }
@@ -1370,15 +1367,15 @@ func (r *Replica) handleFinalAccept(faccept *mdlinproto.FinalAccept) {
       fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, FALSE, r.defaultBallot}
     } else {
       fareply = &mdlinproto.FinalAcceptReply{faccept.Instance, TRUE, faccept.Ballot}
-      for i, k := range faccept.CmdTags {
-        if _, ok := r.bufferedLog[k]; !ok {
+      for _, k := range faccept.CmdTags {
+        /*if _, ok := r.bufferedLog[k]; !ok {
 	  if (faccept.CmdTags[i].PID == -1 || faccept.CmdTags[i].SeqNo == -1) {
 		  panic("This replica didn't have all the entries buffered that the leader sent out in FinalAccept")
 		  break
 	  }
-        } else {
-          delete(r.bufferedLog, k)
-        }
+        } else {*/
+        delete(r.bufferedLog, k)
+        //}
       }
       r.addNewEntryToOrderedLog(faccept.Instance, faccept.Command, faccept.TimestampChain, nil, ACCEPTED)
     }
@@ -1665,8 +1662,7 @@ func (r *Replica) executeCommands() {
 						dlog.Printf("EXECUTING --> CLIENT:OK = TRUE, CommandID = %d, val = %v, key = %d, seqno = %d, PID = %dHA", inst.lb.clientProposals[j].CommandId, val, inst.lb.clientProposals[j].Command.K, inst.lb.clientProposals[j].SeqNo, inst.lb.clientProposals[j].PID)
 
             r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
-					} else {
-          }
+					}
 				}
 				i++
 				//executed = true
