@@ -334,14 +334,15 @@ func (r *Replica) replyCoord(replicaId int32, reply *mdlinproto.CoordinationResp
 }
 
 /* ============= */
-/*
+
 func (r *Replica) batchClock(proposeDone *(chan bool)) {
   for !r.Shutdown {
-    time.Sleep(time.Duration(r.epochlen) * time.Microsecond)
+    time.Sleep(time.Duration(r.batchSize) * time.Millisecond)
     (*proposeDone) <- true
     //dlog.Printf("!!!Pulled of proposeDone\n")
   }
 }
+/*
 func (r *Replica) epochClock(proposeChan *(chan bool), proposeDone *(chan bool)) {
   for !r.Shutdown {
     time.Sleep(time.Duration(r.epochlen) * time.Microsecond)
@@ -368,14 +369,14 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	time.Sleep(3000 * 1000 * 1000)
 
 	go r.executeCommands()
-	/*proposeChan := r.MDLProposeChan
+	proposeChan := r.MDLProposeChan
 	proposeDone := make(chan bool, 1)
 	if r.batchingEnabled && r.IsLeader {
 		proposeChan = nil
 		dlog.Printf("proposeChan = nil\n");
 		go r.batchClock(&proposeDone)
 	}
-
+	/*
 	var epochChan chan bool = nil
 	epochDone := make(chan bool, 1)
 	if r.epochBatching && r.IsLeader {
@@ -386,16 +387,11 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 	for !r.Shutdown {
 		//dlog.Printf("A\n")
-		//if proposeChan == nil {
-		//	dlog.Printf("propose han = nil\n")
-		//} else {
-		//	dlog.Printf("ProposeChan has length = %v\n", len(proposeChan))
-		//}
 		select {
-		//case <-proposeDone:
-		//	proposeChan = r.MDLProposeChan
-		//	break
-		case proposal := <-r.MDLProposeChan:
+		case <-proposeDone:
+			proposeChan = r.MDLProposeChan
+			break
+		case proposal := <-proposeChan:
 			NewPrintf(LEVELALL, "---------ProposalChan---------")
 			dlog.Printf("1\n")
 			dlog.Printf("the proposal = %v", proposal)
@@ -530,15 +526,15 @@ func (r *Replica) processCCEntry() {
 	inst := r.finalAcceptBatch.Front()
 	next := inst
 	var e *Instance
-	cmds := make([]state.Command, r.batchSize)
-	tags := make([]mdlinproto.Tag, r.batchSize)
-	ts_chains := make([][]int64, r.batchSize)
-	proposals := make([]*genericsmr.MDLPropose, r.batchSize)
-	coordsList := make([]int8, r.batchSize)
+	cmds := make([]state.Command, r.finalAcceptBatch.Len())
+	tags := make([]mdlinproto.Tag, r.finalAcceptBatch.Len())
+	ts_chains := make([][]int64, r.finalAcceptBatch.Len())
+	proposals := make([]*genericsmr.MDLPropose, r.finalAcceptBatch.Len())
+	coordsList := make([]int8, r.finalAcceptBatch.Len())
 	i := 0
 	var t mdlinproto.Tag
 	instNo := r.crtInstance
-	for i < r.batchSize {
+	for inst != nil {
 		//if !inst.Value.(*Instance).lb.coordinated[0] {
 			//TODO right now we do not case on if coordinated is false...
 		//}
@@ -572,6 +568,7 @@ func (r *Replica) processCCEntry() {
 		inst = next
 		i++
 	}
+	log.Printf("ProcessCCEntry has %v proposals issued in bcastFinalAccept", i)
 	r.addNewEntryToOrderedLog(instNo, cmds, ts_chains, proposals, ACCEPTED)
 	r.instanceSpace[instNo].lb.inCoordsList = coordsList
 	r.crtInstance++
@@ -786,84 +783,66 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		r.MDReplyPropose(preply, propose.Reply)
 		return
 	}
-	r.proposeBatch.PushBack(propose)
-	dlog.Printf("length of readyBuff is %d\n", r.proposeBatch.Len())
-	if (r.batchingEnabled && (r.proposeBatch.Len() < r.batchSize)) {
-		dlog.Printf("RETURNING")
-		return
-	}
+	dlog.Printf("length of readyBuff is %d\n", len(r.MDLProposeChan)+1)
 
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
 	}
 
 	// Get batch size
-	batchSize := 1
-	//numProposals := len(r.MDLProposeChan) + 1
-	//dlog.Printf("length of the MDLProposeChan = %v\n", len(r.MDLProposeChan)+1)
-	//dlog.Printf("Batched %d, LENGTH of readyBuff = %v\n", batchSize, r.readyBuff.Len())
-	if r.batchingEnabled {
-		dlog.Printf("setting batchSize = %v", r.batchSize)
-		batchSize = r.batchSize
-		//if batchSize > MAX_BATCH {
-		//	batchSize = MAX_BATCH
-		//}
-	}
-	dlog.Printf("batchsize = %v, number of batched proposals = %v\n", batchSize, r.proposeBatch.Len())
+	batchSize := len(r.MDLProposeChan) + 1
 
 	prepareTags := make([]mdlinproto.Tag, batchSize)
+	cmds := make([]state.Command, batchSize)
 
 	prepareTagsFA := make([]mdlinproto.Tag, batchSize)
 
-	prop := r.proposeBatch.Front()
-	next := prop
 	found := 0
 	foundFA := 0
 	var expectedSeqno int64
-	//i := 1
 	var ts_chain []int64 = nil
+	prop := propose
+	i := 0
         // We need a loop like this to lag behind pulling values off the channel,
         // since in contrast to paxos, we might pull things off the channel that
         // aren't usable
 	// i, numProposals = i is a for loop from 1 to numProposals
 	// found, batchsize = we use found to bound the number of entries added to batchsize=1 (and flushing buffer)
 	//for found < batchSize && i <= numProposals {
-	for prop != nil {
+	for i < (batchSize) {
 		dlog.Printf("cmds[%v] = ...", found)
-                next = prop.Next()
-                r.proposeBatch.Remove(prop)
 
 		expectedSeqno = 0
-		if val, ok := r.nextSeqNo[prop.Value.(*genericsmr.MDLPropose).PID]; ok {
+		if val, ok := r.nextSeqNo[prop.PID]; ok {
 			expectedSeqno = val
 		}
 		//dlog.Printf("map = %v, prop.PID = %v, prop.SeqNo = %v, expectedSeqno = %v, predecessor = %v\n", r.nextSeqNo, prop.PID, prop.SeqNo, expectedSeqno, prop.Predecessor)
-		if prop.Value.(*genericsmr.MDLPropose).SeqNo != expectedSeqno {
+		if prop.SeqNo != expectedSeqno {
 			// Add to buffer
 			panic("We shouldn't be getting OoO reqs per client")
-			if _, ok := r.outstandingInst[prop.Value.(*genericsmr.MDLPropose).PID]; !ok {
-				r.outstandingInst[prop.Value.(*genericsmr.MDLPropose).PID] = make([]*genericsmr.MDLPropose, 0)
+			if _, ok := r.outstandingInst[prop.PID]; !ok {
+				r.outstandingInst[prop.PID] = make([]*genericsmr.MDLPropose, 0)
 			}
-			r.outstandingInst[prop.Value.(*genericsmr.MDLPropose).PID] = append(r.outstandingInst[prop.Value.(*genericsmr.MDLPropose).PID], prop.Value.(*genericsmr.MDLPropose))
-			if len(r.outstandingInst[prop.Value.(*genericsmr.MDLPropose).PID]) > 1 {
-				mysort.MergeSort(r.outstandingInst[prop.Value.(*genericsmr.MDLPropose).PID])
+			r.outstandingInst[prop.PID] = append(r.outstandingInst[prop.PID], prop)
+			if len(r.outstandingInst[prop.PID]) > 1 {
+				mysort.MergeSort(r.outstandingInst[prop.PID])
 			}
 			//TODO update other state maps, like CR, CRR, pred, etc.
 		} else {
 			var coord int8 = -1
-			t := mdlinproto.Tag{K: prop.Value.(*genericsmr.MDLPropose).Command.K, PID: prop.Value.(*genericsmr.MDLPropose).PID, SeqNo: prop.Value.(*genericsmr.MDLPropose).SeqNo}
+			t := mdlinproto.Tag{K: prop.Command.K, PID: prop.PID, SeqNo: prop.SeqNo}
                         // Coordination responses that arrived before we did
 			if v, ok2 := r.outstandingCRR[t]; ok2 {
 				coord = int8(v.OK)
 				ts_chain = v.TimestampChain
 				delete(r.outstandingCRR, t)
 			}
-			dlog.Printf("t = %v, coord = %v, naught = %v\n", t, coord, prop.Value.(*genericsmr.MDLPropose).Predecessor.SeqNo == -1)
-			if (prop.Value.(*genericsmr.MDLPropose).Predecessor.SeqNo == -1) {
+			dlog.Printf("t = %v, coord = %v, naught = %v\n", t, coord, prop.Predecessor.SeqNo == -1)
+			if (prop.Predecessor.SeqNo == -1) {
                           // I should also be able to delete anything in the seen map that has the same PID and smaller SeqNo
 			  coord = int8(1)
                           prepareTagsFA[foundFA] = t
-                          newE := r.addEntryToBuffLog(prop.Value.(*genericsmr.MDLPropose).Command, prop.Value.(*genericsmr.MDLPropose), coord, ts_chain, prop.Value.(*genericsmr.MDLPropose).PID, prop.Value.(*genericsmr.MDLPropose).SeqNo)
+                          newE := r.addEntryToBuffLog(prop.Command, prop, coord, ts_chain, prop.PID, prop.SeqNo)
 			  newE.timestampChain[0] = r.giveLamportTS(ts_chain)
 			  if r.defaultBallot != -1 {
 				  dlog.Printf("PUSHING onto the finalAcceptBathc")
@@ -873,14 +852,11 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			  foundFA++
                         } else {
 			  prepareTags[found-foundFA] = t
-			  newE := r.addEntryToBuffLog(prop.Value.(*genericsmr.MDLPropose).Command, prop.Value.(*genericsmr.MDLPropose), coord, ts_chain, prop.Value.(*genericsmr.MDLPropose).PID, prop.Value.(*genericsmr.MDLPropose).SeqNo)
+			  cmds[found-foundFA] = prop.Command
+			  r.addEntryToBuffLog(prop.Command, prop, coord, ts_chain, prop.PID, prop.SeqNo)
 			  dlog.Printf("adding this to buffered log! %v, and now looks like %v", t, r.bufferedLog)
-			  if r.defaultBallot != -1 {
-				  dlog.Printf("PUSHING onto the acceptBatch")
-				  r.acceptBatch.PushBack(newE)
-			  }
 			}
-			r.nextSeqNo[prop.Value.(*genericsmr.MDLPropose).PID]++
+			r.nextSeqNo[prop.PID]++
 			ts_chain = nil
 
 			// Check if any others are ready
@@ -921,8 +897,10 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			}*/
 		}
 		found++
-		prop = next
-		//i++
+		i++
+		if i < (batchSize) {
+			prop = <-r.MDLProposeChan
+		}
 		/*if found < batchSize && i <= numProposals {
 			//NewPrintf(LEVELALL, "--->Pulled out the next one")
 			prop = <-r.MDLProposeChan
@@ -962,7 +940,6 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		//NewPrintf(DEBUG_LEVEL, "    Step2. (candidate) leader broadcasting accepts!....")
 		dlog.Printf("found = %v, foundFA = %v", found, foundFA)
 		dlog.Printf("acceptBatch length = %v", r.acceptBatch.Len())
-		if (r.acceptBatch.Len() >= r.batchSize) {
 /*dlog.Printf("PRINTING ACCEPTBATCH")
   qq := r.acceptBatch.Front()
   n := qq
@@ -981,24 +958,15 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	  ii++
   }*/
 			//dlog.Printf("nonNaughts prepareTags = %v", prepareTags)
-			p := r.acceptBatch.Front()
-			next := p
-			i := 0
-			tags := make([]mdlinproto.Tag, r.batchSize)
-			cmds := make([]state.Command, r.batchSize)
-			for i < r.batchSize {
-				next = p.Next()
-				r.acceptBatch.Remove(p)
-				cmds[i] = p.Value.(*Instance).cmds[0]
-				tags[i] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).lb.clientProposals[0].PID, SeqNo: p.Value.(*Instance).lb.clientProposals[0].SeqNo}
-				p = next
-				i++
+			prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found-foundFA]...)
+			cmds = append([]state.Command(nil), cmds[:found-foundFA]...)
+			log.Printf("handlePropose --> bcastAccepting %v proposals", found-foundFA)
+			if (found-foundFA > 0) {
+				r.bcastAccept(r.defaultBallot, cmds, prepareTags)
 			}
-			r.bcastAccept(r.defaultBallot, cmds, tags)
-		}
-		if (r.finalAcceptBatch.Len() >= r.batchSize) {
-			r.processCCEntry()
-		}
+			if (r.finalAcceptBatch.Len() > 0) {
+				r.processCCEntry()
+			}
 	}
 	dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }
@@ -1206,9 +1174,9 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance, index int) {
   delete(r.outstandingCR, t)
 
   dlog.Printf("The coordsBatch LL is %v long", r.coordsBatch.Len())
-  if (r.coordsBatch.Len() < 1) {
-	  return
-  }
+  //if (r.coordsBatch.Len() < 1) {
+	  //return
+  //}
   dlog.Printf("responding now\n")
   info := r.coordsBatch.Front()
   next := info
@@ -1479,45 +1447,29 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 			totalAcks := inst.lb.prepareOKs
 			naught := (inst.lb.clientProposals[0].Predecessor.PID == -1)
 			b := inst.ballot
-			for _, t := range preply.Instance {
+			cmds := make([]state.Command, len(preply.Instance))
+			for i, t := range preply.Instance {
 				inst = r.bufferedLog[t]
 				dlog.Printf("naught = %v, inst = %v", naught, inst)
 
 				inst.lb.prepareOKs = totalAcks
 				inst.status = PREPARED
 				inst.lb.nacks = 0
+				cmds[i] = inst.cmds[0]
 				if inst.ballot > r.defaultBallot {
 					r.defaultBallot = inst.ballot
 				}
 				r.recordInstanceMetadata(inst)
 				r.sync()
-				if (!naught) {
-					dlog.Printf("here.... of... the size of shit in bcastAccept is %v", len(inst.cmds))
-					dlog.Printf("preply.Instance = %v", preply.Instance)
-					r.acceptBatch.PushBack(inst)
-					if (r.acceptBatch.Len() >= r.batchSize) {
-						p := r.acceptBatch.Front()
-						next := p
-						i := 0
-						tags := make([]mdlinproto.Tag, r.batchSize)
-						cmds := make([]state.Command, r.batchSize)
-						for i < r.batchSize {
-							next = p.Next()
-							r.acceptBatch.Remove(p)
-							cmds[i] = p.Value.(*Instance).cmds[0]
-							tags[i] = mdlinproto.Tag{K: p.Value.(*Instance).cmds[0].K, PID: p.Value.(*Instance).lb.clientProposals[0].PID, SeqNo: p.Value.(*Instance).lb.clientProposals[0].SeqNo}
-							p = next
-							i++
-						}
-						r.bcastAccept(b, cmds, tags)
-					}
-				} else {
-					dlog.Printf("here??, inst = %v", inst)
+				if (naught) {
 					r.finalAcceptBatch.PushBack(inst)
-					if (r.finalAcceptBatch.Len() >= r.batchSize) {
-						r.processCCEntry()
-					}
 				}
+			}
+			if (!naught) {
+				log.Printf("PrepareReply --> bcastAccepting %v proposals", len(preply.Instance))
+				r.bcastAccept(b, cmds, preply.Instance)
+			} else {
+				r.processCCEntry()
 			}
 		}
 	} else {
