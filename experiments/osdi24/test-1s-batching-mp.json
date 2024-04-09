@@ -109,13 +109,15 @@
 
   ],
   "clients": [
-	  "client-0-0"
+	  "client-0-0",
+	  "client-2-0",
+	  "client-3-0"
   ],
   "server_regions": {
     "region1": ["us-west-1-0"],
     "region2": ["us-west-1-1"],
     "region3": ["us-west-1-2"],
-    "region4": ["client-0-0"]
+    "region4": ["client-0-0", "client-2-0", "client-3-0"]
   },
   "region_rtt_latencies": {
       "region1": {
@@ -144,12 +146,12 @@
       }
  },
   "client_total": [
-	  [8, 16, 32, 64, 128, 256, 512],
-	  [8, 16, 32, 64, 128, 256, 512]
+	  [768, 1536, 3072],
+	  [768, 1536, 3072]
   ],
   "client_processes_per_client_node": [
-	  [8, 16, 32, 64, 128, 256, 512],
-	  [8, 16, 32, 64, 128, 256, 512]
+	  [256, 512, 1024],
+	  [256, 512, 1024]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -157,7 +159,7 @@
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
   "client_fanout": 1,
-  "batchsize": 1,
+  "batchsize": 5,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,
@@ -262,7 +264,7 @@
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
   "server_rpc_port": 8087,
-  "src_commit_hash": "faster",
+  "src_commit_hash": "timingBatching",
   "src_directory": "/users/akalaba/MDLin",
   "codebase_name": "mdl",
   "remote_bin_directory_nfs_enabled": false,

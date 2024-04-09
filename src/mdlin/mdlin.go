@@ -396,9 +396,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			dlog.Printf("1\n")
 			dlog.Printf("the proposal = %v", proposal)
 			r.handlePropose(proposal)
-			//if r.batchingEnabled {
-			//	proposeChan = nil
-			//}
+			proposeChan = nil
 			break
 		//case <-epochChan:
 		//	dlog.Printf("2\n")
@@ -960,7 +958,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			//dlog.Printf("nonNaughts prepareTags = %v", prepareTags)
 			prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found-foundFA]...)
 			cmds = append([]state.Command(nil), cmds[:found-foundFA]...)
-			log.Printf("handlePropose --> bcastAccepting %v proposals", found-foundFA)
+			//log.Printf("handlePropose --> bcastAccepting %v proposals", found-foundFA)
 			if (found-foundFA > 0) {
 				r.bcastAccept(r.defaultBallot, cmds, prepareTags)
 			}

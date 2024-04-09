@@ -496,6 +496,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		r.recordCommands(cmds)
 		r.sync()
 
+		//log.Printf("bcastAccepting %v proposals", len(cmds))
 		r.bcastAccept(instNo, r.defaultBallot, cmds)
 		//dlog.Printf("Fast round for instance %d\n", instNo)
 	}
