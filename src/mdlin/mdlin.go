@@ -565,6 +565,9 @@ func (r *Replica) processCCEntry() {
 		  dlog.Printf("Adding t = %v to seen!\n", tags[i])
 		  r.seen[t] = &FullInstance{instNo: int(instNo), index: i}
 		}
+		/*if proposals[i].PID == 69 && proposals[i].CommandId >= 400 && proposals[i].CommandId <= 407 {
+			log.Printf("shardID %v: processCCEntry for CommandID %v and PID = %v at time %v", r.ShardId, proposals[i].CommandId, proposals[i].PID, time.Now().UnixMilli())
+		}*/
 
 		inst = next
 		i++
@@ -804,6 +807,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 	var ts_chain []int64 = nil
 	prop := propose
 	i := 0
+	//printMe := false
         // We need a loop like this to lag behind pulling values off the channel,
         // since in contrast to paxos, we might pull things off the channel that
         // aren't usable
@@ -849,9 +853,16 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 				  dlog.Printf("PUSHING onto the finalAcceptBathc")
 				  r.finalAcceptBatch.PushBack(newE)
 			  }
+			  /*if prop.PID == 69 && prop.CommandId >= 400 && prop.CommandId <= 407 {
+					log.Printf("shardID %v: handlePropose for CommandID %v and PID = %v at time %v to PROCESS cmds list", r.ShardId, prop.CommandId, prop.PID, time.Now().UnixMilli())
+				}*/
 			  dlog.Printf("adding this to buffered log! %v, and now looks like %v", t, r.bufferedLog)
 			  foundFA++
                         } else {
+				/*if prop.PID == 69 && prop.CommandId >= 400 && prop.CommandId <= 407 {
+					printMe = true
+					log.Printf("shardID %v: handlePropose for CommandID %v and PID = %v at time %v to BCASTAccept list", r.ShardId, prop.CommandId, prop.PID, time.Now().UnixMilli())
+				}*/
 			  prepareTags[found-foundFA] = t
 			  cmds[found-foundFA] = prop.Command
 			  r.addEntryToBuffLog(prop.Command, prop, coord, ts_chain, prop.PID, prop.SeqNo)
@@ -963,6 +974,9 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 			cmds = append([]state.Command(nil), cmds[:found-foundFA]...)
 			//log.Printf("handlePropose --> bcastAccepting %v proposals", found-foundFA)
 			if (found-foundFA > 0) {
+				/*if printMe {
+					log.Printf("Bcast Accept @ t=%v!", time.Now().UnixMilli())
+				}*/
 				r.bcastAccept(r.defaultBallot, cmds, prepareTags)
 			}
 			if (r.finalAcceptBatch.Len() > 0) {
@@ -1059,6 +1073,11 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
   e, index := r.findEntry(cr.AskeeTag)
   OK, coord, ts_chain := r.checkCoordination(e, index)
   r.outstandingCR[cr.AskeeTag] = cr
+  /*if (e != nil) {
+  if e.lb.clientProposals[index].PID == 69 && e.lb.clientProposals[index].CommandId >= 400 && e.lb.clientProposals[index].CommandId <= 407 {
+                log.Printf("shardID %v: Got handleCoordination request! for CommandID %v and PID = %v at time %v", r.ShardId, e.lb.clientProposals[index].CommandId, e.lb.clientProposals[index].PID, time.Now().UnixMilli())
+        }
+  }*/
   dlog.Printf("Successor %v looking for predecessor here %v, and we added it in the CR map = %v", cr.AskerTag, cr.AskeeTag, r.outstandingCR)
   dlog.Printf("the predecessor OK, coord, ts_chain = %v, %v, %v\n", OK, coord, ts_chain)
   /*if (e != nil) {
@@ -1144,12 +1163,17 @@ func (r *Replica) handleCoordinationRReply(crr *mdlinproto.CoordinationResponse)
 	  // Update my status
 	  e.lb.coordinated = int8(crr.OK[i])
 	  e.timestampChain[0] = crr.TimestampChain[i]
+	  /*if e.lb.clientProposals[0].PID == 69 && e.lb.clientProposals[0].CommandId >= 400 && e.lb.clientProposals[0].CommandId <= 407 {
+                log.Printf("shardID %v: COORDINATED for CommandID %v and PID = %v at time %v", r.ShardId, e.lb.clientProposals[0].CommandId, e.lb.clientProposals[0].PID, time.Now().UnixMilli())
+        }*/
+
 	  dlog.Printf("status for suucc = %v getting updated to coord = %v, timestampchain received from predecessor = %v\n", crr.AskerTag[i], crr.OK[i], crr.TimestampChain[i])
 	  // if NOW i'm committed and coordinated, then I must add myself 
 	  // to the ordered log AND reply to my successors (if any exist)
 	  OK, _, _ := r.checkCoordination(e, 0)
 	  if OK {
 	    e.timestampChain[0] = r.giveLamportTS(e.timestampChain[0])
+	    r.replyToSuccessorIfExists(e, 0)
 	    r.finalAcceptBatch.PushBack(e)
 	  }
 	  // Otherwise, this will be handled by handleAcceptReply()
@@ -1205,6 +1229,10 @@ func (r *Replica) replyToSuccessorIfExists(e *Instance, index int) {
 	predecessor := info.Value.(*CoordInfo).predecessor
 	index := info.Value.(*CoordInfo).index
 	shardTo := succ.From
+
+	/*if predecessor.lb.clientProposals[index].PID == 69 && predecessor.lb.clientProposals[index].CommandId >= 400 && predecessor.lb.clientProposals[index].CommandId <= 407 {
+                log.Printf("shardID %v: sending Coordination RESPONSE from predecessor with CommandID %v and PID = %v at time %v", r.ShardId, predecessor.lb.clientProposals[index].CommandId, predecessor.lb.clientProposals[index].PID, time.Now().UnixMilli())
+        }*/
 
 	dlog.Printf("going to send response to succ = %v", succ.AskerTag)
 	msg, in := perShard[shardTo]
@@ -1464,7 +1492,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 				}
 			}
 			if (!naught) {
-				log.Printf("PrepareReply --> bcastAccepting %v proposals", len(preply.Instance))
+				//log.Printf("PrepareReply --> bcastAccepting %v proposals", len(preply.Instance))
 				r.bcastAccept(b, cmds, preply.Instance)
 			} else {
 				r.processCCEntry()
@@ -1517,12 +1545,16 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
     for i := 0; i < len(areply.IdTag); i++ {
 	    dlog.Printf("handleAcceptReply t=%v getting accepted!", areply.IdTag[i])
       inst = r.bufferedLog[areply.IdTag[i]]
+      /*if inst.lb.clientProposals[0].PID == 69 && inst.lb.clientProposals[0].CommandId >= 400 && inst.lb.clientProposals[0].CommandId <= 407 {
+		    log.Printf("shardID %v: GOT acceTPED for CommandID %v and PID = %v at time %v", r.ShardId, inst.lb.clientProposals[0].CommandId, inst.lb.clientProposals[0].PID, time.Now().UnixMilli())
+	    }*/
       inst.lb.acceptOKs = numacks
       //NewPrintf(LEVEL0, "Quorum! for commandId %d", inst.lb.clientProposals[0].CommandId)
       OK, _, _ := r.checkCoordination(inst, 0)
       if OK {
 	      dlog.Printf("%v was CC!", areply.IdTag[i])
 	      inst.timestampChain[0] = r.giveLamportTS(inst.timestampChain[0])
+	      r.replyToSuccessorIfExists(inst, 0)
 	      r.finalAcceptBatch.PushBack(inst)
       }
     }
@@ -1564,6 +1596,10 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
 	    }*/
 	    r.readyToCommit(fareply.Instance)
 	    for i := 0; i < len(inst.cmds); i++ {
+		    /*if inst.lb.clientProposals[i].PID == 69 && inst.lb.clientProposals[i].CommandId >= 400 && inst.lb.clientProposals[i].CommandId <= 407 {
+                log.Printf("shardID %v: Got FINAL ACCEPT RESPONSE... going to execute soon for CommandID %v and PID = %v at time %v", r.ShardId, inst.lb.clientProposals[i].CommandId, inst.lb.clientProposals[i].PID, time.Now().UnixMilli())
+        }*/
+
 		    if (inst.lb.clientProposals[i].Predecessor.PID == -1 && inst.lb.clientProposals[i].Predecessor.SeqNo == -1) {
 			    // all naught requests can reply now
 			    r.replyToSuccessorIfExists(inst, i)
@@ -1605,6 +1641,10 @@ func (r *Replica) executeCommands() {
 							inst.lb.clientProposals[j].CommandId,
 							val,
 							17}
+						/*if inst.lb.clientProposals[j].PID == 69 && inst.lb.clientProposals[j].CommandId >= 400 && inst.lb.clientProposals[j].CommandId <= 407 {
+                log.Printf("shardID %v: EXECUTINGING CommandID %v and PID = %v at time %v", r.ShardId, inst.lb.clientProposals[j].CommandId, inst.lb.clientProposals[j].PID, time.Now().UnixMilli())
+        }*/
+
 
 						dlog.Printf("EXECUTING --> CLIENT:OK = TRUE, CommandID = %d, val = %v, key = %d, seqno = %d, PID = %dHA", inst.lb.clientProposals[j].CommandId, val, inst.lb.clientProposals[j].Command.K, inst.lb.clientProposals[j].SeqNo, inst.lb.clientProposals[j].PID)
 
