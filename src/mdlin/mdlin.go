@@ -390,6 +390,9 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		select {
 		case <-proposeDone:
 			proposeChan = r.MDLProposeChan
+			if (r.finalAcceptBatch.Len() > 0) {
+				r.processCCEntry()
+			}
 			break
 		case proposal := <-proposeChan:
 			NewPrintf(LEVELALL, "---------ProposalChan---------")
@@ -566,7 +569,7 @@ func (r *Replica) processCCEntry() {
 		inst = next
 		i++
 	}
-	log.Printf("ProcessCCEntry has %v proposals issued in bcastFinalAccept", i)
+	//log.Printf("ProcessCCEntry has %v proposals issued in bcastFinalAccept", i)
 	r.addNewEntryToOrderedLog(instNo, cmds, ts_chains, proposals, ACCEPTED)
 	r.instanceSpace[instNo].lb.inCoordsList = coordsList
 	r.crtInstance++
@@ -1056,7 +1059,7 @@ func (r *Replica) handleCoordinationRequest(cr *genericsmr.MDLCoordReq) {
   e, index := r.findEntry(cr.AskeeTag)
   OK, coord, ts_chain := r.checkCoordination(e, index)
   r.outstandingCR[cr.AskeeTag] = cr
-  dlog.Printf("Successor %v looking for predecessor here %v, map = %v", cr.AskerTag, cr.AskeeTag, r.outstandingCR)
+  dlog.Printf("Successor %v looking for predecessor here %v, and we added it in the CR map = %v", cr.AskerTag, cr.AskeeTag, r.outstandingCR)
   dlog.Printf("the predecessor OK, coord, ts_chain = %v, %v, %v\n", OK, coord, ts_chain)
   /*if (e != nil) {
 	  dlog.Printf("acceptOKs = %v and finalOKs = %v AND naught = %v\n", e.lb.acceptOKs, e.lb.finalOKs, e.lb.clientProposals[index].Predecessor.PID == -1)
