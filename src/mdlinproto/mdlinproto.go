@@ -109,7 +109,7 @@ type CoordinationRequest struct {
 	From          int32
 }
 
-type CoordinationResponse struct {
+type CoordinationResponseBatch struct {
 	AskerTag        []Tag
 	//AskeeTag        []Tag
   TimestampChain      [][]int64
@@ -117,7 +117,7 @@ type CoordinationResponse struct {
   OK              []uint8
 }
 
-type CoordinationResponseMini struct {
+type CoordinationResponse struct {
 	AskerTag        Tag
 	TimestampChain      []int64
 	OK		uint8

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fastrpc"
-	"dlog"
 	"io"
 	"state"
 	"sync"
@@ -1250,6 +1249,82 @@ func (t *CoordinationResponse) New() fastrpc.Serializable {
 	return new(CoordinationResponse)
 }
 
+
+func (t *CoordinationResponse) Marshal(wire io.Writer) {
+	// AskerTag Tag
+  // TimestampChain []int64
+  // OK       uint8
+  var b [8]byte
+  var bs []byte
+  var tmp64 int64
+
+  t.AskerTag.Marshal(wire)
+
+
+  // TimestampChain
+  bs = b[:]
+  alen1 := int64(len(t.TimestampChain))
+  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
+    wire.Write(b[0:wlen])
+  }
+  for i := int64(0); i < alen1; i++ {
+		  bs = b[:8]
+		  tmp64 = t.TimestampChain[i]
+		  bs[0] = byte(tmp64)
+		  bs[1] = byte(tmp64 >> 8)
+		  bs[2] = byte(tmp64 >> 16)
+		  bs[3] = byte(tmp64 >> 24)
+		  bs[4] = byte(tmp64 >> 32)
+		  bs[5] = byte(tmp64 >> 40)
+		  bs[6] = byte(tmp64 >> 48)
+		  bs[7] = byte(tmp64 >> 56)
+		  wire.Write(bs)
+  }
+
+    // OK
+	    bs = b[:1]
+	    bs[0] = byte(t.OK)
+	    wire.Write(bs)
+}
+
+func (t *CoordinationResponse) Unmarshal(rr io.Reader) error {
+	// AskerTag Tag
+	// AskeeTag Tag
+  // TimestampChain []int64
+	// From     int32
+  // OK       uint8
+	var wire byteReader
+	var ok bool
+	if wire, ok = rr.(byteReader); !ok {
+		wire = bufio.NewReader(rr)
+	}
+		t.AskerTag.Unmarshal(wire)
+
+	var b [8]byte
+	var bs []byte
+	alen1, err := binary.ReadVarint(wire)
+  if err != nil {
+    return err
+  }
+  t.TimestampChain = make([]int64, alen1)
+  for i := int64(0); i < alen1; i++ {
+		  bs = b[:8]
+		  if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
+			  return err
+		  }
+		  t.TimestampChain[i] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+  }
+
+	  bs = b[:1]
+	if _, err := io.ReadAtLeast(wire, bs, 1); err != nil {
+		return err
+	}
+	t.OK = uint8(bs[0])
+	return nil
+}
+
+
+/*
 func (t *CoordinationResponse) Marshal(wire io.Writer) {
 	// AskerTag Tag
 	// AskeeTag Tag
@@ -1370,4 +1445,4 @@ func (t *CoordinationResponse) Unmarshal(rr io.Reader) error {
   }
 	return nil
 }
-
+*/
