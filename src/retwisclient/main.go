@@ -273,46 +273,17 @@ func main() {
 			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
 		}
 
-		var opTypes []state.Operation
-		var k int64
-		var keys []int64
-		for i := 0; i < *fanout; i++ {
-			opTypeRoll := r.Intn(1000)
-			var opType state.Operation
-			if opTypeRoll < *reads {
-				opType = state.GET
-			} else if opTypeRoll < *reads+*writes {
-				opType = state.PUT
-			} else {
-				opType = state.CAS
-			}
-			opTypes = append(opTypes, opType)
-
-			if *conflicts >= 0 {
-				if r.Intn(*conflictsDenom) < *conflicts {
-					k = 0
-				} else {
-					k = (int64(count) << 32) | int64(*clientId)
-				}
-			} else {
-				k = int64(zipf.Uint64())
-				//k = int64(r.Intn(int(*numKeys)))
-			}
-			keys = append(keys, k)
-		}
-
-		var success bool
-
 		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
+		global_timeline := int64(zipf.Uint64())
+		next_post_id := int64(zipf.Uint64())
+		post_id := int64(0)
 		before := time.Now()
-		success, _ = client.AppRequest(opTypes, keys)
+		PostTransformed(post_id, global_timeline, next_post_id, client, zipf)
 		after := time.Now()
+		post_id++
                 //dlog.Printf("!!!!Paxos APP level write took %d microseconds\n", int64(after.Sub(before).Microseconds()))
 
 		opString := "app"
-		if !success {
-			log.Printf("Failed %s(%d).\n", opString, count)
-		}
 		count++
 		dlog.Printf("AppRequests attempted: %d\n", count)
 		//dlog.Printf("AppRequests attempted: %d at time %d\n", count, time.Now().UnixMilli())
@@ -320,7 +291,7 @@ func main() {
 		currInt := int(currRuntime.Seconds())
 		if *rampUp <= currInt && currInt < *expLength-*rampDown {
 			lat := int64(after.Sub(before).Nanoseconds())
-			fmt.Printf("%s,%d,%d,%d\n", opString, lat, k, count)
+			fmt.Printf("%s,%d,%d,%d\n", opString, lat, 0, count)
 
 		}
 		now = time.Now()
