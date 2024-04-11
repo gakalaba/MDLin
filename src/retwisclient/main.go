@@ -391,16 +391,17 @@ func PostSequential(post_id int64, timeline int64, next_post_id int64, client cl
 	client.AppRequest([]state.Operation{state.CAS}, []int64{timeline})
 }
 
-func PostTransformed(post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+func PostTransformed(post_id int64, timeline int64, next_post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	var opTypes []state.Operation
 	var keys []int64
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// $postid = $r->incr("next_post_id");
-	client.AppRequest([]state.Operation{state.CAS}, []int64{int64(zipf.Uint64())})
+	client.AppRequest([]state.Operation{state.CAS}, []int64{next_post_id})
 
 	// $r->hmset("post:$postid","user_id",$User['id'],"time",time(),"body",$status);
 	// $followers = $r->zrange("followers:".$User['id'],0,-1);
-	client.AppRequest([]state.Operation{state.PUT, state.GET}, []int64{int64(zipf.Uint64()), int64(zipf.Uint64())})
+	client.AppRequest([]state.Operation{state.PUT, state.GET}, []int64{post_id, int64(zipf.Uint64())})
 	followers := int64(zipf.Uint64()) % 100
 
 	/* 
@@ -410,29 +411,30 @@ func PostTransformed(post_id int64, client clients.Client, zipf *zipfgenerator.Z
 	keys = nil
 	opTypes = nil
 	for i := int64(0); i < followers; i++ {
-		keys = append(keys, int64(zipf.Uint64()))
+		keys = append(keys, int64(r.Uint64()))
 		opTypes = append(opTypes, state.PUT)
 	}
 	client.AppRequest(opTypes, keys)
 
 	// $r->lpush("timeline",$postid);
 	//$r->ltrim("timeline",0,1000);
-	client.AppRequest([]state.Operation{state.PUT, state.CAS}, []int64{int64(zipf.Uint64()), int64(zipf.Uint64())})
+	client.AppRequest([]state.Operation{state.PUT, state.CAS}, []int64{timeline, timeline})
 }
 
-func PostNaive(post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+func PostNaive(post_id int64, timeline int64, next_post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	followers := int64(zipf.Uint64()) % 100
 	total := 5+followers
 	done := make([]int, total)
 	// $postid = $r->incr("next_post_id");
 	go func(i int) {
-		client.AppRequest([]state.Operation{state.CAS}, []int64{int64(zipf.Uint64())})
+		client.AppRequest([]state.Operation{state.CAS}, []int64{next_post_id})
 		done[i] = 1
 	}(0)
 
 	// $r->hmset("post:$postid","user_id",$User['id'],"time",time(),"body",$status);
 	go func(i int) {
-		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(zipf.Uint64())})
+		client.AppRequest([]state.Operation{state.PUT}, []int64{post_id})
 		done[i] = 1
 	}(1)
 
@@ -448,19 +450,19 @@ func PostNaive(post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGen
 	}*/
 	for i := int64(0); i < followers; i++ {
 		func(j int64) {
-			go client.AppRequest([]state.Operation{state.PUT}, []int64{int64(zipf.Uint64())})
+			go client.AppRequest([]state.Operation{state.PUT}, []int64{int64(r.Uint64())})
 			done[j] = 1
 		}(3 + i)
 	}
 
 	// $r->lpush("timeline",$postid);
 	go func(i int64) {
-		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(zipf.Uint64())})
+		client.AppRequest([]state.Operation{state.PUT}, []int64{timeline})
 		done[i] = 1
 	}(3+followers)
 	//$r->ltrim("timeline",0,1000);
 	go func(i int64) {
-		client.AppRequest([]state.Operation{state.CAS}, []int64{int64(zipf.Uint64())})
+		client.AppRequest([]state.Operation{state.CAS}, []int64{timeline})
 		done[i] = 1
 	}(4+followers)
 
