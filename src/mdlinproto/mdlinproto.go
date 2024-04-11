@@ -89,7 +89,6 @@ type Commit struct {
 	Ballot    int32
 	Command   []state.Command
 	CmdTags   []Tag
-	Status    uint8
   TimestampChain []int64
 }
 
@@ -98,7 +97,6 @@ type CommitShort struct {
 	Instance int32
 	Count    int32
 	Ballot   int32
-	Status   int32
 }
 
 // Message types for MultiShard MDL

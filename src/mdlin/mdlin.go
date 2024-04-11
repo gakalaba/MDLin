@@ -625,7 +625,7 @@ func (r *Replica) bcastAccept(ballot int32, command []state.Command, cmdTags []m
 var pc mdlinproto.Commit
 var pcs mdlinproto.CommitShort
 
-func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Command, pids int64, seqnos int64, status InstanceStatus, ts_chain []int64) {
+func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Command, pids int64, seqnos int64, ts_chain []int64) {
 	defer func() {
 		if err := recover(); err != nil {
 			//NewPrintf(LEVEL0, "Commit bcast failed: %v", err)
@@ -636,14 +636,12 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 	pc.Instance = instance
 	pc.Ballot = ballot
 	pc.Command = command
-	pc.Status = uint8(status)
   pc.TimestampChain = ts_chain
 	args := &pc
 	pcs.LeaderId = r.Id
 	pcs.Instance = instance
 	pcs.Ballot = ballot
 	pcs.Count = int32(len(command))
-	pcs.Status = int32(status)
 	argsShort := &pcs
 
 	//args := &mdlinproto.Commit{r.Id, instance, command}
@@ -1060,7 +1058,7 @@ func (r *Replica) readyToCommit(instance int32) {
 
 	r.updateCommittedUpTo()
 
-	r.bcastCommit(instance, inst.ballot, inst.cmds, inst.lb.clientProposals[0].PID, inst.lb.clientProposals[0].SeqNo, COMMITTED, inst.timestampChain)
+	r.bcastCommit(instance, inst.ballot, inst.cmds, inst.lb.clientProposals[0].PID, inst.lb.clientProposals[0].SeqNo, inst.timestampChain)
 }
 
 func commandToStr(c state.Command) string {
@@ -1185,7 +1183,7 @@ func (r *Replica) handleCommit(commit *mdlinproto.Commit) {
     r.addEntryToOrderedLog(commit.Instance, commit.Command, commit.TimestampChain, nil, COMMITTED)
 	} else {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
-		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
+		r.instanceSpace[commit.Instance].status = InstanceStatus(COMMITTED)
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
     r.instanceSpace[commit.Instance].timestampChain = commit.TimestampChain
 		if inst.lb != nil && inst.lb.clientProposals != nil {
@@ -1213,7 +1211,7 @@ func (r *Replica) handleCommitShort(commit *mdlinproto.CommitShort) {
 	if inst == nil {
     r.addEntryToOrderedLog(commit.Instance, nil, nil, nil, COMMITTED)
 	} else {
-		r.instanceSpace[commit.Instance].status = InstanceStatus(commit.Status)
+		r.instanceSpace[commit.Instance].status = InstanceStatus(COMMITTED)
 		r.instanceSpace[commit.Instance].ballot = commit.Ballot
 		if inst.lb != nil && inst.lb.clientProposals != nil {
 			for i := 0; i < len(inst.lb.clientProposals); i++ {
