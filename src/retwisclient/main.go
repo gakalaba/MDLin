@@ -265,6 +265,12 @@ func main() {
 		client.Finish()
 	}(client)
 
+	// Add these keys in the store 
+	global_timeline := int64(zipf.Uint64())
+	next_post_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT, state.PUT}, []int64{global_timeline, next_post_id})
+	post_id := int64(0)
+
 	start := time.Now()
 	now := start
 	currRuntime := now.Sub(start)
@@ -274,9 +280,6 @@ func main() {
 		}
 
 		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
-		global_timeline := int64(zipf.Uint64())
-		next_post_id := int64(zipf.Uint64())
-		post_id := int64(0)
 		before := time.Now()
 		PostTransformed(post_id, global_timeline, next_post_id, client, zipf)
 		after := time.Now()
