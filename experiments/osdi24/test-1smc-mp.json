@@ -25,141 +25,140 @@
     }
   ],
   "server_names": [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
   ],
   "num_shards": 24,
   "shards": [
 	  [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
     ],
 [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
     ],
 [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
     ],
 [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
     ],
 [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
     ],
 [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
     ],
 [
-      "us-west-1-1",
-      "us-west-1-2",
-      "us-west-1-0"
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
     ],
 [
-      "us-west-1-1",
-      "us-west-1-2",
-      "us-west-1-0"
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
     ],
 [
-      "us-west-1-1",
-      "us-west-1-2",
-      "us-west-1-0"
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
     ],
 [
-      "us-west-1-1",
-      "us-west-1-2",
-      "us-west-1-0"
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
     ],
 [
-      "us-west-1-1",
-      "us-west-1-2",
-      "us-west-1-0"
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
     ],
 [
-      "us-west-1-1",
-      "us-west-1-2",
-      "us-west-1-0"
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
     ],
 [
-      "us-west-1-2",
-      "us-west-1-0",
-      "us-west-1-1"
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
     ],
 [
-      "us-west-1-2",
-      "us-west-1-0",
-      "us-west-1-1"
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
     ],
 [
-      "us-west-1-2",
-      "us-west-1-0",
-      "us-west-1-1"
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
     ],
 [
-      "us-west-1-2",
-      "us-west-1-0",
-      "us-west-1-1"
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
     ],
 [
-      "us-west-1-2",
-      "us-west-1-0",
-      "us-west-1-1"
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
     ],
 [
-      "us-west-1-2",
-      "us-west-1-0",
-      "us-west-1-1"
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
     ],
 [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
     ],
 [
-      "us-west-1-1",
-      "us-west-1-2",
-      "us-west-1-0"
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
     ],
 [
-      "us-west-1-2",
-      "us-west-1-0",
-      "us-west-1-1"
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
     ],
 [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
     ],
 [
-      "us-west-1-1",
-      "us-west-1-2",
-      "us-west-1-0"
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
     ],
 [
-      "us-west-1-2",
-      "us-west-1-0",
-      "us-west-1-1"
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
     ]
-
           ],
   "clients": [
 	  "client-0-0"
   ],
   "server_regions": {
-    "region1": ["us-west-1-0"],
-    "region2": ["us-west-1-1"],
-    "region3": ["us-west-1-2"],
+    "region1": ["eu-west-1-0"],
+    "region2": ["eu-west-1-1"],
+    "region3": ["eu-west-1-2"],
     "region4": ["client-0-0"]
   },
   "region_rtt_latencies": {
@@ -201,7 +200,7 @@
   "client_write_percentage": 1000,
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
-  "client_fanout": 32,
+  "client_fanout": 1,
   "server_epoch": 500,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
@@ -307,7 +306,7 @@
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
   "server_rpc_port": 8087,
-  "src_commit_hash": "faster",
+  "src_commit_hash": "nonbatching",
   "src_directory": "/users/akalaba/MDLin",
   "codebase_name": "mdl",
   "remote_bin_directory_nfs_enabled": false,

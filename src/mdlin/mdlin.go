@@ -346,6 +346,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	dlog.Printf("ANJA\n")
 	time.Sleep(2000 * 1000 * 1000)
 	go r.WaitForClientConnections()
+	time.Sleep(3000 * 1000 * 1000)
 
 	go r.executeCommands()
 	proposeChan := r.MDLProposeChan
