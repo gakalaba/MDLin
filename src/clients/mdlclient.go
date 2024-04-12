@@ -172,8 +172,11 @@ func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, mySha
 
 func (c *MDLClient) readReplies(startId int32, fanout int, opTypes []state.Operation,
 	keys []int64, startTimes []time.Time) (bool, int64) {
+	//rarray := make([]int, fanout)
 	rarray := make([]int, fanout)
+	//done := 0
 	done := false
+	//for (done < fanout) {
 	for !done {
 		reply := (<-c.proposeReplyChan).(*mdlinproto.ProposeReply)
 		if reply.OK == 0 {
@@ -200,6 +203,7 @@ func (c *MDLClient) readReplies(startId int32, fanout int, opTypes []state.Opera
 
 			fmt.Printf("%s,%d,%d,%d\n", opType, lat, k, idx)
 
+			//
 			// Mark op as complete
 			rarray[idx] = 1
 
@@ -210,7 +214,8 @@ func (c *MDLClient) readReplies(startId int32, fanout int, opTypes []state.Opera
 					done = false
 					break
 				}
-			}
+			}//
+			//done++
 		}
 	}
 	return true, int64(fanout)
