@@ -279,12 +279,12 @@ func main() {
 			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
 		}
 
-		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
+		//dlog.Printf("Client %v about to issue POST at time %v\n", *clientId, time.Now().UnixMilli())
 		before := time.Now()
 		PostTransformed(post_id, global_timeline, next_post_id, client, zipf)
 		after := time.Now()
 		post_id++
-                //dlog.Printf("!!!!Paxos APP level write took %d microseconds\n", int64(after.Sub(before).Microseconds()))
+                //dlog.Printf("!!!!POST took %d microseconds\n", int64(after.Sub(before).Microseconds()))
 
 		opString := "app"
 		count++
@@ -345,7 +345,7 @@ func PostSequential(post_id int64, timeline int64, next_post_id int64, client cl
 
 	// $followers = $r->zrange("followers:".$User['id'],0,-1);
 	client.AppRequest([]state.Operation{state.GET}, []int64{int64(zipf.Uint64())})
-	followers := int64(zipf.Uint64()) % 100
+	followers := 1 + (int64(zipf.Uint64()) % 100)
 
 	/* 
 	foreach($followers as $fid) {
@@ -368,15 +368,16 @@ func PostSequential(post_id int64, timeline int64, next_post_id int64, client cl
 func PostTransformed(post_id int64, timeline int64, next_post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	var opTypes []state.Operation
 	var keys []int64
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	//r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// $postid = $r->incr("next_post_id");
+	//dlog.Printf("issueing 1")
 	client.AppRequest([]state.Operation{state.CAS}, []int64{next_post_id})
-
 	// $r->hmset("post:$postid","user_id",$User['id'],"time",time(),"body",$status);
 	// $followers = $r->zrange("followers:".$User['id'],0,-1);
+	//dlog.Printf("issueing 2")
 	client.AppRequest([]state.Operation{state.PUT, state.GET}, []int64{post_id, int64(zipf.Uint64())})
-	followers := int64(zipf.Uint64()) % 100
+	followers := 1 + (int64(zipf.Uint64()) % 100)
 
 	/* 
 	foreach($followers as $fid) {
@@ -384,14 +385,17 @@ func PostTransformed(post_id int64, timeline int64, next_post_id int64, client c
 	}*/
 	keys = nil
 	opTypes = nil
+	//dlog.Printf("creating followers keys and opTypes, num followers = %v", followers)
 	for i := int64(0); i < followers; i++ {
-		keys = append(keys, int64(r.Uint64()))
+		keys = append(keys, int64(zipf.Uint64()))
 		opTypes = append(opTypes, state.PUT)
 	}
+	//dlog.Printf("issueing 3")
 	client.AppRequest(opTypes, keys)
 
 	// $r->lpush("timeline",$postid);
 	//$r->ltrim("timeline",0,1000);
+	//dlog.Printf("issueing 4")
 	client.AppRequest([]state.Operation{state.PUT, state.CAS}, []int64{timeline, timeline})
 }
 

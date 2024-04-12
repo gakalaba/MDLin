@@ -44,6 +44,7 @@ func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 
 func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
 	fanout := len(keys)
+	//dlog.Printf("fanout = %v", fanout)
 	startTimes := make([]time.Time, fanout)
 	startIdx := c.opCount
 	var prevTag mdlinproto.Tag
@@ -72,6 +73,7 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		if opType == state.GET {
 			c.Read(k)
 		} else if opType == state.PUT {
+			//dlog.Printf("type is Put!")
 			c.Write(k, int64(k))
 		} else {
 			c.CompareAndSwap(k, int64(k-1), int64(k))
@@ -103,6 +105,7 @@ func (c *MDLClient) Read(key int64) (bool, int64) {
 }
 
 func (c *MDLClient) Write(key int64, value int64) bool {
+	//dlog.Printf("inside write...")
 	commandId := c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, value)
