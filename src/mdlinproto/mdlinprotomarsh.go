@@ -764,7 +764,7 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
   // Instance  int32
   // Ballot    int32
   // CmdTags  []Tag
-  // TimestampChain [][]int64
+  // TimestampChain []int64
   var b [12]byte
 	var bs []byte
 	bs = b[:12]
@@ -810,19 +810,20 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 	var tmp64 int64
 	bs = b[:]
         alen1 = int64(len(t.TimestampChain))
-        var alen2 int64
+        //var alen2 int64
 	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
                 wire.Write(b[0:wlen])
         }
         for i := int64(0); i < alen1; i++ {
-		alen2 = int64(len(t.TimestampChain[i]))
-		if wlen := binary.PutVarint(bs, alen2); wlen >= 0 {
-			wire.Write(b[0:wlen])
-		}
-		for j := int64(0); j < alen2; j++ {
+		//alen2 = int64(len(t.TimestampChain[i]))
+		//if wlen := binary.PutVarint(bs, alen2); wlen >= 0 {
+			//wire.Write(b[0:wlen])
+		//}
+		//for j := int64(0); j < alen2; j++ {
 			// TimestampChain
 			bs = b[:8]
-			tmp64 = t.TimestampChain[i][j]
+			tmp64 = t.TimestampChain[i]
+			//tmp64 = t.TimestampChain[i][j]
 			bs[0] = byte(tmp64)
 			bs[1] = byte(tmp64 >> 8)
 			bs[2] = byte(tmp64 >> 16)
@@ -832,7 +833,7 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 			bs[6] = byte(tmp64 >> 48)
 			bs[7] = byte(tmp64 >> 56)
 			wire.Write(bs)
-		}
+		//}
 	}
 }
 
@@ -875,24 +876,26 @@ func (t *FinalAccept) Unmarshal(rr io.Reader) error {
 
   // TimestampChain
   alen1, err = binary.ReadVarint(wire)
-  var alen2 int64
+  //var alen2 int64
         if err != nil {
                 return err
         }
-        t.TimestampChain = make([][]int64, alen1)
+        t.TimestampChain = make([]int64, alen1)
+        //t.TimestampChain = make([][]int64, alen1)
         for i := int64(0); i < alen1; i++ {
-		alen2, err = binary.ReadVarint(wire)
-		if err != nil {
-			return err
-		}
-		t.TimestampChain[i] = make([]int64, alen2)
-		for j := int64(0); j < alen2; j++ {
+		//alen2, err = binary.ReadVarint(wire)
+		//if err != nil {
+		//	return err
+		//}
+		//t.TimestampChain[i] = make([]int64, alen2)
+		//for j := int64(0); j < alen2; j++ {
 			bs = b[:8]
 			if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
 				return err
 			}
-			t.TimestampChain[i][j] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-		}
+			t.TimestampChain[i] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+			//t.TimestampChain[i][j] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+		//}
 	}
 	return nil
 }
@@ -1026,19 +1029,20 @@ func (t *Commit) Marshal(wire io.Writer) {
   var tmp64 int64
   bs = b[:]
   alen1 = int64(len(t.TimestampChain))
-  var alen2 int64
+  //var alen2 int64
   if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
     wire.Write(b[0:wlen])
   }
   for i := int64(0); i < alen1; i++ {
-	  alen2 = int64(len(t.TimestampChain[i]))
-	  if wlen := binary.PutVarint(bs, alen2); wlen >= 0 {
-		  wire.Write(b[0:wlen])
-	  }
-          for j := int64(0); j < alen2; j++ {
+	  //alen2 = int64(len(t.TimestampChain[i]))
+	  //if wlen := binary.PutVarint(bs, alen2); wlen >= 0 {
+		//  wire.Write(b[0:wlen])
+	  //}
+          //for j := int64(0); j < alen2; j++ {
 		  // TimestampChain
                   bs = b[:8]
-                  tmp64 = t.TimestampChain[i][j]
+                  tmp64 = t.TimestampChain[i]
+                  //tmp64 = t.TimestampChain[i][j]
                   bs[0] = byte(tmp64)
                   bs[1] = byte(tmp64 >> 8)
                   bs[2] = byte(tmp64 >> 16)
@@ -1048,11 +1052,12 @@ func (t *Commit) Marshal(wire io.Writer) {
                   bs[6] = byte(tmp64 >> 48)
                   bs[7] = byte(tmp64 >> 56)
                   wire.Write(bs)
-	  }
+	  //}
   }
 }
 
 func (t *Commit) Unmarshal(rr io.Reader) error {
+	//return nil
 	var wire byteReader
 	var ok bool
 	if wire, ok = rr.(byteReader); !ok {
@@ -1091,24 +1096,27 @@ func (t *Commit) Unmarshal(rr io.Reader) error {
 
   // TimestampChain
   alen1, err = binary.ReadVarint(wire)
-  var alen2 int64
+  //alen1 = -7
+  //var alen2 int64
   if err != nil {
     return err
   }
-  t.TimestampChain = make([][]int64, alen1)
+  t.TimestampChain = make([]int64, alen1)
+  //t.TimestampChain = make([][]int64, alen1)
   for i := int64(0); i < alen1; i++ {
-	  alen2, err = binary.ReadVarint(wire)
-          if err != nil {
-		  return err
-          }
-	  t.TimestampChain[i] = make([]int64, alen2)
-          for j := int64(0); j < alen2; j++ {
+	  //alen2, err = binary.ReadVarint(wire)
+          //if err != nil {
+	//	  return err
+          //}
+	  //t.TimestampChain[i] = make([]int64, alen2)
+          //for j := int64(0); j < alen2; j++ {
 		  bs = b[:8]
                   if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
 			  return err
                   }
-                  t.TimestampChain[i][j] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-	  }
+                  t.TimestampChain[i] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+                  //t.TimestampChain[i][j] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
+	  //}
 
   }
   return nil

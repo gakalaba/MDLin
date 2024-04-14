@@ -536,7 +536,7 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 				rpair.Chan <- obj
 				r.Stats.Max(fmt.Sprintf("server_rpc_%d_chan_length", msgType), len(rpair.Chan))
 			} else {
-				dlog.Printf("Error: received unknown message type %d. from replica %d\n", msgType, rid)
+				log.Printf("Error: received unknown message type %d. from replica %d\n", msgType, rid)
 				panic("nope")
 			}
 		}
@@ -696,10 +696,16 @@ func (r *Replica) SendMsg(peerId int32, code uint8, msg fastrpc.Serializable) {
 	if r.ShouldDelayNextRPC(int(peerId), code) {
 		r.delayedRPC[peerId][code] <- msg
 	} else {
+		if (r.Id == 0 && peerId == 2) {
+			dlog.Printf("Leader sending to replica 2")
+		}
 		w := r.PeerWriters[peerId]
 		w.WriteByte(code)
 		msg.Marshal(w)
-		w.Flush()
+		err := w.Flush()
+		if (err != nil) {
+			panic(err)
+		}
 	}
 }
 
