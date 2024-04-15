@@ -389,28 +389,32 @@ func PostTransformed(post_id int64, timeline int64, next_post_id int64,
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// $postid = $r->incr("next_post_id");
-	client.AppRequest([]state.Operation{state.CAS}, []int64{next_post_id})
+	// $followers = $r->zrange("followers:".$User['id'],0,-1);
+	client.AppRequest([]state.Operation{state.CAS, state.GET}, []int64{next_post_id, int64(zipf.Uint64())})
+	followers := 1 + int64(zipf.Uint64()) % 100
 
 	// $r->hmset("post:$postid","user_id",$User['id'],"time",time(),"body",$status);
-	// $followers = $r->zrange("followers:".$User['id'],0,-1);
-	client.AppRequest([]state.Operation{state.PUT, state.GET}, []int64{post_id, int64(zipf.Uint64())})
-	followers := int64(zipf.Uint64()) % 100
+	keys = nil
+	opTypes = nil
+	keys = append(keys, post_id)
+	opTypes = append(opTypes, state.PUT)
 
 	/* 
 	foreach($followers as $fid) {
 		$r->lpush("posts:$fid",$postid);
 	}*/
-	keys = nil
-	opTypes = nil
 	for i := int64(0); i < followers; i++ {
 		keys = append(keys, int64(r.Uint64()))
 		opTypes = append(opTypes, state.PUT)
 	}
-	client.AppRequest(opTypes, keys)
 
 	// $r->lpush("timeline",$postid);
-	//$r->ltrim("timeline",0,1000);
-	client.AppRequest([]state.Operation{state.PUT, state.CAS}, []int64{timeline, timeline})
+	// $r->ltrim("timeline",0,1000);
+	keys = append(keys, timeline)
+	opTypes = append(opTypes, state.PUT)
+	keys = append(keys, timeline)
+	opTypes = append(opTypes, state.CAS)
+	client.AppRequest(opTypes, keys)
 }
 
 //***********************************************************//
