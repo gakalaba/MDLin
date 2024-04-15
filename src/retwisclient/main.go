@@ -276,7 +276,6 @@ func main() {
 		opType := r.Uint64() % 100
 		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
 		before := time.Now()
-			FollowTransformed(auths, client, zipf)
 		if (opType < 2) {
 			// Login 2%
 			LoginTransformed(users, auth, client, zipf)
@@ -443,7 +442,7 @@ func FollowSequential(auths int64, client clients.Client, zipf *zipfgenerator.Zi
 }
 
 func FollowTransformed(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	// Follow makes call to isLoggedIn()
+	// Follow makes call to isLoggedIn() - must be sequential because of ICF
 	// if ($userid = $r->hget("auths",$authcookie)) {
 	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
 	// if ($r->hget("user:$userid","auth") != $authcookie)
@@ -453,14 +452,12 @@ func FollowTransformed(auths int64, client clients.Client, zipf *zipfgenerator.Z
 	// $User['username'] = $r->hget("user:$userid","username");
 	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 
-
 	// Always assume the user is logged in
 	// $r->zadd("followers:".$uid,time(),$User['id']);
-	followers := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT}, []int64{followers})
 	// $r->zadd("following:".$User['id'],time(),$uid);
+	followers := int64(zipf.Uint64())
 	following := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT}, []int64{following})
+	client.AppRequest([]state.Operation{state.PUT, state.PUT}, []int64{followers, following})
 }
 //***********************************************************//
 //********************** Retwis Login ***********************//
@@ -485,15 +482,12 @@ func LoginTransformed(users int64, auth int64, client clients.Client,
 				zipf *zipfgenerator.ZipfGenerator) {
 	// $userid = $r->hget("users",$username);
 	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
 	// $realpassword = $r->hget("user:$userid","password");
-	userid := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
-
 	// $authsecret = $r->hget("user:$userid","auth");
-	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
-
 	// setcookie("auth",$authsecret,time()+3600*24*365);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{auth})
+	userid := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET, state.GET, state.GET}, []int64{userid, userid, auth})
 }
 //***********************************************************//
 //********************* Retwis Logout ***********************//
@@ -520,13 +514,9 @@ func LogoutTransformed(auths int64, client clients.Client, zipf *zipfgenerator.Z
 	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
 
 	// $r->hset("user:$userid","auth",$newauthsecret);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{userid})
-
-	//$r->hset("auths",$newauthsecret,$userid);
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
-
-	//$r->hdel("auths",$oldauthsecret);
-	client.AppRequest([]state.Operation{state.CAS}, []int64{auths})
+	// $r->hset("auths",$newauthsecret,$userid);
+	// $r->hdel("auths",$oldauthsecret);
+	client.AppRequest([]state.Operation{state.PUT, state.GET, state.CAS}, []int64{userid, auths, auths})
 }
 //***********************************************************//
 //******************** Retwis Register **********************//
@@ -562,26 +552,17 @@ func RegisterTransformed(users int64, users_by_time int64, next_user_id int64,
 		auths int64, auth int64, client clients.Client,
 		zipf *zipfgenerator.ZipfGenerator) {
 	// if ($r->hget("users",$username))
-	client.AppRequest([]state.Operation{state.GET}, []int64{users})
-
 	// $userid = $r->incr("next_user_id");
-	client.AppRequest([]state.Operation{state.CAS}, []int64{next_user_id})
+	client.AppRequest([]state.Operation{state.GET, state.CAS}, []int64{users, next_user_id})
 
 	// $r->hset("users",$username,$userid);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{users})
-
 	// $r->hmset("user:$userid", "username",$username, "password",$password, "auth",$authsecret);
-	userid := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT}, []int64{userid})
-
 	// $r->hset("auths",$authsecret,$userid);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{auths})
-
 	// $r->zadd("users_by_time",time(),$username);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{users_by_time})
-
 	// setcookie("auth",$authsecret,time()+3600*24*365);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{auth})
+	userid := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT, state.PUT, state.PUT},
+						[]int64{users, userid, auths, users_by_time, auth})
 }
 //***********************************************************//
 //****************** Retwis ShowTimeline ********************//
@@ -621,15 +602,20 @@ func ShowTimelineTransformed(users_by_time int64, timeline int64,
 	// $posts = $r->lrange("timeline",0,50);
 	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
 	posts := 50
+	var opTypes []state.Operation
+        var keys []int64
 	for i := 0; i < posts; i++ {
 		// showUserPosts() makes call to showPost()
 		// $post = $r->hgetall("post:$id");
 		postid := int64(zipf.Uint64())
-		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
 		// $username = $r->hget("user:$userid","username");
 		userid := int64(zipf.Uint64())
-		client.AppRequest([]state.Operation{state.GET}, []int64{userid})
+		keys = append(keys, postid)
+		keys = append(keys, userid)
+		opTypes = append(opTypes, state.GET)
+		opTypes = append(opTypes, state.GET)
 	}
+	client.AppRequest(opTypes, keys)
 }
 ///***********************************************************//
 //********************* Retwis Profile ***********************//
@@ -677,7 +663,7 @@ func ProfileTransformed(users int64, auths int64, timeline int64,
 	// $userid = $r->hget("users",gt("u"))
 	client.AppRequest([]state.Operation{state.GET}, []int64{users})
 
-	// Profile makes call to isLoggedIn()
+	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
 	// if ($userid = $r->hget("auths",$authcookie)) {
 	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
 	// if ($r->hget("user:$userid","auth") != $authcookie)
@@ -696,14 +682,20 @@ func ProfileTransformed(users int64, auths int64, timeline int64,
 	// $posts = $r->lrange("timeline",0,50);
 	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
 	posts := 10
+	var opTypes []state.Operation
+        var keys []int64
 	for i := 0; i < posts; i++ {
 		// showUserPosts() makes call to showPost()
 		// $post = $r->hgetall("post:$id");
 		postid := int64(zipf.Uint64())
-		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
 		// $username = $r->hget("user:$userid","username");
-		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+		keys = append(keys, postid)
+		keys = append(keys, user_id)
+		opTypes = append(opTypes, state.GET)
+		opTypes = append(opTypes, state.GET)
 	}
+	client.AppRequest(opTypes, keys)
+
 }
 /*
 func PostNaive(post_id int64, timeline int64, next_post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
