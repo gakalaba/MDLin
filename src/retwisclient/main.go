@@ -220,21 +220,8 @@ func Max(a int64, b int64) int64 {
 func main() {
 	flag.Parse()
 
-	if *conflicts > 100 {
-		log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
-	}
 
 	dlog.DLOG = *debug
-
-	if *conflicts >= 0 {
-		dlog.Println("Using uniform distribution")
-	} else {
-		dlog.Println("Using zipfian distribution")
-	}
-
-	if *writes+*reads+*rmws != 1000 {
-		log.Fatalf("Writes (%d), reads (%d), and rmws (%d) must add up to 1000.\n", *writes, *reads, *rmws)
-	}
 
 	runtime.GOMAXPROCS(*maxProcessors)
 
@@ -252,7 +239,7 @@ func main() {
 
 	client := createClient()
 
-	r := rand.New(rand.NewSource(int64(*clientId)))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
   zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
   if err != nil {
     panic("problem making the zipfian generator :0")
@@ -308,9 +295,9 @@ func main() {
 
 
 //***********************************************************//
-//********************** Retwis POST ************************//
+//********************** Retwis Post ************************//
 //***********************************************************//
-
+// Based on https://github.com/antirez/retwis/blob/master/post.php
 /*
 $postid = $r->incr("next_post_id");
 $status = str_replace("\n"," ",gt("status"));
@@ -365,7 +352,8 @@ func PostSequential(post_id int64, timeline int64, next_post_id int64, client cl
 	client.AppRequest([]state.Operation{state.CAS}, []int64{timeline})
 }
 
-func PostTransformed(post_id int64, timeline int64, next_post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+func PostTransformed(post_id int64, timeline int64, next_post_id int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	var opTypes []state.Operation
 	var keys []int64
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -395,6 +383,132 @@ func PostTransformed(post_id int64, timeline int64, next_post_id int64, client c
 	client.AppRequest([]state.Operation{state.PUT, state.CAS}, []int64{timeline, timeline})
 }
 
+//***********************************************************//
+//****************** Retwis Follow/Unfollow *****************//
+//***********************************************************//
+// Based on 
+// https://github.com/antirez/retwis/blob/master/follow.php
+// and
+// https://github.com/antirez/retwis/blob/master/retwis.php
+func FollowSequential(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// Follow makes call to isLoggedIn()
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+
+	// Always assume the user is logged in
+	// $r->zadd("followers:".$uid,time(),$User['id']);
+	followers := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT}, []int64{followers})
+	// $r->zadd("following:".$User['id'],time(),$uid);
+	following := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT}, []int64{following})
+}
+
+//***********************************************************//
+//********************** Retwis Login ***********************//
+//***********************************************************//
+// Based on https://github.com/antirez/retwis/blob/master/login.php
+func LoginSequential(users int64, auth int64, client clients.Client,
+				zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",$username);
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+	// $realpassword = $r->hget("user:$userid","password");
+	userid := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
+
+	// $authsecret = $r->hget("user:$userid","auth");
+	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
+
+	// setcookie("auth",$authsecret,time()+3600*24*365);
+	client.AppRequest([]state.Operation{state.PUT}, []int64{auth})
+}
+
+//***********************************************************//
+//********************* Retwis Logout ***********************//
+//***********************************************************//
+// Based on https://github.com/antirez/retwis/blob/master/logout.php
+func LogoutSequential(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	userid := int64(zipf.Uint64())
+	// $oldauthsecret = $r->hget("user:$userid","auth");
+	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
+
+	// $r->hset("user:$userid","auth",$newauthsecret);
+	client.AppRequest([]state.Operation{state.PUT}, []int64{userid})
+
+	//$r->hset("auths",$newauthsecret,$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+
+	//$r->hdel("auths",$oldauthsecret);
+	client.AppRequest([]state.Operation{state.CAS}, []int64{auths})
+}
+
+//***********************************************************//
+//******************** Retwis Register **********************//
+//***********************************************************//
+// Based on https://github.com/antirez/retwis/blob/master/register.php
+func RegisterSequential(users int64, users_by_time int64, next_user_id int64,
+		auths int64, auth int64, client clients.Client,
+		zipf *zipfgenerator.ZipfGenerator) {
+	// if ($r->hget("users",$username))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// $userid = $r->incr("next_user_id");
+	client.AppRequest([]state.Operation{state.CAS}, []int64{next_user_id})
+
+	// $r->hset("users",$username,$userid);
+	client.AppRequest([]state.Operation{state.PUT}, []int64{users})
+
+	// $r->hmset("user:$userid", "username",$username, "password",$password, "auth",$authsecret);
+	userid := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT}, []int64{userid})
+
+	// $r->hset("auths",$authsecret,$userid);
+	client.AppRequest([]state.Operation{state.PUT}, []int64{auths})
+
+	// $r->zadd("users_by_time",time(),$username);
+	client.AppRequest([]state.Operation{state.PUT}, []int64{users_by_time})
+
+	// setcookie("auth",$authsecret,time()+3600*24*365);
+	client.AppRequest([]state.Operation{state.PUT}, []int64{auth})
+}
+
+//***********************************************************//
+//****************** Retwis ShowTimeline ********************//
+//***********************************************************//
+// Based on 
+// https://github.com/antirez/retwis/blob/master/timeline.php
+// and
+// https://github.com/antirez/retwis/blob/master/retwis.php
+func ShowTimelineSequential(users_by_time int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// showTimeline makes call to showLastUsers()
+	// $users = $r->zrevrange("users_by_time",0,9);
+	client.AppRequest([]state.Operation{state.GET}, []int64{users_by_time})
+
+	// showTimeline makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+
+	posts := 50
+	for i := 0; i < posts; i++ {
+		// showPost
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
+		// $username = $r->hget("user:$userid","username");
+		userid := int64(zipf.Uint64())
+		client.AppRequest([]state.Operation{state.GET}, []int64{userid})
+	}
+}
+
+/*
 func PostNaive(post_id int64, timeline int64, next_post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	followers := int64(zipf.Uint64()) % 100
@@ -418,10 +532,9 @@ func PostNaive(post_id int64, timeline int64, next_post_id int64, client clients
 		done[i] = 1
 	}(2)
 
-	/* 
-	foreach($followers as $fid) {
-		$r->lpush("posts:$fid",$postid);
-	}*/
+	//foreach($followers as $fid) {
+	//	$r->lpush("posts:$fid",$postid);
+	
 	for i := int64(0); i < followers; i++ {
 		func(j int64) {
 			go client.AppRequest([]state.Operation{state.PUT}, []int64{int64(r.Uint64())})
@@ -450,7 +563,7 @@ func PostNaive(post_id int64, timeline int64, next_post_id int64, client clients
 			}
 		}
 	}
-}
+}*/
 
 func catchKill(interrupt chan os.Signal) {
 	<-interrupt
