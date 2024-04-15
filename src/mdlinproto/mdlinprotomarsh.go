@@ -983,6 +983,7 @@ func (p *CommitCache) Put(t *Commit) {
 	p.mu.Unlock()
 }
 func (t *Commit) Marshal(wire io.Writer) {
+	//return
 	var b [12]byte
 	var bs []byte
 	bs = b[:12]

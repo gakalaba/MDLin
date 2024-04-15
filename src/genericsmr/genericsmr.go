@@ -524,12 +524,17 @@ func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
 			} else {
 				r.Ewma[rid] = 0.99*r.Ewma[rid] + 0.01*diff
 			}
+			log.Println("yaas")
 			log.Println(r.Ewma)
 			break
 
 		default:
 			if rpair, present := r.rpcTable[msgType]; present {
 				obj := rpair.Obj.New()
+				//if (r.Id == 2) {
+					//log.Printf("got commit %v", msgType)
+					//break
+				//}
 				if err = obj.Unmarshal(reader); err != nil {
 					break
 				}
