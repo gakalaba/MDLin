@@ -33,22 +33,279 @@
       "us-west-1-1",
       "us-west-1-2"
   ],
-  "num_shards": 3,
+  "num_shards": 54,
   "shards": [
 	  [
       "eu-west-1-0",
       "eu-west-1-1",
       "eu-west-1-2"
     ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+
     [
       "us-east-1-0",
       "us-east-1-1",
       "us-east-1-2"
     ],
+[
+      "us-east-1-2",
+      "us-east-1-0",
+      "us-east-1-1"
+    ],
+[
+      "us-east-1-1",
+      "us-east-1-2",
+      "us-east-1-0"
+    ],
+ [
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
+    ],
+[
+      "us-east-1-2",
+      "us-east-1-0",
+      "us-east-1-1"
+    ],
+[
+      "us-east-1-1",
+      "us-east-1-2",
+      "us-east-1-0"
+    ],
+[
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
+    ],
+[
+      "us-east-1-2",
+      "us-east-1-0",
+      "us-east-1-1"
+    ],
+[
+      "us-east-1-1",
+      "us-east-1-2",
+      "us-east-1-0"
+    ],
+ [
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
+    ],
+[
+      "us-east-1-2",
+      "us-east-1-0",
+      "us-east-1-1"
+    ],
+[
+      "us-east-1-1",
+      "us-east-1-2",
+      "us-east-1-0"
+    ],
+[
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
+    ],
+[
+      "us-east-1-2",
+      "us-east-1-0",
+      "us-east-1-1"
+    ],
+[
+      "us-east-1-1",
+      "us-east-1-2",
+      "us-east-1-0"
+    ],
+ [
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
+    ],
+[
+      "us-east-1-2",
+      "us-east-1-0",
+      "us-east-1-1"
+    ],
+[
+      "us-east-1-1",
+      "us-east-1-2",
+      "us-east-1-0"
+    ],
+
     [
       "us-west-1-0",
       "us-west-1-1",
       "us-west-1-2"
+    ],
+[
+      "us-west-1-2",
+      "us-west-1-0",
+      "us-west-1-1"
+    ],
+[
+      "us-west-1-1",
+      "us-west-1-2",
+      "us-west-1-2"
+    ],
+[
+      "us-west-1-0",
+      "us-west-1-1",
+      "us-west-1-2"
+    ],
+[
+      "us-west-1-2",
+      "us-west-1-0",
+      "us-west-1-1"
+    ],
+[
+      "us-west-1-1",
+      "us-west-1-2",
+      "us-west-1-0"
+    ],
+[
+      "us-west-1-0",
+      "us-west-1-1",
+      "us-west-1-2"
+    ],
+[
+      "us-west-1-2",
+      "us-west-1-0",
+      "us-west-1-1"
+    ],
+[
+      "us-west-1-1",
+      "us-west-1-2",
+      "us-west-1-2"
+    ],
+[
+      "us-west-1-0",
+      "us-west-1-1",
+      "us-west-1-2"
+    ],
+[
+      "us-west-1-2",
+      "us-west-1-0",
+      "us-west-1-1"
+    ],
+[
+      "us-west-1-1",
+      "us-west-1-2",
+      "us-west-1-0"
+    ],
+[
+      "us-west-1-0",
+      "us-west-1-1",
+      "us-west-1-2"
+    ],
+[
+      "us-west-1-2",
+      "us-west-1-0",
+      "us-west-1-1"
+    ],
+[
+      "us-west-1-1",
+      "us-west-1-2",
+      "us-west-1-2"
+    ],
+[
+      "us-west-1-0",
+      "us-west-1-1",
+      "us-west-1-2"
+    ],
+[
+      "us-west-1-2",
+      "us-west-1-0",
+      "us-west-1-1"
+    ],
+[
+      "us-west-1-1",
+      "us-west-1-2",
+      "us-west-1-0"
     ]
           ],
   "clients": [
@@ -203,7 +460,7 @@
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
   "client_fanout": 1,
-  "server_epoch": 500,
+  "batchsize": 500,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,
@@ -212,20 +469,6 @@
     "y_label": "Cumulative ratio of operations"
   },
   "plots": [
-    {
-      "name": "tput-lat-mean",
-      "font": "DejaVu Sans,12",
-      "height": 600,
-      "width": 800,
-      "series_indep_vars_idx": 0,
-      "series_titles": ["MDL", "Multi-Paxos"],
-      "x_var_is_config": false,
-      "x_var": ["run_stats", "app", "tput", "p50"],
-      "x_label": "Throughput (ops/s)",
-      "y_label": "p50 Latency",
-      "x_indep_vars_idx": 1,
-      "y_var": ["aggregate", "app", "mean"]
-    },
     {
       "name": "tput-lat-p99",
       "font": "DejaVu Sans,12",
@@ -275,7 +518,7 @@
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
   "client_debug_output": false,
-  "client_experiment_length": 60,
+  "client_experiment_length": 100,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 2,
@@ -296,7 +539,7 @@
   "max_bandwidth": "10gibps",
   "max_file_descriptors": 65535,
   "max_retries": 0,
-  "num_experiment_runs": 1,
+  "num_experiment_runs": 5,
   "out_directory_name": "out",
   "project_name": "praxis-PG0",
   "stats_file_name": "stats.json",
@@ -308,7 +551,7 @@
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
   "server_rpc_port": 8087,
-  "src_commit_hash": "scripts",
+  "src_commit_hash": "newCrisis",
   "src_directory": "/users/akalaba/MDLin",
   "codebase_name": "mdl",
   "remote_bin_directory_nfs_enabled": false,
