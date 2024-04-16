@@ -337,7 +337,7 @@ func (r *Replica) replyCoord(replicaId int32, reply *mdlinproto.CoordinationResp
 
 func (r *Replica) batchClock(proposeDone *(chan bool)) {
   for !r.Shutdown {
-    time.Sleep(time.Duration(r.batchSize) * time.Millisecond)
+    time.Sleep(time.Duration(r.batchSize) * time.Microsecond)
     (*proposeDone) <- true
     //dlog.Printf("!!!Pulled of proposeDone\n")
   }
