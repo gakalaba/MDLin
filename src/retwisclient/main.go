@@ -105,7 +105,7 @@ var rampUp *int = flag.Int(
 
 var randSleep *int = flag.Int(
 	"randSleep",
-	0,
+	1,
 	"Max number of milliseconds to sleep after operation completed.")
 
 var randomLeader *bool = flag.Bool(
@@ -220,21 +220,8 @@ func Max(a int64, b int64) int64 {
 func main() {
 	flag.Parse()
 
-	if *conflicts > 100 {
-		log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
-	}
 
 	dlog.DLOG = *debug
-
-	if *conflicts >= 0 {
-		dlog.Println("Using uniform distribution")
-	} else {
-		dlog.Println("Using zipfian distribution")
-	}
-
-	if *writes+*reads+*rmws != 1000 {
-		log.Fatalf("Writes (%d), reads (%d), and rmws (%d) must add up to 1000.\n", *writes, *reads, *rmws)
-	}
 
 	runtime.GOMAXPROCS(*maxProcessors)
 
@@ -252,7 +239,7 @@ func main() {
 
 	client := createClient()
 
-	r := rand.New(rand.NewSource(int64(*clientId)))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
   zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
   if err != nil {
     panic("problem making the zipfian generator :0")
@@ -268,7 +255,14 @@ func main() {
 	// Add these keys in the store 
 	global_timeline := int64(zipf.Uint64())
 	next_post_id := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT, state.PUT}, []int64{global_timeline, next_post_id})
+	next_user_id := int64(zipf.Uint64())
+	auths := int64(zipf.Uint64())
+	auth := int64(zipf.Uint64())
+	users := int64(zipf.Uint64())
+	users_by_time := int64(zipf.Uint64())
+	ops := []state.Operation{state.PUT, state.PUT, state.PUT, state.PUT, state.PUT, state.PUT, state.PUT}
+	appState := []int64{global_timeline, next_post_id, next_user_id, auths, auth, users, users_by_time}
+	client.AppRequest(ops, appState)
 	post_id := int64(0)
 
 	start := time.Now()
@@ -279,9 +273,39 @@ func main() {
 			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
 		}
 
-		//dlog.Printf("Client %v about to issue POST at time %v\n", *clientId, time.Now().UnixMilli())
+		opType := r.Uint64() % 100
+		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
 		before := time.Now()
-		PostTransformed(post_id, global_timeline, next_post_id, client, zipf)
+		if (opType < 2) {
+			// Login 2%
+			dlog.Printf("Client %v about to issue Login at time %v\n", *clientId, time.Now().UnixMilli())
+			LoginTransformed(users, auth, client, zipf)
+		} else if (opType < 4) {
+			// Logout 2%
+			dlog.Printf("Client %v about to issue Logout at time %v\n", *clientId, time.Now().UnixMilli())
+			LogoutTransformed(auths, client, zipf)
+		} else if (opType < 9) {
+			// Register 5%
+			dlog.Printf("Client %v about to issue Register at time %v\n", *clientId, time.Now().UnixMilli())
+			RegisterTransformed(users, users_by_time, next_user_id, auths, auth, client, zipf)
+		} else if (opType < 20) {
+			// Post 11%
+			dlog.Printf("Client %v about to issue Post at time %v\n", *clientId, time.Now().UnixMilli())
+			PostTransformed(post_id, global_timeline, next_post_id, client, zipf)
+		} else if (opType < 40) {
+			// Follow 20%
+			dlog.Printf("Client %v about to issue Follow at time %v\n", *clientId, time.Now().UnixMilli())
+			FollowTransformed(auths, client, zipf)
+		} else if (opType < 90) {
+			// ShowTimeline 50%
+			dlog.Printf("Client %v about to issue ShowTimeline at time %v\n", *clientId, time.Now().UnixMilli())
+			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
+		} else {
+			// Profile 10%
+			dlog.Printf("Client %v about to issue Profile at time %v\n", *clientId, time.Now().UnixMilli())
+			ProfileTransformed(users, auths, global_timeline, client, zipf)
+		}
+
 		after := time.Now()
 		post_id++
                 //dlog.Printf("!!!!POST took %d microseconds\n", int64(after.Sub(before).Microseconds()))
@@ -308,9 +332,9 @@ func main() {
 
 
 //***********************************************************//
-//********************** Retwis POST ************************//
+//********************** Retwis Post ************************//
 //***********************************************************//
-
+// Based on https://github.com/antirez/retwis/blob/master/post.php
 /*
 $postid = $r->incr("next_post_id");
 $status = str_replace("\n"," ",gt("status"));
@@ -365,7 +389,8 @@ func PostSequential(post_id int64, timeline int64, next_post_id int64, client cl
 	client.AppRequest([]state.Operation{state.CAS}, []int64{timeline})
 }
 
-func PostTransformed(post_id int64, timeline int64, next_post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+func PostTransformed(post_id int64, timeline int64, next_post_id int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	var opTypes []state.Operation
 	var keys []int64
 	//r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -373,12 +398,14 @@ func PostTransformed(post_id int64, timeline int64, next_post_id int64, client c
 	// $postid = $r->incr("next_post_id");
 	// $followers = $r->zrange("followers:".$User['id'],0,-1);
 	client.AppRequest([]state.Operation{state.CAS, state.GET}, []int64{next_post_id, int64(zipf.Uint64())})
-	followers := 1 + (int64(zipf.Uint64()) % 100)
+	followers := 1 + int64(zipf.Uint64()) % 100
 	//followers := 10
 
 	// $r->hmset("post:$postid","user_id",$User['id'],"time",time(),"body",$status);
-	opTypes = append(opTypes, state.PUT)
+	keys = nil
+	opTypes = nil
 	keys = append(keys, post_id)
+	opTypes = append(opTypes, state.PUT)
 
 	/* 
 	foreach($followers as $fid) {
@@ -391,7 +418,7 @@ func PostTransformed(post_id int64, timeline int64, next_post_id int64, client c
 	}
 
 	// $r->lpush("timeline",$postid);
-	//$r->ltrim("timeline",0,1000);
+	// $r->ltrim("timeline",0,1000);
 	keys = append(keys, timeline)
 	opTypes = append(opTypes, state.PUT)
 	keys = append(keys, timeline)
@@ -399,6 +426,291 @@ func PostTransformed(post_id int64, timeline int64, next_post_id int64, client c
 	client.AppRequest(opTypes, keys)
 }
 
+//***********************************************************//
+//****************** Retwis Follow/Unfollow *****************//
+//***********************************************************//
+// Based on 
+// https://github.com/antirez/retwis/blob/master/follow.php
+// and
+// https://github.com/antirez/retwis/blob/master/retwis.php
+func FollowSequential(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// Follow makes call to isLoggedIn()
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+
+	// Always assume the user is logged in
+	// $r->zadd("followers:".$uid,time(),$User['id']);
+	followers := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT}, []int64{followers})
+	// $r->zadd("following:".$User['id'],time(),$uid);
+	following := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT}, []int64{following})
+}
+
+func FollowTransformed(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// Follow makes call to isLoggedIn() - must be sequential because of ICF
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	// Always assume the user is logged in
+	// $r->zadd("followers:".$uid,time(),$User['id']);
+	// $r->zadd("following:".$User['id'],time(),$uid);
+	followers := int64(zipf.Uint64())
+	following := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT, state.PUT}, []int64{followers, following})
+}
+//***********************************************************//
+//********************** Retwis Login ***********************//
+//***********************************************************//
+// Based on https://github.com/antirez/retwis/blob/master/login.php
+func LoginSequential(users int64, auth int64, client clients.Client,
+				zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",$username);
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+	// $realpassword = $r->hget("user:$userid","password");
+	userid := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
+
+	// $authsecret = $r->hget("user:$userid","auth");
+	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
+
+	// setcookie("auth",$authsecret,time()+3600*24*365);
+	client.AppRequest([]state.Operation{state.PUT}, []int64{auth})
+}
+
+func LoginTransformed(users int64, auth int64, client clients.Client,
+				zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",$username);
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// $realpassword = $r->hget("user:$userid","password");
+	// $authsecret = $r->hget("user:$userid","auth");
+	// setcookie("auth",$authsecret,time()+3600*24*365);
+	userid := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET, state.GET, state.GET}, []int64{userid, userid, auth})
+}
+//***********************************************************//
+//********************* Retwis Logout ***********************//
+//***********************************************************//
+// Based on https://github.com/antirez/retwis/blob/master/logout.php
+func LogoutSequential(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	userid := int64(zipf.Uint64())
+	// $oldauthsecret = $r->hget("user:$userid","auth");
+	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
+
+	// $r->hset("user:$userid","auth",$newauthsecret);
+	client.AppRequest([]state.Operation{state.PUT}, []int64{userid})
+
+	//$r->hset("auths",$newauthsecret,$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+
+	//$r->hdel("auths",$oldauthsecret);
+	client.AppRequest([]state.Operation{state.CAS}, []int64{auths})
+}
+
+func LogoutTransformed(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	userid := int64(zipf.Uint64())
+	// $oldauthsecret = $r->hget("user:$userid","auth");
+	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
+
+	// $r->hset("user:$userid","auth",$newauthsecret);
+	// $r->hset("auths",$newauthsecret,$userid);
+	// $r->hdel("auths",$oldauthsecret);
+	client.AppRequest([]state.Operation{state.PUT, state.GET, state.CAS}, []int64{userid, auths, auths})
+}
+//***********************************************************//
+//******************** Retwis Register **********************//
+//***********************************************************//
+// Based on https://github.com/antirez/retwis/blob/master/register.php
+func RegisterSequential(users int64, users_by_time int64, next_user_id int64,
+		auths int64, auth int64, client clients.Client,
+		zipf *zipfgenerator.ZipfGenerator) {
+	// if ($r->hget("users",$username))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// $userid = $r->incr("next_user_id");
+	client.AppRequest([]state.Operation{state.CAS}, []int64{next_user_id})
+
+	// $r->hset("users",$username,$userid);
+	client.AppRequest([]state.Operation{state.PUT}, []int64{users})
+
+	// $r->hmset("user:$userid", "username",$username, "password",$password, "auth",$authsecret);
+	userid := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT}, []int64{userid})
+
+	// $r->hset("auths",$authsecret,$userid);
+	client.AppRequest([]state.Operation{state.PUT}, []int64{auths})
+
+	// $r->zadd("users_by_time",time(),$username);
+	client.AppRequest([]state.Operation{state.PUT}, []int64{users_by_time})
+
+	// setcookie("auth",$authsecret,time()+3600*24*365);
+	client.AppRequest([]state.Operation{state.PUT}, []int64{auth})
+}
+
+func RegisterTransformed(users int64, users_by_time int64, next_user_id int64,
+		auths int64, auth int64, client clients.Client,
+		zipf *zipfgenerator.ZipfGenerator) {
+	// if ($r->hget("users",$username))
+	// $userid = $r->incr("next_user_id");
+	client.AppRequest([]state.Operation{state.GET, state.CAS}, []int64{users, next_user_id})
+
+	// $r->hset("users",$username,$userid);
+	// $r->hmset("user:$userid", "username",$username, "password",$password, "auth",$authsecret);
+	// $r->hset("auths",$authsecret,$userid);
+	// $r->zadd("users_by_time",time(),$username);
+	// setcookie("auth",$authsecret,time()+3600*24*365);
+	userid := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT, state.PUT, state.PUT},
+						[]int64{users, userid, auths, users_by_time, auth})
+}
+//***********************************************************//
+//****************** Retwis ShowTimeline ********************//
+//***********************************************************//
+// Based on 
+// https://github.com/antirez/retwis/blob/master/timeline.php
+// and
+// https://github.com/antirez/retwis/blob/master/retwis.php
+func ShowTimelineSequential(users_by_time int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// showTimeline makes call to showLastUsers()
+	// $users = $r->zrevrange("users_by_time",0,9);
+	client.AppRequest([]state.Operation{state.GET}, []int64{users_by_time})
+
+	// showTimeline makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 50
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
+		// $username = $r->hget("user:$userid","username");
+		userid := int64(zipf.Uint64())
+		client.AppRequest([]state.Operation{state.GET}, []int64{userid})
+	}
+}
+
+func ShowTimelineTransformed(users_by_time int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// showTimeline makes call to showLastUsers()
+	// $users = $r->zrevrange("users_by_time",0,9);
+	client.AppRequest([]state.Operation{state.GET}, []int64{users_by_time})
+
+	// showTimeline makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 50
+	var opTypes []state.Operation
+        var keys []int64
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		// $username = $r->hget("user:$userid","username");
+		userid := int64(zipf.Uint64())
+		keys = append(keys, postid)
+		keys = append(keys, userid)
+		opTypes = append(opTypes, state.GET)
+		opTypes = append(opTypes, state.GET)
+	}
+	client.AppRequest(opTypes, keys)
+}
+///***********************************************************//
+//********************* Retwis Profile ***********************//
+//***********************************************************//
+// Based on 
+// https://github.com/antirez/retwis/blob/master/profile.php
+// and
+// https://github.com/antirez/retwis/blob/master/retwis.php
+func ProfileSequential(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn()
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
+		// $username = $r->hget("user:$userid","username");
+		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	}
+}
+
+func ProfileTransformed(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	var opTypes []state.Operation
+        var keys []int64
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		// $username = $r->hget("user:$userid","username");
+		keys = append(keys, postid)
+		keys = append(keys, user_id)
+		opTypes = append(opTypes, state.GET)
+		opTypes = append(opTypes, state.GET)
+	}
+	client.AppRequest(opTypes, keys)
+
+}
+/*
 func PostNaive(post_id int64, timeline int64, next_post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	followers := int64(zipf.Uint64()) % 100
@@ -422,10 +734,9 @@ func PostNaive(post_id int64, timeline int64, next_post_id int64, client clients
 		done[i] = 1
 	}(2)
 
-	/* 
-	foreach($followers as $fid) {
-		$r->lpush("posts:$fid",$postid);
-	}*/
+	//foreach($followers as $fid) {
+	//	$r->lpush("posts:$fid",$postid);
+	
 	for i := int64(0); i < followers; i++ {
 		func(j int64) {
 			go client.AppRequest([]state.Operation{state.PUT}, []int64{int64(r.Uint64())})
@@ -454,7 +765,7 @@ func PostNaive(post_id int64, timeline int64, next_post_id int64, client clients
 			}
 		}
 	}
-}
+}*/
 
 func catchKill(interrupt chan os.Signal) {
 	<-interrupt
