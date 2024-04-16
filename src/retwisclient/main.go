@@ -284,24 +284,24 @@ func main() {
 			// Logout 2%
 			dlog.Printf("Client %v about to issue Logout at time %v\n", *clientId, time.Now().UnixMilli())
 			LogoutTransformed(auths, client, zipf)
-		} else if (opType < 9) {
-			// Register 5%
+		} else if (opType < 5) {
+			// Register 1%
 			dlog.Printf("Client %v about to issue Register at time %v\n", *clientId, time.Now().UnixMilli())
 			RegisterTransformed(users, users_by_time, next_user_id, auths, auth, client, zipf)
-		} else if (opType < 20) {
-			// Post 11%
+		} else if (opType < 15) {
+			// Post 10%
 			dlog.Printf("Client %v about to issue Post at time %v\n", *clientId, time.Now().UnixMilli())
 			PostTransformed(post_id, global_timeline, next_post_id, client, zipf)
-		} else if (opType < 40) {
+		} else if (opType < 35) {
 			// Follow 20%
 			dlog.Printf("Client %v about to issue Follow at time %v\n", *clientId, time.Now().UnixMilli())
 			FollowTransformed(auths, client, zipf)
-		} else if (opType < 90) {
+		} else if (opType < 85) {
 			// ShowTimeline 50%
 			dlog.Printf("Client %v about to issue ShowTimeline at time %v\n", *clientId, time.Now().UnixMilli())
 			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
 		} else {
-			// Profile 10%
+			// Profile 15%
 			dlog.Printf("Client %v about to issue Profile at time %v\n", *clientId, time.Now().UnixMilli())
 			ProfileTransformed(users, auths, global_timeline, client, zipf)
 		}
