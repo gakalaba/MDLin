@@ -264,6 +264,8 @@ func main() {
 	appState := []int64{global_timeline, next_post_id, next_user_id, auths, auth, users, users_by_time}
 	client.AppRequest(ops, appState)
 	post_id := int64(0)
+	retwisTypes := [7]string{"login", "logout", "register", "post", "follow", "timeline", "profile"}
+	selector := 0
 
 	start := time.Now()
 	now := start
@@ -278,31 +280,38 @@ func main() {
 		before := time.Now()
 		if (opType < 2) {
 			// Login 2%
-			dlog.Printf("Client %v about to issue Login at time %v\n", *clientId, time.Now().UnixMilli())
+			selector = 0
+			//dlog.Printf("Client %v about to issue Login at time %v\n", *clientId, time.Now().UnixMilli())
 			LoginTransformed(users, auth, client, zipf)
 		} else if (opType < 4) {
 			// Logout 2%
-			dlog.Printf("Client %v about to issue Logout at time %v\n", *clientId, time.Now().UnixMilli())
+			selector = 1
+			//dlog.Printf("Client %v about to issue Logout at time %v\n", *clientId, time.Now().UnixMilli())
 			LogoutTransformed(auths, client, zipf)
 		} else if (opType < 5) {
 			// Register 1%
-			dlog.Printf("Client %v about to issue Register at time %v\n", *clientId, time.Now().UnixMilli())
+			selector = 2
+			//dlog.Printf("Client %v about to issue Register at time %v\n", *clientId, time.Now().UnixMilli())
 			RegisterTransformed(users, users_by_time, next_user_id, auths, auth, client, zipf)
 		} else if (opType < 15) {
 			// Post 10%
-			dlog.Printf("Client %v about to issue Post at time %v\n", *clientId, time.Now().UnixMilli())
+			selector = 3
+			//dlog.Printf("Client %v about to issue Post at time %v\n", *clientId, time.Now().UnixMilli())
 			PostTransformed(post_id, global_timeline, next_post_id, client, zipf)
 		} else if (opType < 35) {
 			// Follow 20%
-			dlog.Printf("Client %v about to issue Follow at time %v\n", *clientId, time.Now().UnixMilli())
+			selector = 4
+			//dlog.Printf("Client %v about to issue Follow at time %v\n", *clientId, time.Now().UnixMilli())
 			FollowTransformed(auths, client, zipf)
 		} else if (opType < 85) {
 			// ShowTimeline 50%
-			dlog.Printf("Client %v about to issue ShowTimeline at time %v\n", *clientId, time.Now().UnixMilli())
+			selector = 5
+			//dlog.Printf("Client %v about to issue ShowTimeline at time %v\n", *clientId, time.Now().UnixMilli())
 			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
 		} else {
 			// Profile 15%
-			dlog.Printf("Client %v about to issue Profile at time %v\n", *clientId, time.Now().UnixMilli())
+			selector = 6
+			//dlog.Printf("Client %v about to issue Profile at time %v\n", *clientId, time.Now().UnixMilli())
 			ProfileTransformed(users, auths, global_timeline, client, zipf)
 		}
 
@@ -311,6 +320,7 @@ func main() {
                 //dlog.Printf("!!!!POST took %d microseconds\n", int64(after.Sub(before).Microseconds()))
 
 		opString := "app"
+		retwisType := retwisTypes[selector]
 		count++
 		dlog.Printf("AppRequests attempted: %d\n", count)
 		//dlog.Printf("AppRequests attempted: %d at time %d\n", count, time.Now().UnixMilli())
@@ -319,6 +329,7 @@ func main() {
 		if *rampUp <= currInt && currInt < *expLength-*rampDown {
 			lat := int64(after.Sub(before).Nanoseconds())
 			fmt.Printf("%s,%d,%d,%d\n", opString, lat, 0, count)
+			fmt.Printf("%s,%d,%d,%d\n", retwisType, lat, 0, count)
 
 		}
 		now = time.Now()
