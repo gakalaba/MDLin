@@ -460,7 +460,8 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	instNo := r.crtInstance
 	r.crtInstance++
 
-	batchSize := len(r.ProposeChan) + 1
+	//batchSize := len(r.ProposeChan) + 1
+	batchSize := 1
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.Propose, batchSize)
@@ -699,6 +700,9 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 		if inst.lb.acceptOKs+1 > r.N>>1 {
 			inst = r.instanceSpace[areply.Instance]
 			inst.status = COMMITTED
+			if len(inst.cmds) > 1 {
+				panic("no batch")
+			}
 			/*if inst.lb.clientProposals != nil {
 				// give client the all clear
 				if len(inst.cmds) > 1 {
