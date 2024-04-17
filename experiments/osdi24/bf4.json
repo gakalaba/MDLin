@@ -4,7 +4,7 @@
 	  ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol":[
-	  "multi_paxos", "mdl"
+	  "mdl", "multi_paxos"
   ],
   "replication_protocol_settings": [
     {
@@ -29,7 +29,7 @@
       "us-west-1-1",
       "us-west-1-2"
   ],
-  "num_shards": 15,
+  "num_shards": 9,
   "shards": [
 [
 "us-west-1-0",
@@ -47,16 +47,6 @@
 "us-west-1-2"
 ],
 [
-"us-west-1-0",
-"us-west-1-1",
-"us-west-1-2"
-],
-[
-"us-west-1-0",
-"us-west-1-1",
-"us-west-1-2"
-],
-[
 "us-west-1-1",
 "us-west-1-2",
 "us-west-1-0"
@@ -70,26 +60,6 @@
 "us-west-1-1",
 "us-west-1-2",
 "us-west-1-0"
-],
-[
-"us-west-1-1",
-"us-west-1-2",
-"us-west-1-0"
-],
-[
-"us-west-1-1",
-"us-west-1-2",
-"us-west-1-0"
-],
-[
-"us-west-1-2",
-"us-west-1-0",
-"us-west-1-1"
-],
-[
-"us-west-1-2",
-"us-west-1-0",
-"us-west-1-1"
 ],
 [
 "us-west-1-2",
@@ -106,7 +76,6 @@
 "us-west-1-0",
 "us-west-1-1"
 ]
-
   ],
   "clients": [
 	  "client-0-0",
@@ -159,7 +128,7 @@
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
   "client_fanout": 16,
-  "batchsize": 1000,
+  "batchsize": 100,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,
@@ -217,12 +186,12 @@
   "bin_directory_name": "bin",
   "client_bin_name": "clientnew",
   "client_debug_output": false,
-  "client_experiment_length": 60,
+  "client_experiment_length": 65,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 2,
   "client_num_keys": 1000000,
-  "client_ramp_down": 10,
+  "client_ramp_down": 20,
   "client_ramp_up": 10,
   "client_random_coordinator": false,
   "client_zipfian_s": 0,
