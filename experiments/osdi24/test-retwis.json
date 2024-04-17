@@ -29,23 +29,8 @@
       "us-east-1-1",
       "us-east-1-2"
   ],
-  "num_shards": 18,
+  "num_shards": 9,
   "shards": [
-	  [
-      "us-east-1-0",
-      "us-east-1-1",
-      "us-east-1-2"
-    ],
-[
-      "us-east-1-1",
-      "us-east-1-2",
-      "us-east-1-0"
-    ],
-[
-      "us-est-1-2",
-      "us-est-1-0",
-      "us-est-1-1"
-    ],
 [
       "us-east-1-0",
       "us-east-1-1",
@@ -72,39 +57,9 @@
       "us-east-1-0"
     ],
 [
-      "us-est-1-2",
-      "us-est-1-0",
-      "us-est-1-1"
-    ],
-[
-      "us-east-1-0",
-      "us-east-1-1",
-      "us-east-1-2"
-    ],
-[
-      "us-east-1-1",
-      "us-east-1-2",
-      "us-east-1-0"
-    ],
-[
       "us-east-1-2",
       "us-east-1-0",
       "us-east-1-1"
-    ],
-[
-      "us-east-1-0",
-      "us-east-1-1",
-      "us-east-1-2"
-    ],
-[
-      "us-east-1-1",
-      "us-east-1-2",
-      "us-east-1-0"
-    ],
-[
-      "us-est-1-2",
-      "us-est-1-0",
-      "us-est-1-1"
     ],
 [
       "us-east-1-0",
@@ -158,12 +113,12 @@
       }
  },
   "client_total": [
-	  [16, 32, 64, 128],
-	  []
+	  [1, 2, 4, 8, 16, 32, 64, 128, 256],
+	  [1, 2, 4, 8, 16, 32, 64, 128, 256]
   ],
   "client_processes_per_client_node": [
-	  [16, 32, 64, 128],
-	  []
+	  [1, 2, 4, 8, 16, 32, 64, 128, 256],
+	  [1, 2, 4, 8, 16, 32, 64, 128, 256]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -207,6 +162,106 @@
       "x_var_is_config": false,
       "y_label": "p50 Latency",
       "y_var": ["aggregate", "app", "p50"]
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-profile-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "profile", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "profile", "p50"]
+
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-login-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "login", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "login", "p50"]
+
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-logout-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "logout", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "logout", "p50"]
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-register-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "register", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "register", "p50"]
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-post-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "post", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "post", "p50"]
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-follow-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "follow", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "follow", "p50"]
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-timeline-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "timeline", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "timeline", "p50"]
     }
   ],
   "plot_cdf_png_font": "DejaVu Sans,12",
@@ -229,13 +284,13 @@
   "bin_directory_name": "bin",
   "client_bin_name": "retwisclient",
   "client_debug_output": false,
-  "client_experiment_length": 40,
+  "client_experiment_length": 90,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 2,
   "client_num_keys": 1000000,
   "client_ramp_down": 10,
-  "client_ramp_up": 10,
+  "client_ramp_up": 20,
   "client_random_coordinator": false,
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
@@ -250,7 +305,7 @@
   "max_bandwidth": "10gibps",
   "max_file_descriptors": 65535,
   "max_retries": 0,
-  "num_experiment_runs": 1,
+  "num_experiment_runs": 2,
   "out_directory_name": "out",
   "project_name": "praxis-PG0",
   "stats_file_name": "stats.json",
