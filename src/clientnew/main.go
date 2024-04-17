@@ -105,7 +105,7 @@ var rampUp *int = flag.Int(
 
 var randSleep *int = flag.Int(
 	"randSleep",
-	0,
+	1,
 	"Max number of milliseconds to sleep after operation completed.")
 
 var randomLeader *bool = flag.Bool(
