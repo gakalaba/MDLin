@@ -31,7 +31,7 @@ var doAbd *bool = flag.Bool("a", false, "Use ABD as the replication protocol. De
 var doMencius *bool = flag.Bool("m", false, "Use Mencius as the replication protocol. Defaults to false.")
 var doGpaxos *bool = flag.Bool("g", false, "Use Generalized Paxos as the replication protocol. Defaults to false.")
 var doEpaxos *bool = flag.Bool("e", false, "Use EPaxos as the replication protocol. Defaults to false.")
-var procs *int = flag.Int("p", 8, "GOMAXPROCS. Defaults to 2")
+var procs *int = flag.Int("p", 2, "GOMAXPROCS. Defaults to 2")
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 var blockprofile = flag.String("blockprofile", "", "write block profile to file")
 var thrifty = flag.Bool("thrifty", false, "Use only as many messages as strictly required for inter-replica communication.")
@@ -64,7 +64,7 @@ func main() {
 
 	dlog.DLOG = *debug
 
-	runtime.GOMAXPROCS(8)
+	runtime.GOMAXPROCS(2)
 
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)

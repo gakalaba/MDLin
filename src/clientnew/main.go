@@ -227,7 +227,7 @@ func main() {
 		log.Fatalf("Writes (%d), reads (%d), and rmws (%d) must add up to 1000.\n", *writes, *reads, *rmws)
 	}
 
-	runtime.GOMAXPROCS(*maxProcessors)
+	runtime.GOMAXPROCS(2)
 
 	if *cpuProfile != "" {
 		f, err := os.Create(*cpuProfile)
