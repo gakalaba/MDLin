@@ -13,7 +13,6 @@ import (
 	"time"
   "net/rpc"
   "fmt"
-  "runtime"
   "masterproto"
 )
 
@@ -113,7 +112,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 	r.acceptReplyRPC = r.RegisterRPC(new(paxosproto.AcceptReply), r.acceptReplyChan)
 	go r.run(masterAddr, masterPort)
 
-	dlog.Printf("GO PMAPRICOS %v\n", runtime.GOMAXPROCS(0))
+	//dlog.Printf("GO PMAPRICOS %v\n", runtime.GOMAXPROCS(0))
 	return r
 }
 

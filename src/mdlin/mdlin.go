@@ -14,7 +14,6 @@ import (
 	"mysort"
 	"state"
 	"time"
-	"runtime"
   "container/list"
   "masterproto"
 	"net/rpc"
@@ -193,7 +192,7 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 
 	go r.run(masterAddr, masterPort)
 
-	dlog.Printf("GO PMAPRICOS %v\n", runtime.GOMAXPROCS(0))
+	//dlog.Printf("GO PMAPRICOS %v\n", runtime.GOMAXPROCS(0))
 	return r
 }
 

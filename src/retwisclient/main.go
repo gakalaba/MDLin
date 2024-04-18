@@ -223,7 +223,7 @@ func main() {
 
 	dlog.DLOG = *debug
 
-	runtime.GOMAXPROCS(*maxProcessors)
+	runtime.GOMAXPROCS(2)
 
 	if *cpuProfile != "" {
 		f, err := os.Create(*cpuProfile)
