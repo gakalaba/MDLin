@@ -14,7 +14,7 @@ import (
 	"mysort"
 	"state"
 	"time"
-	"runtime"
+	"runtime/debug"
   "container/list"
   "masterproto"
 	"net/rpc"
@@ -210,8 +210,8 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
   r.coordResponseRPC = r.RegisterRPC(new(mdlinproto.CoordinationResponse), r.coordReqReplyChan)
 
 	go r.run(masterAddr, masterPort)
-
-	dlog.Printf("GO PMAPRICOS %v\n", runtime.GOMAXPROCS(0))
+	debug.SetGCPercent(-1)
+	//dlog.Printf("GO PMAPRICOS %v\n", runtime.GOMAXPROCS(2))
 	return r
 }
 
@@ -1477,6 +1477,21 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
 		    r.replyToSuccessorIfExists(inst)
 		    dlog.Printf("This Command %v got FINAL accepted at time %v\n", inst.lb.clientProposals[0].CommandId, time.Now().UnixNano())
 	    }*/
+	    /*if inst.lb.clientProposals != nil {
+		    // give client the all clear
+		    for i := 0; i < len(inst.cmds); i++ {
+			    //if !r.NeedsWaitForExecute(&inst.cmds[i]) {
+			    dlog.Printf("AAA\n")
+			    propreply := &mdlinproto.ProposeReply{
+                                                        TRUE,
+                                                        inst.lb.clientProposals[i].CommandId,
+                                                        state.NIL,
+                                                        17}
+			    r.MDReplyPropose(propreply, inst.lb.clientProposals[i].Reply)
+			    //}
+		    }
+	    }*/
+
 	    r.readyToCommit(fareply.Instance)
 		    /*if inst.lb.clientProposals[i].PID == 69 && inst.lb.clientProposals[i].CommandId >= 400 && inst.lb.clientProposals[i].CommandId <= 407 {
                 log.Printf("shardID %v: Got FINAL ACCEPT RESPONSE... going to execute soon for CommandID %v and PID = %v at time %v", r.ShardId, inst.lb.clientProposals[i].CommandId, inst.lb.clientProposals[i].PID, time.Now().UnixMilli())

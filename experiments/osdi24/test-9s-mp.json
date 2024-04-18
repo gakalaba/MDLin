@@ -29,39 +29,9 @@
       "eu-west-1-1",
       "eu-west-1-2"
   ],
-  "num_shards": 15,
+  "num_shards": 9,
   "shards": [
 	  [
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-    [
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-    [
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
       "eu-west-1-0",
       "eu-west-1-1",
       "eu-west-1-2"
@@ -155,7 +125,7 @@
   "client_write_percentage": 1000,
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
-  "client_fanout": 16,
+  "client_fanout": 1,
   "batchsize": 500,
   "cdf_plots": {
     "font": "DejaVu Sans,12",

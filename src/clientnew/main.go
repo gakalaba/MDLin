@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"runtime/debug"
 	"runtime/pprof"
 	"state"
 	"time"
@@ -37,7 +38,7 @@ var cpuProfile *string = flag.String(
 	"",
 	"Name of file for CPU profile. If empty, no profile is created.")
 
-var debug *bool = flag.Bool(
+var dbg *bool = flag.Bool(
 	"debug",
 	true,
 	"Enable debug output.")
@@ -215,7 +216,7 @@ func main() {
 		log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
 	}
 
-	dlog.DLOG = *debug
+	dlog.DLOG = *dbg
 
 	if *conflicts >= 0 {
 		dlog.Println("Using uniform distribution")
@@ -227,8 +228,8 @@ func main() {
 		log.Fatalf("Writes (%d), reads (%d), and rmws (%d) must add up to 1000.\n", *writes, *reads, *rmws)
 	}
 
-	runtime.GOMAXPROCS(*maxProcessors)
-
+	runtime.GOMAXPROCS(2)
+	debug.SetGCPercent(-1)
 	if *cpuProfile != "" {
 		f, err := os.Create(*cpuProfile)
 		if err != nil {
