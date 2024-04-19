@@ -115,12 +115,12 @@
       }
  },
   "client_total": [
-	  [],
-	  [48, 96, 192, 384, 768, 1536, 3072]
+	  [48, 96, 192, 384, 768, 1536, 3072],
+	  []
   ],
   "client_processes_per_client_node": [
-	  [],
-	  [16, 32, 64, 128, 256, 512, 1024]
+	  [16, 32, 64, 128, 256, 512, 1024],
+	  []
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -128,7 +128,7 @@
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
   "client_fanout": 16,
-  "batchsize": 600,
+  "batchsize": 6,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,
