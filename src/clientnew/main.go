@@ -261,7 +261,7 @@ func main() {
 	currRuntime := now.Sub(start)
 	for int(currRuntime.Seconds()) < *expLength {
 		//if *randSleep > 0 {
-		time.Sleep(time.Duration(r.Intn(1 * 1e6))) // randSleep ms
+		time.Sleep(time.Duration(r.Intn(100 * 1e6))) // randSleep ms
 		//}
 
 		var opTypes []state.Operation

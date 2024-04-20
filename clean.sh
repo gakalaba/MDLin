@@ -1,0 +1,10 @@
+#!/bin/bash
+ssh client-1-0 'sudo rm -rf /mnt/ex*/e*/2*'
+ssh client-2-0 'sudo rm -rf /mnt/ex*/e*/2*'
+ssh client-3-0 'sudo rm -rf /mnt/ex*/e*/2*'
+ssh us-east-1-0 'sudo rm -rf /mnt/ex*/e*/2*'
+ssh us-east-1-1 'sudo rm -rf /mnt/ex*/e*/2*'
+ssh us-east-1-2 'sudo rm -rf /mnt/ex*/e*/2*'
+ssh us-west-1-0 'sudo rm -rf /mnt/ex*/e*/2*'
+ssh us-west-1-1 'sudo rm -rf /mnt/ex*/e*/2*'
+ssh us-west-1-2 'sudo rm -rf /mnt/ex*/e*/2*'
