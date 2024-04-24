@@ -389,6 +389,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		select {
 		case <-proposeDone:
 			proposeChan = r.MDLProposeChan
+			dlog.Printf("here!")
 			if (r.finalAcceptBatch.Len() > 0) {
 				r.processCCEntry()
 			}
@@ -503,6 +504,9 @@ func (r *Replica) giveLamportTS(ts_chain []int64) []int64 {
 // indexOL, orderedLog, bufferedLog
 func (r *Replica) processCCEntry() {
 	dlog.Printf("Inside of processCCEntry!")
+	if r.finalAcceptBatch.Len() <= 0 {
+		return
+	}
 	//if (r.finalAcceptBatch.Len() < r.batchSize) {
 	//	return
 	//}
