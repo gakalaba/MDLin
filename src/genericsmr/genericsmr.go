@@ -597,9 +597,11 @@ func (r *Replica) clientListener(conn net.Conn) {
 
 		//dlog.Printf("[%d] Read opcode %d from client %s.\n", r.Id, msgType, conn.RemoteAddr().String())
 
+
 		switch uint8(msgType) {
 
 		case clientproto.GEN_PROPOSE:
+			//r.busyWait(100)
 			prop := new(genericsmrproto.Propose)
 			if err = prop.Unmarshal(reader); err != nil {
 				errS = "reading GEN_PROPOSE"
@@ -610,6 +612,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 			break
 
 		case clientproto.MDL_PROPOSE:
+			//r.busyWait(100)
 			prop := new(mdlinproto.Propose)
 			if err = prop.Unmarshal(reader); err != nil {
 				errS = "reading MDL_PROPOSE"
@@ -690,6 +693,18 @@ func (r *Replica) SendISMsg(leaderId int32, code uint8, msg fastrpc.Serializable
 	w.WriteByte(code)
 	msg.Marshal(w)
 	w.Flush()
+}
+
+func (r *Replica) busyWait(length int64) {
+	done := false
+	start := time.Now()
+	for !done {
+		now := time.Now()
+		lat := int64(now.Sub(start).Milliseconds())
+		if lat >= length {
+			done = true
+		}
+	}
 }
 
 func (r *Replica) SendMsg(peerId int32, code uint8, msg fastrpc.Serializable) {

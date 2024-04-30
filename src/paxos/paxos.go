@@ -191,9 +191,9 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 	go r.WaitForClientConnections()
 	time.Sleep(3000 * 1000 * 1000)
-	if r.Exec {
+	//if r.Exec && r.IsLeader {
 		go r.executeCommands()
-	}
+	//}
 
 	//slowClockChan := make(chan bool, 1)
 	//go r.SlowClock(slowClockChan)
@@ -740,7 +740,7 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 func (r *Replica) executeCommands() {
 	i := int32(0)
 	for !r.Shutdown {
-		//executed := false
+		executed := false
 
 		for i <= r.committedUpTo {
 			if r.instanceSpace[i].cmds != nil {
@@ -759,15 +759,15 @@ func (r *Replica) executeCommands() {
 					}
 				}
 				i++
-				//executed = true
+				executed = true
 			} else {
 				break
 			}
 		}
 
-		//if !executed {
-		//	time.Sleep(1000 * 1000)
-		//}
+		if !executed {
+			time.Sleep(1000 * 1000)
+		}
 	}
 
 }

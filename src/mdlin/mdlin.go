@@ -367,7 +367,9 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	go r.WaitForClientConnections()
 	time.Sleep(3000 * 1000 * 1000)
 
-	go r.executeCommands()
+	//if r.IsLeader {
+		go r.executeCommands()
+	//}
 	proposeChan := r.MDLProposeChan
 	proposeDone := make(chan bool, 1)
 	if r.batchingEnabled && r.IsLeader {
@@ -1573,7 +1575,7 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
 func (r *Replica) executeCommands() {
 	i := int32(0)
 	for !r.Shutdown {
-		//executed := false
+		executed := false
 
 		for i <= r.committedUpTo {
 			if r.instanceSpace[i].cmds != nil {
@@ -1604,15 +1606,15 @@ func (r *Replica) executeCommands() {
 					}
 				}
 				i++
-				//executed = true
+				executed = true
 			} else {
 				break
 			}
 		}
 
-		//if !executed {
-		//	time.Sleep(1000 * 1000)
-		//}
+		if !executed {
+			time.Sleep(1000 * 1000)
+		}
 	}
 
 }
