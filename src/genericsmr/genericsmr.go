@@ -570,6 +570,18 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 	}
 }
 
+func (r *Replica) busyWait(length int64) {
+	done := false
+	start := time.Now()
+	for !done {
+		now := time.Now()
+		lat := int64(now.Sub(start).Milliseconds())
+		if lat >= length {
+			done = true
+		}
+	}
+}
+
 // Listen for client traffic
 func (r *Replica) clientListener(conn net.Conn) {
 	var err error
@@ -605,6 +617,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 		switch uint8(msgType) {
 
 		case clientproto.GEN_PROPOSE:
+			//r.busyWait(100)
 			prop := new(genericsmrproto.Propose)
 			if err = prop.Unmarshal(reader); err != nil {
 				errS = "reading GEN_PROPOSE"
@@ -615,6 +628,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 			break
 
 		case clientproto.MDL_PROPOSE:
+			//r.busyWait(100)
 			prop := new(mdlinproto.Propose)
 			if err = prop.Unmarshal(reader); err != nil {
 				errS = "reading MDL_PROPOSE"
