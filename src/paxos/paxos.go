@@ -190,7 +190,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	log.Println("Waiting for client connections")
 
 	go r.WaitForClientConnections()
-	time.Sleep(3000 * 1000 * 1000)
+	time.Sleep(6000 * 1000 * 1000)
 	//if r.Exec && r.IsLeader {
 		go r.executeCommands()
 	//}
@@ -209,6 +209,10 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		go r.batchClock(&proposeDone)
 	}
 
+	t_avg := int64(0)
+	t_v := int64(0)
+	bs_avg := 0
+	bs_v := 0
 	for !r.Shutdown {
 		select {
 		case <-proposeDone:
@@ -216,7 +220,14 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			break
 		case proposal := <-proposeChan:
 			//got a Propose from a client
-			r.handlePropose(proposal)
+			start := time.Now()
+			bs_v += r.handlePropose(proposal)
+			end := time.Now()
+			t_v += end.Sub(start).Microseconds()
+			t_avg++
+			bs_avg++
+			log.Printf("handlePropose avg length = %v microseconds", t_v/t_avg)
+			log.Printf("handlePropose avg batchsize = %v", bs_v/bs_avg)
 			if r.batchingEnabled {
 				proposeChan = nil
 			}
@@ -439,7 +450,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 	}
 }
 
-func (r *Replica) handlePropose(propose *genericsmr.Propose) {
+func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 
 
 	//dlog.Printf("got handlePropose for CommandID %v at time %v\n", propose.CommandId, time.Now().UnixNano())
@@ -447,10 +458,9 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	if !r.IsLeader {
 		preply := &genericsmrproto.ProposeReplyTS{FALSE, -1, state.NIL, 0}
 		r.ReplyProposeTS(preply, propose.Reply)
-		return
+		return -1
 	}
 
-	dlog.Printf("length of readyBuff is %d\n", len(r.ProposeChan)+1)
 
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
@@ -460,6 +470,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 	r.crtInstance++
 
 	batchSize := len(r.ProposeChan) + 1
+	dlog.Printf("Batchsize = %d\n", batchSize)
 
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.Propose, batchSize)
@@ -499,6 +510,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) {
 		r.bcastAccept(instNo, r.defaultBallot, cmds)
 		//dlog.Printf("Fast round for instance %d\n", instNo)
 	}
+	return batchSize
 	//dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }
 

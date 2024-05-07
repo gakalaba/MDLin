@@ -386,21 +386,45 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		go r.epochClock(&epochChan, &epochDone)
 	}*/
 
+	t_avg := int64(0)
+	t_CC_avg := int64(0)
+	t_v := int64(0)
+	t_CC_v := int64(0)
+	bs_avg := 0
+	bs_CC_avg := 0
+	bs_v := 0
+	bs_CC_v := 0
 	for !r.Shutdown {
 		//dlog.Printf("A\n")
 		select {
 		case <-proposeDone:
 			proposeChan = r.MDLProposeChan
-			dlog.Printf("here!")
-			if (r.finalAcceptBatch.Len() > 0) {
-				r.processCCEntry()
-			}
+			dlog.Printf("here!, proposeChan = %v, len(proposeChan) = %v", proposeChan, len(proposeChan))
+			//go func() {
+				start := time.Now()
+				bs_CC_v += r.processCCEntry()
+				end := time.Now()
+				t_CC_v += end.Sub(start).Microseconds()
+				t_CC_avg++
+				bs_CC_avg++
+				log.Printf("processCC avg length %v microseconds", t_CC_v/t_CC_avg)
+				log.Printf("processCC avg entrySize %v", bs_CC_v/bs_CC_avg)
+			//}()
 			break
 		case proposal := <-proposeChan:
 			NewPrintf(LEVELALL, "---------ProposalChan---------")
 			dlog.Printf("1\n")
 			dlog.Printf("the proposal = %v", proposal)
-			r.handlePropose(proposal)
+			dlog.Printf("ok... calling handlePropose")
+			start := time.Now()
+			bs_v += r.handlePropose(proposal)
+			//r.processCCEntry()
+			end := time.Now()
+			t_v += end.Sub(start).Microseconds()
+			t_avg++
+			bs_avg++
+			log.Printf("handlePropose avg length %v microseconds", t_v/t_avg)
+			log.Printf("handlePropose avg batchsize = %v", bs_v/bs_avg)
 			proposeChan = nil
 			break
 		//case <-epochChan:
@@ -504,11 +528,12 @@ func (r *Replica) giveLamportTS(ts_chain []int64) []int64 {
 }
 
 // indexOL, orderedLog, bufferedLog
-func (r *Replica) processCCEntry() {
+func (r *Replica) processCCEntry() int {
 	dlog.Printf("Inside of processCCEntry!")
 	if r.finalAcceptBatch.Len() <= 0 {
-		return
+		return 0
 	}
+	dlog.Printf("New CC Entry has %v entries", r.finalAcceptBatch.Len())
 	//if (r.finalAcceptBatch.Len() < r.batchSize) {
 	//	return
 	//}
@@ -596,6 +621,7 @@ func (r *Replica) processCCEntry() {
 	//NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
 	dlog.Printf("calling bcastFinalAccept, seen SIZE = %v, bufferedLog = %v\n", len(r.seen), r.bufferedLog)
 	r.bcastFinalAccept(instNo, r.defaultBallot, tags, cmds, ts_chains)
+	return i
 }
 
 func (r *Replica) updateCommittedUpTo() {
@@ -784,15 +810,14 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 }
 
 // Client submitted a command to a server
-func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
+func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) int {
 	dlog.Printf("got handlePropose for CommandID %v and PID = %v at time %v, the key = %v\n", propose.CommandId, propose.PID, time.Now().UnixNano(), propose.Command.K)
 	if !r.IsLeader {
 		preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.NIL, 0}
 		//NewPrintf(LEVELALL, "I'm not the leader... responding to client with OK = false (0)")
 		r.MDReplyPropose(preply, propose.Reply)
-		return
+		return -1
 	}
-	dlog.Printf("length of readyBuff is %d\n", len(r.MDLProposeChan)+1)
 
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
@@ -800,6 +825,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 
 	// Get batch size
 	batchSize := len(r.MDLProposeChan) + 1
+	dlog.Printf("Batchsize = %d\n", batchSize)
 
 	prepareTags := make([]mdlinproto.Tag, batchSize)
 	cmds := make([]state.Command, batchSize)
@@ -931,7 +957,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 		// We won't respond to the client, since that response
 		// will come when the command gets unbuffered and later executed
 		r.noProposalsReady = true
-		return
+		return batchSize
 	}
 
 	/*if (r.proposeBatch.Len() != 0) {
@@ -984,11 +1010,9 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) {
 				}*/
 				r.bcastAccept(r.defaultBallot, cmds, prepareTags)
 			}
-			if (r.finalAcceptBatch.Len() > 0) {
-				r.processCCEntry()
-			}
 	}
 	dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
+	return batchSize
 }
 
 func (r *Replica) addEntryToBuffLog(cmds state.Command, proposals *genericsmr.MDLPropose, coord int8, ts_chain []int64, pid int64, seqno int64) *Instance {
