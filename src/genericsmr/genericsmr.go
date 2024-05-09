@@ -568,6 +568,12 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 // Listen for client traffic
 func (r *Replica) clientListener(conn net.Conn) {
 	var err error
+	//downcast conn to a tcp connection
+	// from this you can do .file((.fd)
+	// and then we wanna modify this to
+	// fctrl(fd, O_NONBLOCK) to make this shit nonblocking
+	// the flag is O_NONBLOCK F_FL
+	// fcntl
 	reader := bufio.NewReader(conn)
 	writer := bufio.NewWriter(conn)
 

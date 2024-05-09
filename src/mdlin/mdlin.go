@@ -2,6 +2,7 @@ package mdlin
 
 import (
   "math"
+  "sort"
 	"encoding/binary"
 	"fastrpc"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"mysort"
 	"state"
 	"time"
+	//"runtime"
   "container/list"
   "masterproto"
 	"net/rpc"
@@ -353,6 +355,17 @@ func (r *Replica) epochClock(proposeChan *(chan bool), proposeDone *(chan bool))
 
 /* Main event processing loop */
 
+func InsertSorted(s []int, ss []int, b int, e int) ([]int, []int) {
+	i := sort.SearchInts(s, e)
+	    s = append(s, 0)
+	    ss = append(ss, 0)
+	        copy(s[i+1:], s[i:])
+	        copy(ss[i+1:], ss[i:])
+		    s[i] = e
+		    ss[i] = b
+		        return s, ss
+}
+
 func (r *Replica) run(masterAddr string, masterPort int) {
 	if r.Id == 0 {
 		r.IsLeader = true
@@ -394,6 +407,14 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 	bs_CC_avg := 0
 	bs_v := 0
 	bs_CC_v := 0
+	t_median := make([]int, 0)
+	t_copy := make([]int, 0)
+	bs_median := make([]int, 0)
+	bs_copy := make([]int, 0)
+	bs_CC_median := make([]int, 0)
+	bs_CC_copy := make([]int, 0)
+	t_CC_median := make([]int, 0)
+	t_CC_copy := make([]int, 0)
 	for !r.Shutdown {
 		//dlog.Printf("A\n")
 		select {
@@ -401,31 +422,63 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			proposeChan = r.MDLProposeChan
 			dlog.Printf("here!, proposeChan = %v, len(proposeChan) = %v", proposeChan, len(proposeChan))
 			//go func() {
+			//runtime.LockOSThread()
 				start := time.Now()
-				bs_CC_v += r.processCCEntry()
+				bs_CC_v = r.processCCEntry()
 				end := time.Now()
-				t_CC_v += end.Sub(start).Microseconds()
+				t_CC_v = end.Sub(start).Microseconds()
 				t_CC_avg++
 				bs_CC_avg++
-				log.Printf("processCC avg length %v microseconds", t_CC_v/t_CC_avg)
-				log.Printf("processCC avg entrySize %v", bs_CC_v/bs_CC_avg)
+				bs_CC_median, t_CC_copy = InsertSorted(bs_CC_median, t_CC_copy, int(t_CC_v), bs_CC_v)
+				t_CC_median, bs_CC_copy = InsertSorted(t_CC_median, bs_CC_copy, bs_CC_v, int(t_CC_v))
+				//log.Printf("processCC avg length %v microseconds", t_CC_v/t_CC_avg)
+				//log.Printf("processCC avg entrySize %v", bs_CC_v/bs_CC_avg)
+				log.Printf("bs = %v, t = %v", bs_CC_v, t_CC_v)
+				log.Printf("processCCEntry p50 length = %v microseconds, BS = %v", t_CC_median[int(len(t_CC_median)/2)], bs_CC_copy[int(len(t_CC_median)/2)])
+                                log.Printf("processCCEntry p90 length = %v microseconds, BS = %v", t_CC_median[int(float64(len(t_CC_median))*0.9)], bs_CC_copy[int(float64(len(t_CC_median))*0.9)])
+                                log.Printf("processCCEntry p99 length = %v microseconds, BS = %v", t_CC_median[int(float64(len(t_CC_median))*0.99)], bs_CC_copy[int(float64(len(t_CC_median))*0.99)])
+                                log.Printf("processCCEntry p50 batchsize = %v, t = %v", bs_CC_median[int(len(bs_CC_median)/2)], t_CC_copy[int(len(bs_CC_median)/2)])
+                                log.Printf("processCCEntry p90 batchsize = %v, t = %v", bs_CC_median[int(float64(len(bs_CC_median))*0.9)], t_CC_copy[int(float64(len(bs_CC_median))*0.9)])
+                                log.Printf("processCCEntry p99 batchsize = %v, t = %v", bs_CC_median[int(float64(len(bs_CC_median))*0.99)], t_CC_copy[int(float64(len(bs_CC_median))*0.99)])
+				if (t_CC_v > 15000) {
+                                        log.Printf("++++++++++++++++++++++")
+                                }
 			//}()
+			//runtime.UnlockOSThread()
 			break
 		case proposal := <-proposeChan:
+			//runtime.LockOSThread()
 			NewPrintf(LEVELALL, "---------ProposalChan---------")
 			dlog.Printf("1\n")
 			dlog.Printf("the proposal = %v", proposal)
 			dlog.Printf("ok... calling handlePropose")
 			start := time.Now()
-			bs_v += r.handlePropose(proposal)
+			bs_v = r.handlePropose(proposal)
 			//r.processCCEntry()
 			end := time.Now()
-			t_v += end.Sub(start).Microseconds()
+			t_v = end.Sub(start).Microseconds()
 			t_avg++
 			bs_avg++
-			log.Printf("handlePropose avg length %v microseconds", t_v/t_avg)
-			log.Printf("handlePropose avg batchsize = %v", bs_v/bs_avg)
+			bs_median, t_copy = InsertSorted(bs_median, t_copy, int(t_v), bs_v)
+			t_median, bs_copy = InsertSorted(t_median, bs_copy, bs_v, int(t_v))
+			//log.Printf("handlePropose avg length %v microseconds", t_v/t_avg)
+			//log.Printf("handlePropose avg batchsize = %v", bs_v/bs_avg)
 			proposeChan = nil
+                        log.Printf("bs = %v, t = %v", bs_v, t_v)
+			log.Printf("handlePropose p50 length = %v microseconds, BS = %v", t_median[int(len(t_median)/2)], bs_copy[int(len(t_median)/2)])
+                        log.Printf("handlePropose p90 length = %v microseconds, BS = %v", t_median[int(float64(len(t_median))*0.9)], bs_copy[int(float64(len(t_median))*0.9)])
+                        log.Printf("handlePropose p99 length = %v microseconds, BS = %v", t_median[int(float64(len(t_median))*0.99)], bs_copy[int(float64(len(t_median))*0.99)])
+                        //log.Printf("handlePropose avg length = %v microseconds", t_v/t_avg)
+                        //log.Printf("handlePropose avg batchsize = %v", bs_v/bs_avg)
+                        log.Printf("handlePropose p50 batchsize = %v, t = %v", bs_median[int(len(bs_median)/2)], t_copy[int(len(bs_median)/2)])
+                        log.Printf("handlePropose p90 batchsize = %v, t = %v", bs_median[int(float64(len(bs_median))*0.9)], t_copy[int(float64(len(bs_median))*0.9)])
+			log.Printf("handlePropose p99 batchsize = %v, t = %v", bs_median[int(float64(len(bs_median))*0.99)], t_copy[int(float64(len(bs_median))*0.99)])
+
+			if (t_v > 15000) {
+                                        log.Printf("++++++++++++++++++++++")
+                        }
+
+			//runtime.UnlockOSThread()
 			break
 		//case <-epochChan:
 		//	dlog.Printf("2\n")
@@ -529,6 +582,7 @@ func (r *Replica) giveLamportTS(ts_chain []int64) []int64 {
 
 // indexOL, orderedLog, bufferedLog
 func (r *Replica) processCCEntry() int {
+	A := time.Now()
 	dlog.Printf("Inside of processCCEntry!")
 	if r.finalAcceptBatch.Len() <= 0 {
 		return 0
@@ -554,6 +608,7 @@ func (r *Replica) processCCEntry() int {
 	  qq = n
 	  ii++
   }*/
+  	B := time.Now()
 	inst := r.finalAcceptBatch.Front()
 	next := inst
 	var e *Instance
@@ -565,6 +620,7 @@ func (r *Replica) processCCEntry() int {
 	i := 0
 	var t mdlinproto.Tag
 	instNo := r.crtInstance
+	C := time.Now()
 	for inst != nil {
 		//if !inst.Value.(*Instance).lb.coordinated[0] {
 			//TODO right now we do not case on if coordinated is false...
@@ -602,25 +658,37 @@ func (r *Replica) processCCEntry() int {
 		inst = next
 		i++
 	}
+	D := time.Now()
 	//log.Printf("ProcessCCEntry has %v proposals issued in bcastFinalAccept", i)
 	r.addNewEntryToOrderedLog(instNo, cmds, ts_chains, proposals, ACCEPTED)
 	r.instanceSpace[instNo].lb.inCoordsList = coordsList
 	r.crtInstance++
+	E := time.Now()
 	for i := 0; i < len(r.instanceSpace[instNo].cmds); i++ {
 		if (r.instanceSpace[instNo].lb.clientProposals[i].Predecessor.PID != -1) {
 			// all non-naught reqeusts can reply now
 			r.replyToSuccessorIfExists(r.instanceSpace[instNo], i)
 		}
 	}
+	F := time.Now()
 	r.recordInstanceMetadata(r.instanceSpace[instNo])
 	dlog.Printf("syncing instance %v", r.instanceSpace[instNo])
 	r.recordCommands(r.instanceSpace[instNo].cmds)
 	r.sync()
 
+	G := time.Now()
 	// do last paxos roundtrip with this whole batch you just added
 	//NewPrintf(LEVEL0, "Issueing a final round paxos RTT for epoch %v, with %v commands", r.epoch, n)
 	dlog.Printf("calling bcastFinalAccept, seen SIZE = %v, bufferedLog = %v\n", len(r.seen), r.bufferedLog)
 	r.bcastFinalAccept(instNo, r.defaultBallot, tags, cmds, ts_chains)
+	H := time.Now()
+	log.Printf("p_CC: A = %v", B.Sub(A).Microseconds())
+	log.Printf("p_CC: B = %v", C.Sub(B).Microseconds())
+	log.Printf("p_CC: C = %v", D.Sub(C).Microseconds())
+	log.Printf("p_CC: D = %v", E.Sub(D).Microseconds())
+	log.Printf("p_CC: E = %v", F.Sub(E).Microseconds())
+	log.Printf("p_CC: F = %v", G.Sub(F).Microseconds())
+	log.Printf("p_CC: G = %v", H.Sub(G).Microseconds())
 	return i
 }
 
@@ -811,6 +879,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 
 // Client submitted a command to a server
 func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) int {
+	A := time.Now()
 	dlog.Printf("got handlePropose for CommandID %v and PID = %v at time %v, the key = %v\n", propose.CommandId, propose.PID, time.Now().UnixNano(), propose.Command.K)
 	if !r.IsLeader {
 		preply := &mdlinproto.ProposeReply{FALSE, propose.CommandId, state.NIL, 0}
@@ -819,19 +888,23 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) int {
 		return -1
 	}
 
+	B := time.Now()
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
 	}
 
+	C1 := time.Now()
 	// Get batch size
 	batchSize := len(r.MDLProposeChan) + 1
 	dlog.Printf("Batchsize = %d\n", batchSize)
 
+	C2 := time.Now()
 	prepareTags := make([]mdlinproto.Tag, batchSize)
 	cmds := make([]state.Command, batchSize)
 
 	prepareTagsFA := make([]mdlinproto.Tag, batchSize)
 
+	C3 := time.Now()
 	found := 0
 	foundFA := 0
 	var expectedSeqno int64
@@ -845,6 +918,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) int {
 	// i, numProposals = i is a for loop from 1 to numProposals
 	// found, batchsize = we use found to bound the number of entries added to batchsize=1 (and flushing buffer)
 	//for found < batchSize && i <= numProposals {
+	D := time.Now()
 	for i < (batchSize) {
 		dlog.Printf("cmds[%v] = ...", found)
 
@@ -950,6 +1024,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) int {
 		}*/
 	}
 
+	E := time.Now()
 	// None of the proposals in the channel
 	// are ready to be added to the log
 	if found == 0 {
@@ -966,6 +1041,8 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) int {
 
 	r.noProposalsReady = false
 
+	F1 := time.Now()
+	var F2 time.Time
 	//dlog.Printf("ended up finding %d entries for this batch, %d of which WERE naught ones", found)
 	if r.defaultBallot == -1 {
 		// Resize all the arrays to hold the actual amount we found
@@ -1003,6 +1080,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) int {
 			//dlog.Printf("nonNaughts prepareTags = %v", prepareTags)
 			prepareTags = append([]mdlinproto.Tag(nil), prepareTags[:found-foundFA]...)
 			cmds = append([]state.Command(nil), cmds[:found-foundFA]...)
+			F2 = time.Now()
 			//log.Printf("handlePropose --> bcastAccepting %v proposals", found-foundFA)
 			if (found-foundFA > 0) {
 				/*if printMe {
@@ -1011,7 +1089,19 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) int {
 				r.bcastAccept(r.defaultBallot, cmds, prepareTags)
 			}
 	}
+	G := time.Now()
 	dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
+	log.Printf("A = %v", B.Sub(A).Microseconds())
+        log.Printf("B = %v", C1.Sub(B).Microseconds())
+        log.Printf("C = %v", D.Sub(C1).Microseconds())
+        log.Printf("C1 = %v", C2.Sub(C1).Microseconds())
+        log.Printf("C2 = %v", C3.Sub(C2).Microseconds())
+        log.Printf("C3 = %v", D.Sub(C3).Microseconds())
+        log.Printf("D = %v", E.Sub(D).Microseconds())
+        log.Printf("E = %v", F1.Sub(E).Microseconds())
+        log.Printf("F = %v", G.Sub(F1).Microseconds())
+        log.Printf("F1 = %v", F2.Sub(F1).Microseconds())
+        log.Printf("F2 = %v", G.Sub(F2).Microseconds())
 	return batchSize
 }
 

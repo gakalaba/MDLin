@@ -2,14 +2,19 @@ package paxos
 
 import (
 	"dlog"
+	//"sync"
 	"encoding/binary"
 	"fastrpc"
 	"genericsmr"
 	"genericsmrproto"
 	"io"
 	"log"
+	"sort"
 	"paxosproto"
 	"state"
+	//"runtime"
+	//"os"
+	//"runtime/pprof"
 	"time"
   "net/rpc"
   "fmt"
@@ -179,6 +184,16 @@ func (r *Replica) batchClock(proposeDone *(chan bool)) {
   }
 }
 
+func InsertSorted(s []int, ss []int, b int, e int) ([]int, []int) {
+	i := sort.SearchInts(s, e)
+	    s = append(s, 0)
+	    ss = append(ss, 0)
+	        copy(s[i+1:], s[i:])
+	        copy(ss[i+1:], ss[i:])
+		    s[i] = e
+		    ss[i] = b
+		        return s, ss
+}
 
 func (r *Replica) run(masterAddr string, masterPort int) {
 
@@ -211,8 +226,17 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 
 	t_avg := int64(0)
 	t_v := int64(0)
+	t_median := make([]int, 0)
+	t_copy := make([]int, 0)
+	bs_median := make([]int, 0)
+	bs_copy := make([]int, 0)
 	bs_avg := 0
 	bs_v := 0
+	//var mm sync.Mutex
+	//f, _ := os.Create("/users/akalaba/profile")
+	//runtime.SetCPUProfileRate(500)
+	//pprof.StartCPUProfile(f)
+	//defer pprof.StopCPUProfile()
 	for !r.Shutdown {
 		select {
 		case <-proposeDone:
@@ -220,17 +244,36 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			break
 		case proposal := <-proposeChan:
 			//got a Propose from a client
-			start := time.Now()
-			bs_v += r.handlePropose(proposal)
-			end := time.Now()
-			t_v += end.Sub(start).Microseconds()
-			t_avg++
-			bs_avg++
-			log.Printf("handlePropose avg length = %v microseconds", t_v/t_avg)
-			log.Printf("handlePropose avg batchsize = %v", bs_v/bs_avg)
+			//go func() {
+			//runtime.LockOSThread()
+			//mm.Lock()
+				start := time.Now()
+				bs_v = r.handlePropose(proposal)
+				end := time.Now()
+				t_v = end.Sub(start).Microseconds()
+				t_avg++
+				bs_avg++
+				bs_median, t_copy = InsertSorted(bs_median, t_copy, int(t_v), bs_v)
+				t_median, bs_copy = InsertSorted(t_median, bs_copy, bs_v, int(t_v))
+
+				log.Printf("bs = %v, t = %v", bs_v, t_v)
+				log.Printf("handlePropose p50 length = %v microseconds, BS = %v", t_median[int(len(t_median)/2)], bs_copy[int(len(t_median)/2)])
+				log.Printf("handlePropose p90 length = %v microseconds, BS = %v", t_median[int(float64(len(t_median))*0.9)], bs_copy[int(float64(len(t_median))*0.9)])
+				log.Printf("handlePropose p99 length = %v microseconds, BS = %v", t_median[int(float64(len(t_median))*0.99)], bs_copy[int(float64(len(t_median))*0.99)])
+				//log.Printf("handlePropose avg length = %v microseconds", t_v/t_avg)
+				//log.Printf("handlePropose avg batchsize = %v", bs_v/bs_avg)
+				log.Printf("handlePropose p50 batchsize = %v, t = %v", bs_median[int(len(bs_median)/2)], t_copy[int(len(bs_median)/2)])
+				log.Printf("handlePropose p90 batchsize = %v, t = %v", bs_median[int(float64(len(bs_median))*0.9)], t_copy[int(float64(len(bs_median))*0.9)])
+				log.Printf("handlePropose p99 batchsize = %v, t = %v", bs_median[int(float64(len(bs_median))*0.99)], t_copy[int(float64(len(bs_median))*0.99)])
+				if (t_v > 15000) {
+					log.Printf("++++++++++++++++++++++")
+				}
+			//}()
 			if r.batchingEnabled {
 				proposeChan = nil
 			}
+			//mm.Unlock()
+			//runtime.UnlockOSThread()
 			break
 		case prepareS := <-r.prepareChan:
 			prepare := prepareS.(*paxosproto.Prepare)
@@ -452,6 +495,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 
+	A := time.Now()
 
 	//dlog.Printf("got handlePropose for CommandID %v at time %v\n", propose.CommandId, time.Now().UnixNano())
 	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)
@@ -462,21 +506,28 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 	}
 
 
+	B := time.Now()
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
 	}
 
+	C1 := time.Now()
 	instNo := r.crtInstance
 	r.crtInstance++
 
+	C2 := time.Now()
 	batchSize := len(r.ProposeChan) + 1
 	dlog.Printf("Batchsize = %d\n", batchSize)
 
+	C3 := time.Now()
 	cmds := make([]state.Command, batchSize)
 	proposals := make([]*genericsmr.Propose, batchSize)
 
+	C4 := time.Now()
 	prop := propose
 	i := 0
+
+	D := time.Now()
 	for i < (batchSize) {
 		dlog.Printf("cmds[%v] = ...", i)
 		cmds[i] = prop.Command
@@ -487,6 +538,8 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 		}
 	}
 
+	E1 := time.Now()
+	var E2, E3, E4, E5 time.Time
 	if r.defaultBallot == -1 {
 		r.instanceSpace[instNo] = &Instance{
 			cmds,
@@ -502,14 +555,34 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 			PREPARED,
 			&LeaderBookkeeping{proposals, 0, 0, 0, 0}}
 
+		E2 = time.Now()
 		r.recordInstanceMetadata(r.instanceSpace[instNo])
+		E3 = time.Now()
 		r.recordCommands(cmds)
+		E4 = time.Now()
 		r.sync()
+		E5 = time.Now()
 
 		//log.Printf("bcastAccepting %v proposals", len(cmds))
 		r.bcastAccept(instNo, r.defaultBallot, cmds)
 		//dlog.Printf("Fast round for instance %d\n", instNo)
 	}
+	F := time.Now()
+
+	log.Printf("A = %v", B.Sub(A).Microseconds())
+	log.Printf("B = %v", C1.Sub(B).Microseconds())
+	log.Printf("C = %v", D.Sub(C1).Microseconds())
+	log.Printf("C1 = %v", C2.Sub(C1).Microseconds())
+	log.Printf("C2 = %v", C3.Sub(C2).Microseconds())
+	log.Printf("C3 = %v", C4.Sub(C3).Microseconds())
+	log.Printf("C4 = %v", D.Sub(C4).Microseconds())
+	log.Printf("D = %v", E1.Sub(D).Microseconds())
+	log.Printf("E = %v", F.Sub(E1).Microseconds())
+	log.Printf("E1 = %v", E2.Sub(E1).Microseconds())
+	log.Printf("E2 = %v", E3.Sub(E2).Microseconds())
+	log.Printf("E3 = %v", E4.Sub(E3).Microseconds())
+	log.Printf("E4 = %v", E5.Sub(E4).Microseconds())
+	log.Printf("E5 = %v", F.Sub(E5).Microseconds())
 	return batchSize
 	//dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }
