@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fastrpc"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"genericsmrproto"
 	"io"
 	"log"
@@ -475,6 +476,11 @@ func (r *Replica) WaitForClientConnections() {
 	// NOTE: all peers must be connected before clients begin attempting to connect
 	//   otherwise we might accept a client connection as a peer connection due to
 	//   listening for RPCs on the same port
+	/*for i := 0; i < 7485; i++ {
+		conn, _ := r.Listener.Accept()
+		go r.fakeClientListener(conn)
+	}*/
+	log.Printf("F_GETFL = %v, F_SETFL = %v, O_NONBLOCK = %v", unix.F_GETFL, unix.F_SETFL, unix.O_NONBLOCK)
 	for !r.Shutdown {
 		conn, err := r.Listener.Accept()
 		if err != nil {
@@ -489,6 +495,7 @@ func (r *Replica) WaitForClientConnections() {
 		}
 	}
 }
+
 
 // Listen for replica traffic
 func (r *Replica) replicaListener(rid int, reader *bufio.Reader) {
@@ -565,9 +572,33 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 	}
 }
 
+func (r *Replica) fakeClientListener(conn net.Conn) {
+	reader := bufio.NewReader(conn)
+	for !r.Shutdown {
+		reader.ReadByte()
+	}
+}
+
+func makeNonBlocking(conn net.Conn) {
+	file, err := conn.(*net.TCPConn).File()
+	if err != nil {
+		panic("HUHUH")
+	}
+	fd := file.Fd()
+	flags, err := unix.FcntlInt(fd, unix.F_GETFL, 0)
+	if err != nil || flags == -1 {
+		panic("ohohoh")
+	}
+	flags, err = unix.FcntlInt(fd, unix.F_SETFL, flags | unix.O_NONBLOCK)
+	if err != nil || flags == -1 {
+		panic("heehehehee")
+	}
+}
+
 // Listen for client traffic
 func (r *Replica) clientListener(conn net.Conn) {
 	var err error
+	//makeNonBlocking(conn)
 	//downcast conn to a tcp connection
 	// from this you can do .file((.fd)
 	// and then we wanna modify this to
@@ -596,6 +627,9 @@ func (r *Replica) clientListener(conn net.Conn) {
 	for !r.Shutdown && err == nil {
 		//dlog.Printf("[%d] Waiting for message from client...\n", r.Id)
 		//dlog.Printf("Tryna read a message from client %v.....\n", r.Id)
+
+		//log.Printf("setting deadline!")
+		//conn.SetReadDeadline(time.Now().Add(1 * time.Microsecond))
 		if msgType, err = reader.ReadByte(); err != nil {
 			errS = "reading opcode"
 			break
@@ -628,16 +662,14 @@ func (r *Replica) clientListener(conn net.Conn) {
 			dlog.Printf("GENERICSMR got command %v at time %v\n", prop.CommandId, time.Now().UnixNano())
 			r.MDLProposeChan <- &MDLPropose{prop, writer}
 			break
-
-    case clientproto.MDL_COORDREQ:
-      CR := new(mdlinproto.CoordinationRequest)
-      if err = CR.Unmarshal(reader); err != nil {
-        errS = "reading MDL_COORDREQ"
-        break
-      }
-      r.MDLCoordReqChan <- &MDLCoordReq{CR}
-      break
-
+		case clientproto.MDL_COORDREQ:
+			CR := new(mdlinproto.CoordinationRequest)
+			if err = CR.Unmarshal(reader); err != nil {
+				errS = "reading MDL_COORDREQ"
+				break
+			}
+			r.MDLCoordReqChan <- &MDLCoordReq{CR}
+			break
 		case clientproto.GEN_READ:
 			read := new(genericsmrproto.Read)
 			if err = read.Unmarshal(reader); err != nil {

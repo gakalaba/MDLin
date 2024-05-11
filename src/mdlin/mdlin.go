@@ -620,14 +620,18 @@ func (r *Replica) processCCEntry() int {
 	i := 0
 	var t mdlinproto.Tag
 	instNo := r.crtInstance
-	C := time.Now()
+	C1 := time.Now()
+	var S1, S2, S3, S4 int64
 	for inst != nil {
 		//if !inst.Value.(*Instance).lb.coordinated[0] {
 			//TODO right now we do not case on if coordinated is false...
 		//}
+		C1 := time.Now()
 		next = inst.Next()
 		r.finalAcceptBatch.Remove(inst)
 		e = inst.Value.(*Instance)
+
+		C2 := time.Now()
 
 		coordsList[i] = e.lb.inCoordsList[0]
 		// Remove from bufflo
@@ -638,7 +642,9 @@ func (r *Replica) processCCEntry() int {
 		proposals[i] = e.lb.clientProposals[0]
 		coordsList[i] = e.lb.inCoordsList[0]
 		cmds[i] = e.cmds[0]
+		C3 := time.Now()
 		delete(r.bufferedLog, t)
+		C4 := time.Now()
 		// Get the lamport clocks ordered
 		ts_chains[i] = ts_chain
 		dlog.Printf("New entry added has timestampChain = %v", ts_chains[i])
@@ -654,11 +660,20 @@ func (r *Replica) processCCEntry() int {
 		/*if proposals[i].PID == 69 && proposals[i].CommandId >= 400 && proposals[i].CommandId <= 407 {
 			log.Printf("shardID %v: processCCEntry for CommandID %v and PID = %v at time %v", r.ShardId, proposals[i].CommandId, proposals[i].PID, time.Now().UnixMilli())
 		}*/
+		C5 := time.Now()
 
+		S1 += C2.Sub(C1).Microseconds()
+		S2 += C3.Sub(C2).Microseconds()
+		S3 += C4.Sub(C3).Microseconds()
+		S4 += C5.Sub(C4).Microseconds()
 		inst = next
 		i++
 	}
 	D := time.Now()
+	S1 = S1/int64(i)
+	S2 = S2/int64(i)
+	S3 = S3/int64(i)
+	S4 = S4/int64(i)
 	//log.Printf("ProcessCCEntry has %v proposals issued in bcastFinalAccept", i)
 	r.addNewEntryToOrderedLog(instNo, cmds, ts_chains, proposals, ACCEPTED)
 	r.instanceSpace[instNo].lb.inCoordsList = coordsList
@@ -683,8 +698,8 @@ func (r *Replica) processCCEntry() int {
 	r.bcastFinalAccept(instNo, r.defaultBallot, tags, cmds, ts_chains)
 	H := time.Now()
 	log.Printf("p_CC: A = %v", B.Sub(A).Microseconds())
-	log.Printf("p_CC: B = %v", C.Sub(B).Microseconds())
-	log.Printf("p_CC: C = %v", D.Sub(C).Microseconds())
+	log.Printf("p_CC: B = %v", C1.Sub(B).Microseconds())
+	log.Printf("p_CC: C = %v", D.Sub(C1).Microseconds())
 	log.Printf("p_CC: D = %v", E.Sub(D).Microseconds())
 	log.Printf("p_CC: E = %v", F.Sub(E).Microseconds())
 	log.Printf("p_CC: F = %v", G.Sub(F).Microseconds())
