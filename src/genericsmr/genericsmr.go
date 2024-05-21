@@ -113,6 +113,9 @@ type Replica struct {
 	DoneAdaptingChan chan bool
 	delayRPC         []map[uint8]bool
 	delayedRPC       []map[uint8]chan fastrpc.Serializable
+	all_sockets      []net.Conn
+	all_readers      []*bufio.Reader
+	all_writers      []*bufio.Writer
 }
 
 func NewReplica(id int, peerAddrList []string, numShards int, thrifty bool, exec bool, dreply bool, clientConnect bool, statsFile string) *Replica {
@@ -158,6 +161,9 @@ func NewReplica(id int, peerAddrList []string, numShards int, thrifty bool, exec
 		make(chan bool, 1),
 		make([]map[uint8]bool, 0),                      // delayRPC
 		make([]map[uint8]chan fastrpc.Serializable, 0), // delayedRPC
+		make([]net.Conn, 0),
+		make([]*bufio.Reader, 0),
+		make([]*bufio.Writer, 0),
 	}
 
 	dlog.Printf("hi\n")
@@ -469,6 +475,136 @@ func (r *Replica) waitForShardConnections(done chan bool) {
 	}
 
 	//done <- true
+}
+
+func (r *Replica) listenToAllClients() {
+	var err error
+
+	var msgType byte //:= make([]byte, 1)
+	var errS string
+	for !r.Shutdown && err == nil {
+		for i := 0; i < 7500; i++ {
+			reader := r.all_readers[i]
+			writer := r.all_writers[i]
+			if msgType, err = reader.ReadByte(); err != nil {
+				//errS = "reading opcode"
+				dlog.Printf("errororororororor = %v", err)
+				err = nil
+				continue
+			}
+
+			//dlog.Printf("[%d] Read opcode %d from client %s.\n", r.Id, msgType, conn.RemoteAddr().String())
+
+
+			switch uint8(msgType) {
+
+			case clientproto.GEN_PROPOSE:
+				//r.busyWait(100)
+				prop := new(genericsmrproto.Propose)
+				if err = prop.Unmarshal(reader); err != nil {
+					errS = "reading GEN_PROPOSE"
+					break
+				}
+				dlog.Printf("GENERICSMR got command %v at time %v\n", prop.CommandId, time.Now().UnixNano())
+				r.ProposeChan <- &Propose{prop, writer}
+				break
+
+			case clientproto.MDL_PROPOSE:
+				//r.busyWait(100)
+				prop := new(mdlinproto.Propose)
+				if err = prop.Unmarshal(reader); err != nil {
+					errS = "reading MDL_PROPOSE"
+					break
+				}
+				//dlog.Printf("Proposal with CommandId %v arrived on WIRE at %v,,, len(MDLProposeChan) = %v\n", prop.CommandId, time.Now().UnixMilli(), len(r.MDLProposeChan))
+				dlog.Printf("GENERICSMR got command %v at time %v\n", prop.CommandId, time.Now().UnixNano())
+				r.MDLProposeChan <- &MDLPropose{prop, writer}
+				break
+			case clientproto.MDL_COORDREQ:
+				CR := new(mdlinproto.CoordinationRequest)
+				if err = CR.Unmarshal(reader); err != nil {
+					errS = "reading MDL_COORDREQ"
+					break
+				}
+				r.MDLCoordReqChan <- &MDLCoordReq{CR}
+				break
+			case clientproto.GEN_READ:
+				read := new(genericsmrproto.Read)
+				if err = read.Unmarshal(reader); err != nil {
+					errS = "reading GEN_READ"
+					break
+				}
+				//r.ReadChan <- read
+				break
+
+			case clientproto.GEN_PROPOSE_AND_READ:
+				pr := new(genericsmrproto.ProposeAndRead)
+				if err = pr.Unmarshal(reader); err != nil {
+					errS = "reading GEN_PROPOSE_AND_READ"
+					break
+				}
+				//r.ProposeAndReadChan <- pr
+				break
+
+			default:
+				if rpair, present := r.clientRpcTable[msgType]; present {
+					obj := rpair.Obj.New()
+					if err = obj.Unmarshal(reader); err != nil {
+						errS = "unmarshaling message"
+						break
+					}
+					rpair.Chan <- &ClientRPC{obj, writer}
+					r.Stats.Max(fmt.Sprintf("client_rpc_%d_chan_length", msgType), len(rpair.Chan))
+				} else {
+					log.Printf("Error: received unknown message type: %d\n", msgType)
+				}
+			}
+		}
+	}
+	if err != nil && err != io.EOF {
+		log.Printf("Error %s from client: %v\n", errS, err)
+	}
+}
+
+
+func (r *Replica) OldWaitForClientConnections() {
+// NOTE: all peers must be connected before clients begin attempting to connect
+	//   otherwise we might accept a client connection as a peer connection due to
+	//   listening for RPCs on the same port
+	/*for i := 0; i < 7485; i++ {
+		conn, _ := r.Listener.Accept()
+		go r.fakeClientListener(conn)
+	}*/
+	for i := 0; i < 7500; i++ {
+		conn, err := r.Listener.Accept()
+		if err != nil {
+			log.Printf("Error accepting client connection: %v\n", err)
+			continue
+		}
+		log.Printf("Accepted client connection %s\n", conn.RemoteAddr().String())
+		r.all_sockets = append(r.all_sockets, conn)
+	}
+	for i := 0; i < 7500; i++ {
+		conn := r.all_sockets[i]
+		reader := bufio.NewReader(conn)
+		writer := bufio.NewWriter(conn)
+		r.all_readers = append(r.all_readers, reader)
+		r.all_writers = append(r.all_writers, writer)
+		var idBytes [4]byte
+		idBytesS := idBytes[:4]
+		n, err := io.ReadFull(reader, idBytesS)
+		if err != nil || n != 4 {
+			log.Printf("Error reading connecting client id: %v, %d.\n", err, n)
+			return
+		}
+		clientId := int32(binary.LittleEndian.Uint32(idBytesS))
+
+		r.clientIdMapsLock.Lock()
+		r.clientReaders[clientId] = reader
+		r.clientWriters[clientId] = writer
+		r.clientIdMapsLock.Unlock()
+	}
+	go r.listenToAllClients()
 }
 
 /* Client connections dispatcher */

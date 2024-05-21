@@ -72,6 +72,7 @@ func main() {
 			log.Fatal(err)
 		}
 		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
 	}
 	if *blockprofile != "" {
 		runtime.SetBlockProfileRate(1)
@@ -162,14 +163,14 @@ func catchKill(f Finishable, interrupt chan os.Signal) {
 	if *cpuprofile != "" {
 		pprof.StopCPUProfile()
 	}
-	if *blockprofile != "" {
+	/*if *blockprofile != "" {
 		f, err := os.Create(*blockprofile)
 		if err != nil {
 			log.Fatal(err)
 		}
 		pprof.Lookup("block").WriteTo(f, 0)
 		f.Close()
-	}
+	}*/
 	if *statsFile != "" {
 		log.Printf("Writing stats to file %s.\n", *statsFile)
 		f.Finish()
