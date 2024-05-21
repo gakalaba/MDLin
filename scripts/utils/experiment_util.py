@@ -189,6 +189,7 @@ def start_clients(config, local_exp_directory, remote_exp_directory, run):
 
 
 def start_servers(config, local_exp_directory, remote_exp_directory, run):
+    print("BOBOBOBOBOB calling start_servers")
     server_threads = []
 
     server_names = config["server_names"]
@@ -220,6 +221,8 @@ def start_servers(config, local_exp_directory, remote_exp_directory, run):
 
     for replica_host, cmd in start_commands.items():
         if is_exp_remote(config):
+            print("start_commands = ", start_commands.items())
+            print("444444444444444444444444inside of start_servers: running run_local_command_async(cmd), where cmd = ", cmd)
             server_threads.append(run_remote_command_async(cmd,
                                                            config['emulab_user'],
                                                            replica_host, detach=False))
@@ -228,6 +231,7 @@ def start_servers(config, local_exp_directory, remote_exp_directory, run):
         time.sleep(0.1)
 
     time.sleep(1)
+    print("AJAHAHAJAJAHAHAAA, length of server_threads = %v", len(server_threads))
     return server_threads
 
 
@@ -298,6 +302,7 @@ def start_coordinator(config, local_exp_directory, remote_exp_directory, run):
     else:
         coordinator_thread = run_local_command_async(coordinator_command)
 
+    print("COOOOOOOOORDINATOR_THREAD", coordinator_thread)
     return coordinator_thread
 
 
@@ -442,6 +447,10 @@ def prepare_remote_exp_directories(config, local_exp_directory, executor):
         futures.append(executor.submit(prepare_remote_client, config, client_host,
                                        local_exp_directory, remote_out_directory))
 
+    # Orchestrator
+    master_coord_host = get_master_host(config, 0)
+    futures.append(executor.submit(prepare_remote_server, config, master_coord_host,
+                                       local_exp_directory, remote_out_directory))
     concurrent.futures.wait(futures)
     return remote_directory
 
@@ -524,6 +533,15 @@ def copy_binaries_to_nfs(config, executor):
                                                client_host,
                                                config['base_remote_bin_directory_nfs']))
 
+    master_coord_host = get_master_host(config, 0)
+    if master_coord_host not in SERVERS_SETUP:
+        futures.append(executor.submit(copy_path_to_remote_host,
+                                       os.path.join(config['src_directory'],
+                                                    config['bin_directory_name']),
+                                       config['emulab_user'],
+                                       master_coord_host,
+                                       config['base_remote_bin_directory_nfs']))
+
     concurrent.futures.wait(futures)
 
 
@@ -557,7 +575,7 @@ def run_experiment(config_file, client_config_idx, executor):
         kill_servers(config, executor)
         kill_clients(config, executor)
         kill_masters(config, executor)
-
+        
         if is_exp_remote(config):
             copy_binaries_to_nfs(config, executor)
 

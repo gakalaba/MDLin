@@ -38,8 +38,9 @@ def get_master_host(config, shard_idx, full=True):
     if is_exp_local(config):
         return "localhost"
 
-    shards = config["shards"]
-    master_host = shards[shard_idx][0]
+    #shards = config["shards"]
+    #master_host = shards[shard_idx][0]
+    master_host = config["orchestra_host"]
 
     if not full:
         return master_host
@@ -53,6 +54,7 @@ MASTER_PORTS = {}
 def get_master_port(config, shard_idx):
     global MASTER_HOST_PORTS
     global MASTER_PORTS
+    print("23232323232323232323", MASTER_HOST_PORTS, "404040404040400404", MASTER_PORTS)
 
     if MASTER_HOST_PORTS is None:
         MASTER_HOST_PORTS = collections.defaultdict(lambda: config["master_port"])
@@ -187,6 +189,7 @@ def copy_remote_directory_to_local(local_directory, remote_user, remote_host, re
 
     run_remote_command_sync("cd {} && tar -czf {} {}".format(remote_directory, tar_file_path, file_filter),
                             remote_user, remote_host)
+
 
     subprocess.call(["scp", "-r", "-p", '%s@%s:%s' % (remote_user, remote_host, tar_file_path), local_directory])
     subprocess.call(['tar', '-xzf', os.path.join(local_directory, tar_file), '-C', local_directory])

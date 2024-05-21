@@ -24,7 +24,7 @@ func Serve(rpcPort int) {
 func RegisterWithMaster(myAddr string, portnum int, rpcPort int, masterAddr string) (int, []string) {
 	args := &masterproto.RegisterArgs{myAddr, portnum, rpcPort}
 	var reply masterproto.RegisterReply
-	log.Println("Hi, registering with master using myAddr portnum rpcPort", myAddr, portnum, rpcPort)
+	log.Println("Hi, registering with master using myAddr portnum rpcPort; masterAddr = ", myAddr, portnum, rpcPort, masterAddr)
 
 	for done := false; !done; {
 		mcli, err := rpc.DialHTTP("tcp", masterAddr)
@@ -34,13 +34,13 @@ func RegisterWithMaster(myAddr string, portnum int, rpcPort int, masterAddr stri
 				done = true
 				break
 			} else if err != nil {
-        log.Printf("Error registering with master: %v\n", err)
-      } else if !reply.Ready {
-        log.Printf("Master not ready for replica registration\n")
-      }
+				log.Printf("Error registering with master: %v\n", err)
+			} else if !reply.Ready {
+				log.Printf("Master not ready for replica registration\n")
+			}
 		} else {
-      log.Printf("Error dialing master: %v\n", err)
-    }
+			log.Printf("Error dialing master: %v\n", err)
+		}
 		time.Sleep(1e9)
 	}
 	return reply.ReplicaId, reply.NodeList
