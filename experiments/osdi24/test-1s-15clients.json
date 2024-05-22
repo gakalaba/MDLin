@@ -4,7 +4,7 @@
 	  ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol":[
-	 "mdl", "multi_paxos"
+	 "multi_paxos", "mdl"
   ],
   "replication_protocol_settings": [
     {
@@ -88,11 +88,11 @@
       }
  },
   "client_total": [
-	  [7500],
+	  [15000],
 	  [7500]
   ],
   "client_processes_per_client_node": [
-	  [500],
+	  [1000],
 	  [500]
   ],
   "client_threads_per_process": 1,
@@ -178,7 +178,7 @@
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
   "server_rpc_port": 8087,
-  "src_commit_hash": "timingBatching",
+  "src_commit_hash": "generate",
   "src_directory": "/users/akalaba/MDLin",
   "codebase_name": "mdl",
   "remote_bin_directory_nfs_enabled": false,
