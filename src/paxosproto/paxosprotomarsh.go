@@ -232,7 +232,7 @@ func (t *Accept) Marshal(wire io.Writer) {
 	bs[11] = byte(tmp32 >> 24)
 	wire.Write(bs)
 	bs = b[:]
-	alen1 := int64(len(t.Command))
+	alen1 := int64(t.CommandCount)
 	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
 		wire.Write(b[0:wlen])
 	}
@@ -240,6 +240,8 @@ func (t *Accept) Marshal(wire io.Writer) {
 		t.Command[i].Marshal(wire)
 	}
 }
+
+var theCommands = make([]state.Command, 120000)
 
 func (t *Accept) Unmarshal(rr io.Reader) error {
 	var wire byteReader
@@ -260,10 +262,12 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
 	if err != nil {
 		return err
 	}
-	t.Command = make([]state.Command, alen1)
+	// t.Command = make([]state.Command, alen1)
+	t.Command = theCommands
 	for i := int64(0); i < alen1; i++ {
 		t.Command[i].Unmarshal(wire)
 	}
+	t.CommandCount = int32(alen1)
 	return nil
 }
 
@@ -391,7 +395,7 @@ func (t *Commit) Marshal(wire io.Writer) {
 	bs[11] = byte(tmp32 >> 24)
 	wire.Write(bs)
 	bs = b[:]
-	alen1 := int64(len(t.Command))
+	alen1 := int64(t.CommandCount)
 	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
 		wire.Write(b[0:wlen])
 	}
@@ -400,6 +404,7 @@ func (t *Commit) Marshal(wire io.Writer) {
 	}
 }
 
+var theCommitCommands = make([]state.Command, 120000)
 func (t *Commit) Unmarshal(rr io.Reader) error {
 	var wire byteReader
 	var ok bool
@@ -419,10 +424,11 @@ func (t *Commit) Unmarshal(rr io.Reader) error {
 	if err != nil {
 		return err
 	}
-	t.Command = make([]state.Command, alen1)
+	t.Command = theCommitCommands
 	for i := int64(0); i < alen1; i++ {
 		t.Command[i].Unmarshal(wire)
 	}
+	t.CommandCount = int32(alen1)
 	return nil
 }
 

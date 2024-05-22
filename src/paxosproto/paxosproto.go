@@ -32,6 +32,7 @@ type Accept struct {
 	Instance int32
 	Ballot   int32
 	Command  []state.Command
+	CommandCount int32
 }
 
 type AcceptReply struct {
@@ -45,6 +46,7 @@ type Commit struct {
 	Instance int32
 	Ballot   int32
 	Command  []state.Command
+	CommandCount int32
 }
 
 type CommitShort struct {
