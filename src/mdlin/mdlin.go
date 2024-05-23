@@ -813,6 +813,7 @@ func (r *Replica) bcastAccept(ballot int32, command []state.Command, cmdTags []m
 		}
 	}()
 
+	log.Printf("bcasting... batchSize = %v", batchSize)
   // We don't replicate the coordinated bit!!!
   // A new leader has to undergo the expensive
   // procedure of re-coordinating all requests
@@ -1117,6 +1118,7 @@ func (r *Replica) handlePropose(propose *genericsmr.MDLPropose) int {
 				/*if printMe {
 					log.Printf("Bcast Accept @ t=%v!", time.Now().UnixMilli())
 				}*/
+				log.Printf("ANJANJA")
 				r.bcastAccept(r.defaultBallot, r.handleCommands, r.handleProposePrepareTags, int32(found-foundFA))
 			}
 	}
@@ -1414,7 +1416,7 @@ func (r *Replica) handleAccept(accept *mdlinproto.Accept) {
     //t := mdlinproto.Tag{K: -1, PID: -1, SeqNo: -1}
     areply = &mdlinproto.AcceptReply{FALSE, r.defaultBallot, nil, 0}
   } else {
-	  dlog.Printf("the accept RPC looks like this %v", accept)
+	  log.Printf("the accept RPC looks like this %v", accept)
     // could add predecessor Req to Accept message type so that new elected leader can issue coordReq!
     areply = &mdlinproto.AcceptReply{TRUE, r.defaultBallot, accept.CmdTags, accept.BatchSize}
     for i := int32(0); i < accept.BatchSize; i++ {
@@ -1554,6 +1556,7 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 		return
 	}
 
+	log.Printf("handlePrepareReply OK = %v", preply.OK == TRUE)
 	if preply.OK == TRUE {
 		inst.lb.prepareOKs++
 
@@ -1574,8 +1577,10 @@ func (r *Replica) handlePrepareReply(preply *mdlinproto.PrepareReply) {
 		// Don't need to change anything for MDL, just issue bcast Accept
 		// as usual and let the number of accepts compete with the ISRT replies
 		if (inst.lb.prepareOKs+1 > r.N>>1) && (inst.status != PREPARED) {
+			log.Printf("HAHAHA the BatchSize in preply = %v", preply.BatchSize)
 			totalAcks := inst.lb.prepareOKs
 			naught := (inst.lb.clientProposals[0].Predecessor.PID == -1)
+			log.Printf("naught = %v", naught)
 			b := inst.ballot
 			for i := int32(0); i < preply.BatchSize; i++ {
 				t := preply.Instance[i]
@@ -1645,6 +1650,7 @@ func (r *Replica) handleAcceptReply(areply *mdlinproto.AcceptReply) {
   inst.lb.acceptOKs++
   if inst.lb.acceptOKs+1 > r.N>>1 {
     numacks := inst.lb.acceptOKs
+    log.Printf("handleAcceptReply returned!")
     // This is for batching, we go through all the requests just replicated by a replica
     for i := int32(0); i < areply.BatchSize; i++ {
 	    dlog.Printf("handleAcceptReply t=%v getting accepted!", areply.IdTag[i])
