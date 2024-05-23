@@ -206,15 +206,17 @@ func (t *Prepare) Marshal(wire io.Writer) {
 	bs[8] = byte(t.ToInfinity)
 	wire.Write(bs)
   bs = b[:]
-  alen1 := int64(len(t.Instance))
+  alen1 := int64(t.BatchSize)
   if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
     wire.Write(b[0:wlen])
   }
   for i := int64(0); i < alen1; i++ {
     t.Instance[i].Marshal(wire)
   }
+
 }
 
+//var thePrepareCommands = make([]Tag, 120000)
 func (t *Prepare) Unmarshal(rr io.Reader) error {
   var wire byteReader
   var ok bool
@@ -234,6 +236,7 @@ func (t *Prepare) Unmarshal(rr io.Reader) error {
   if err != nil {
     return err
   }
+  t.BatchSize = int32(alen1)
   t.Instance = make([]Tag, alen1)
   for i := int64(0); i < alen1; i++ {
     t.Instance[i].Unmarshal(wire)
@@ -281,7 +284,7 @@ func (t *PrepareReply) Marshal(wire io.Writer) {
 	var b [10]byte
 	var bs []byte
   bs = b[:]
-  alen1 := int64(len(t.Instance))
+  alen1 := int64(t.BatchSize)
   if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
     wire.Write(b[0:wlen])
   }
@@ -300,6 +303,8 @@ func (t *PrepareReply) Marshal(wire io.Writer) {
 
 }
 
+//var thePrepareReplyCommands = make([]Tag, 120000)
+
 func (t *PrepareReply) Unmarshal(rr io.Reader) error {
 	var wire byteReader
 	var ok bool
@@ -312,6 +317,7 @@ func (t *PrepareReply) Unmarshal(rr io.Reader) error {
   if err != nil {
     return err
   }
+  t.BatchSize = int32(alen1)
   t.Instance = make([]Tag, alen1)
   for i := int64(0); i < alen1; i++ {
     t.Instance[i].Unmarshal(rr)
@@ -385,7 +391,7 @@ func (t *Accept) Marshal(wire io.Writer) {
 	// Marshalling for variable length arrays:
 	// Command array
 	bs = b[:]
-	alen1 := int64(len(t.Command))
+	alen1 := int64(t.BatchSize)
 	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
 		wire.Write(b[0:wlen])
 	}
@@ -395,10 +401,10 @@ func (t *Accept) Marshal(wire io.Writer) {
 
 	//CmdTags
   bs = b[:]
-  alen1 = int64(len(t.CmdTags))
-  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
-    wire.Write(b[0:wlen])
-  }
+  //alen1 = int64(len(t.CmdTags))
+  //if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
+  //  wire.Write(b[0:wlen])
+  //}
   for i := int64(0); i < alen1; i++ {
     t.CmdTags[i].Marshal(wire)
   }
@@ -418,7 +424,8 @@ func (t *Accept) Marshal(wire io.Writer) {
 	  wire.Write(bs)
   }*/
 }
-
+var theAcceptCommands = make([]state.Command, 120000)
+var theAcceptTags = make([]Tag, 120000)
 func (t *Accept) Unmarshal(rr io.Reader) error {
 	var wire byteReader
 	var ok bool
@@ -439,16 +446,17 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
 	if err != nil {
 		return err
 	}
-	t.Command = make([]state.Command, alen1)
+	t.BatchSize = int32(alen1)
+	t.Command = theAcceptCommands
 	for i := int64(0); i < alen1; i++ {
 		t.Command[i].Unmarshal(wire)
 	}
 // CmdTags
-  alen1, err = binary.ReadVarint(wire)
-  if err != nil {
-    return err
-  }
-  t.CmdTags = make([]Tag, alen1)
+  //alen1, err = binary.ReadVarint(wire)
+  //if err != nil {
+  //  return err
+  //}
+  t.CmdTags = theAcceptTags
   for i := int64(0); i < alen1; i++ {
     t.CmdTags[i].Unmarshal(wire)
   }
@@ -719,7 +727,7 @@ func (t *AcceptReply) Marshal(wire io.Writer) {
 	wire.Write(bs)
   // []IdTag
   bs = b[:]
-  alen1 := int64(len(t.IdTag))
+  alen1 := int64(t.BatchSize)
   if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
     wire.Write(b[0:wlen])
   }
@@ -728,6 +736,7 @@ func (t *AcceptReply) Marshal(wire io.Writer) {
   }
 }
 
+var theAcceptReplyTags = make([]Tag, 120000)
 func (t *AcceptReply) Unmarshal(rr io.Reader) error {
   var wire byteReader
   var ok bool
@@ -747,7 +756,8 @@ func (t *AcceptReply) Unmarshal(rr io.Reader) error {
   if err != nil {
     return err
   }
-  t.IdTag = make([]Tag, alen1)
+  t.BatchSize = int32(alen1)
+  t.IdTag = theAcceptReplyTags
   for i := int64(0); i < alen1; i++ {
     t.IdTag[i].Unmarshal(wire)
   }
@@ -765,6 +775,7 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
   // Ballot    int32
   // CmdTags  []Tag
   // TimestampChain [][]int64
+  // BatchSize
   var b [12]byte
 	var bs []byte
 	bs = b[:12]
@@ -787,7 +798,7 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 
   // CmdTags
   bs = b[:]
-  alen1 := int64(len(t.CmdTags))
+  alen1 := int64(t.BatchSize)
   if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
     wire.Write(b[0:wlen])
   }
@@ -798,10 +809,10 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 // Marshalling for variable length arrays:
 	// Command array
 	bs = b[:]
-	alen1 = int64(len(t.Command))
+	/*alen1 = int64(len(t.Command))
 	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
 		wire.Write(b[0:wlen])
-	}
+	}*/
 	for i := int64(0); i < alen1; i++ {
 		t.Command[i].Marshal(wire)
 	}
@@ -809,11 +820,11 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 	// TimestampChains
 	var tmp64 int64
 	bs = b[:]
-        alen1 = int64(len(t.TimestampChain))
+        //alen1 = int64(len(t.TimestampChain))
         var alen2 int64
-	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
+	/*if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
                 wire.Write(b[0:wlen])
-        }
+        }*/
         for i := int64(0); i < alen1; i++ {
 		alen2 = int64(len(t.TimestampChain[i]))
 		if wlen := binary.PutVarint(bs, alen2); wlen >= 0 {
@@ -836,6 +847,9 @@ func (t *FinalAccept) Marshal(wire io.Writer) {
 	}
 }
 
+var theFACommands = make([]state.Command, 120000)
+var theFATags = make([]Tag, 120000)
+var theFATimestampChains = make([][]int64, 120000)
 func (t *FinalAccept) Unmarshal(rr io.Reader) error {
   var wire byteReader
 	var ok bool
@@ -857,29 +871,30 @@ func (t *FinalAccept) Unmarshal(rr io.Reader) error {
   if err != nil {
     return err
   }
-  t.CmdTags = make([]Tag, alen1)
+  t.BatchSize = int32(alen1)
+  t.CmdTags = theFATags
   for i := int64(0); i < alen1; i++ {
     t.CmdTags[i].Unmarshal(wire)
   }
 
 	// Command
-	alen1, err = binary.ReadVarint(wire)
+	/*alen1, err = binary.ReadVarint(wire)
 	if err != nil {
 		return err
-	}
-	t.Command = make([]state.Command, alen1)
+	}*/
+	t.Command = theFACommands
 	for i := int64(0); i < alen1; i++ {
 		t.Command[i].Unmarshal(wire)
 	}
 
 
   // TimestampChain
-  alen1, err = binary.ReadVarint(wire)
+  //alen1, err = binary.ReadVarint(wire)
   var alen2 int64
-        if err != nil {
+        /*if err != nil {
                 return err
-        }
-        t.TimestampChain = make([][]int64, alen1)
+        }*/
+        t.TimestampChain = theFATimestampChains
         for i := int64(0); i < alen1; i++ {
 		alen2, err = binary.ReadVarint(wire)
 		if err != nil {
@@ -1000,7 +1015,7 @@ func (t *Commit) Marshal(wire io.Writer) {
 	bs[11] = byte(tmp32 >> 24)
 	wire.Write(bs)
 	bs = b[:]
-	alen1 := int64(len(t.Command))
+	alen1 := int64(t.BatchSize)
 	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
 		wire.Write(b[0:wlen])
 	}
@@ -1025,11 +1040,11 @@ func (t *Commit) Marshal(wire io.Writer) {
   // TimestampChain
   var tmp64 int64
   bs = b[:]
-  alen1 = int64(len(t.TimestampChain))
+  //alen1 = int64(len(t.TimestampChain))
   var alen2 int64
-  if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
+  /*if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
     wire.Write(b[0:wlen])
-  }
+  }*/
   for i := int64(0); i < alen1; i++ {
 	  alen2 = int64(len(t.TimestampChain[i]))
 	  if wlen := binary.PutVarint(bs, alen2); wlen >= 0 {
@@ -1052,6 +1067,8 @@ func (t *Commit) Marshal(wire io.Writer) {
   }
 }
 
+var theCommitCommands = make([]state.Command, 120000)
+var theCommitTimestampChains = make([][]int64, 120000)
 func (t *Commit) Unmarshal(rr io.Reader) error {
 	var wire byteReader
 	var ok bool
@@ -1071,7 +1088,8 @@ func (t *Commit) Unmarshal(rr io.Reader) error {
 	if err != nil {
 		return err
 	}
-	t.Command = make([]state.Command, alen1)
+	t.BatchSize = int32(alen1)
+	t.Command = theCommitCommands
 	for i := int64(0); i < alen1; i++ {
 		t.Command[i].Unmarshal(wire)
 	}
@@ -1090,12 +1108,12 @@ func (t *Commit) Unmarshal(rr io.Reader) error {
   t.Status = uint8(uint8(bs[8]) << 64)*/
 
   // TimestampChain
-  alen1, err = binary.ReadVarint(wire)
+  //alen1, err = binary.ReadVarint(wire)
   var alen2 int64
-  if err != nil {
+  /*if err != nil {
     return err
-  }
-  t.TimestampChain = make([][]int64, alen1)
+  }*/
+  t.TimestampChain = theCommitTimestampChains
   for i := int64(0); i < alen1; i++ {
 	  alen2, err = binary.ReadVarint(wire)
           if err != nil {

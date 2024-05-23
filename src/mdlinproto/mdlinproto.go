@@ -37,12 +37,14 @@ type Prepare struct {
 	Ballot     int32
 	ToInfinity uint8
 	Instance   []Tag
+	BatchSize  int32
 }
 
 type PrepareReply struct {
 	Instance []Tag
   Ballot   int32
 	OK       uint8
+	BatchSize  int32
 }
 
 type Accept struct {
@@ -50,12 +52,14 @@ type Accept struct {
 	Ballot       int32
 	Command      []state.Command
 	CmdTags      []Tag
+	BatchSize    int32
 }
 
 type AcceptReply struct {
 	OK         uint8
 	Ballot     int32
   IdTag      []Tag
+  BatchSize  int32
 }
 
 type FinalAccept struct {
@@ -65,6 +69,7 @@ type FinalAccept struct {
   CmdTags   []Tag
   Command []state.Command
   TimestampChain [][]int64
+  BatchSize int32
 }
 
 type FinalAcceptReply struct {
@@ -92,6 +97,7 @@ type Commit struct {
 	//CmdTags   []Tag
 	//Status    uint8
   TimestampChain [][]int64
+  BatchSize int32
 }
 
 type CommitShort struct {
