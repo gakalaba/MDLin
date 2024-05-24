@@ -13,6 +13,7 @@ import (
 	"mencius"
 	"net/rpc"
 	"os"
+	"syscall"
 	"os/signal"
 	"paxos"
 	"runtime"
@@ -66,13 +67,20 @@ func main() {
 
 	runtime.GOMAXPROCS(2)
 
+	var f *os.File
+	var err error
 	if *cpuprofile != "" {
-		f, err := os.Create(*cpuprofile)
+		f, err = os.Create(*cpuprofile)
 		if err != nil {
 			log.Fatal(err)
 		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
+		log.Printf("CREATING THE PROFILE FILEEEEEEEE %v", *cpuprofile)
+		//defer pprof.StopCPUProfile()
+		//defer f.Close()
+		if err = pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		runtime.SetCPUProfileRate(200)
 	}
 	if *blockprofile != "" {
 		runtime.SetBlockProfileRate(1)
@@ -95,8 +103,8 @@ func main() {
 	}
 	log.Printf("]\n")
 
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, os.Kill)
+	interrupt := make(chan os.Signal, 2)
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
 	var rep Finishable
 	if *doMDLin {
@@ -148,7 +156,7 @@ func main() {
 	}
 
 	rpc.Register(rep)
-	go catchKill(rep, interrupt)
+	go catchKill(rep, interrupt, f)
 
 	serverlib.Serve(*portnum) // to listen to master connections?
 }
@@ -157,11 +165,14 @@ type Finishable interface {
 	Finish()
 }
 
-func catchKill(f Finishable, interrupt chan os.Signal) {
+func catchKill(f Finishable, interrupt chan os.Signal, ff *os.File) {
 	sig := <-interrupt
-	log.Printf("Caught signal %d.\n", sig)
+	log.Printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@Caught signal %d.\n", sig)
 	if *cpuprofile != "" {
+		log.Printf("closing file!")
 		pprof.StopCPUProfile()
+		ff.Close()
+		log.Printf("COMPLETEL")
 	}
 	/*if *blockprofile != "" {
 		f, err := os.Create(*blockprofile)
