@@ -306,7 +306,7 @@ func (c *AbstractClient) leaderListener(leader int) {
 	var errS string
 	for !c.shutdown && err == nil {
 		if msgType, err = c.readers[leader].ReadByte(); err != nil {
-			dlog.Printf("&&&&&&&&&&&&&&&&&Got this error from leader %d at time %v: %v\n", leader, time.Now().UnixMilli(), err)
+			dlog.Printf("&&&&&&&&&&&&&&&&&Got this error from leader %d at time %v: %v\n", leader, time.Now().UnixNano(), err)
 			errS = "reading opcode"
 			break
 		}
