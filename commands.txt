@@ -8,7 +8,7 @@ apt-get install -y python3-pip
 pip3 install numpy
 
 
-sudo -s; apt-get update; apt-get install -y feh; apt-get install -y gnuplot; apt-get install -y python3-pip; pip3 install numpy
+sudo -s; apt-get update; apt-get install -y feh; apt-get install -y gnuplot; apt-get install -y python3-pip; pip3 install numpy; apt install golang-go
 
 ----- to run ---------------
 ----------------------------

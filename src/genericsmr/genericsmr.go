@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"fastrpc"
 	"fmt"
-	"golang.org/x/sys/unix"
+	//"golang.org/x/sys/unix"
 	"genericsmrproto"
 	"io"
 	"log"
@@ -616,7 +616,7 @@ func (r *Replica) WaitForClientConnections() {
 		conn, _ := r.Listener.Accept()
 		go r.fakeClientListener(conn)
 	}*/
-	log.Printf("F_GETFL = %v, F_SETFL = %v, O_NONBLOCK = %v", unix.F_GETFL, unix.F_SETFL, unix.O_NONBLOCK)
+	//log.Printf("F_GETFL = %v, F_SETFL = %v, O_NONBLOCK = %v", unix.F_GETFL, unix.F_SETFL, unix.O_NONBLOCK)
 	for !r.Shutdown {
 		conn, err := r.Listener.Accept()
 		if err != nil {
@@ -715,7 +715,7 @@ func (r *Replica) fakeClientListener(conn net.Conn) {
 	}
 }
 
-func makeNonBlocking(conn net.Conn) {
+/*func makeNonBlocking(conn net.Conn) {
 	file, err := conn.(*net.TCPConn).File()
 	if err != nil {
 		panic("HUHUH")
@@ -729,7 +729,7 @@ func makeNonBlocking(conn net.Conn) {
 	if err != nil || flags == -1 {
 		panic("heehehehee")
 	}
-}
+}*/
 
 // Listen for client traffic
 func (r *Replica) clientListener(conn net.Conn) {
