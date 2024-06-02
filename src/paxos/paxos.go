@@ -226,14 +226,14 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 		go r.batchClock(&proposeDone)
 	}
 
-	t_avg := int64(0)
+	/*t_avg := int64(0)
 	t_v := int64(0)
 	t_median := make([]int, 0)
 	t_copy := make([]int, 0)
 	bs_median := make([]int, 0)
 	bs_copy := make([]int, 0)
 	bs_avg := 0
-	bs_v := 0
+	bs_v := 0*/
 	//var mm sync.Mutex
 	//f, _ := os.Create("/users/akalaba/profile")
 	//runtime.SetCPUProfileRate(500)
@@ -249,9 +249,9 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 			//go func() {
 			//runtime.LockOSThread()
 			//mm.Lock()
-				start := time.Now()
-				bs_v = r.handlePropose(proposal)
-				end := time.Now()
+				//start := time.Now()
+				r.handlePropose(proposal)
+				/*end := time.Now()
 				t_v = end.Sub(start).Microseconds()
 				t_avg++
 				bs_avg++
@@ -269,7 +269,7 @@ func (r *Replica) run(masterAddr string, masterPort int) {
 				log.Printf("handlePropose p99 batchsize = %v, t = %v", bs_median[int(float64(len(bs_median))*0.99)], t_copy[int(float64(len(bs_median))*0.99)])
 				if (t_v > 15000) {
 					log.Printf("++++++++++++++++++++++")
-				}
+				}*/
 			//}()
 			if r.batchingEnabled {
 				proposeChan = nil
@@ -499,7 +499,7 @@ func (r *Replica) bcastCommit(instance int32, ballot int32, command []state.Comm
 
 func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 
-	A := time.Now()
+	//A := time.Now()
 
 	//dlog.Printf("got handlePropose for CommandID %v at time %v\n", propose.CommandId, time.Now().UnixNano())
 	//dlog.Printf("Proposal with op %d\n", propose.Command.Op)
@@ -510,31 +510,31 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 	}
 
 
-	B := time.Now()
+	//B := time.Now()
 	for r.instanceSpace[r.crtInstance] != nil {
 		r.crtInstance++
 	}
 
-	C1 := time.Now()
+	//C1 := time.Now()
 	instNo := r.crtInstance
 	r.crtInstance++
 
-	C2 := time.Now()
+	//C2 := time.Now()
 	batchSize := len(r.ProposeChan) + 1
 	if batchSize > MAX_BATCH {
 		batchSize = MAX_BATCH
 	}
 	dlog.Printf("Batchsize = %d\n", batchSize)
 
-	C3 := time.Now()
+	//C3 := time.Now()
 	//cmds := make([]state.Command, batchSize)
 	//proposals := make([]*genericsmr.Propose, batchSize)
 
-	C4 := time.Now()
+	//C4 := time.Now()
 	prop := propose
 	i := 0
 
-	D := time.Now()
+	//D := time.Now()
 	for i < (batchSize) {
 		dlog.Printf("cmds[%v] = ...", i)
 		r.handleProposeCommands[i] = prop.Command
@@ -545,8 +545,8 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 		}
 	}
 
-	E1 := time.Now()
-	var E2, E3, E4, E5 time.Time
+	//E1 := time.Now()
+	//var E2, E3, E4, E5 time.Time
 	if r.defaultBallot == -1 {
 		r.instanceSpace[instNo] = &Instance{
 			r.handleProposeCommands,
@@ -564,19 +564,19 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 			int32(batchSize),
 			&LeaderBookkeeping{r.handleProposeProposals, 0, 0, 0, 0}}
 
-		E2 = time.Now()
+		//E2 = time.Now()
 		r.recordInstanceMetadata(r.instanceSpace[instNo])
-		E3 = time.Now()
+		//E3 = time.Now()
 		r.recordCommands(r.handleProposeCommands, r.instanceSpace[instNo].batchSize)
-		E4 = time.Now()
+		//E4 = time.Now()
 		r.sync()
-		E5 = time.Now()
+		//E5 = time.Now()
 
 		//log.Printf("bcastAccepting %v proposals", len(cmds))
 		r.bcastAccept(instNo, r.defaultBallot, r.handleProposeCommands, int32(batchSize))
 		//dlog.Printf("Fast round for instance %d\n", instNo)
 	}
-	F := time.Now()
+	/*F := time.Now()
 
 	log.Printf("A = %v", B.Sub(A).Microseconds())
 	log.Printf("B = %v", C1.Sub(B).Microseconds())
@@ -591,7 +591,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 	log.Printf("E2 = %v", E3.Sub(E2).Microseconds())
 	log.Printf("E3 = %v", E4.Sub(E3).Microseconds())
 	log.Printf("E4 = %v", E5.Sub(E4).Microseconds())
-	log.Printf("E5 = %v", F.Sub(E5).Microseconds())
+	log.Printf("E5 = %v", F.Sub(E5).Microseconds())*/
 	return batchSize
 	//dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }

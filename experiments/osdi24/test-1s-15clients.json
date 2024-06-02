@@ -4,17 +4,9 @@
 	  ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol":[
-	 "multi_paxos", "mdl"
+	 "multi_paxos"
   ],
   "replication_protocol_settings": [
-    {
-	    "first_round_batching": true,
-	    "second_round_batching": false,
-            "server_delay_reply": true,
-	    "single_shard_aware": false,
-      "server_execute_commands": true,
-      "server_thrifty": true
-    },
 	  {
 	    "first_round_batching": true,
 	    "second_round_batching": false,
@@ -51,15 +43,15 @@
 	  "client-3-0",
 	  "client-3-1",
 	  "client-3-2",
-	  "us-east-1-0",
-	  "us-east-1-1",
-	  "us-east-1-2"
+	  "client-4-0",
+	  "client-4-1",
+	  "client-4-2"
   ],
   "server_regions": {
     "region1": ["eu-west-1-0"],
     "region2": ["eu-west-1-1"],
     "region3": ["eu-west-1-2"],
-    "region4": ["client-0-0", "client-0-1", "client-0-2", "client-1-0", "client-1-1", "client-1-2", "client-2-0", "client-2-1", "client-2-2", "client-3-0", "client-3-1", "client-3-2", "us-east-1-0","us-east-1-1", "us-east-1-2"]
+    "region4": ["client-0-0", "client-0-1", "client-0-2", "client-1-0", "client-1-1", "client-1-2", "client-2-0", "client-2-1", "client-2-2", "client-3-0", "client-3-1", "client-3-2", "client-4-0", "client-4-1", "client-4-2"]
   },
   "region_rtt_latencies": {
       "region1": {
@@ -88,12 +80,10 @@
       }
  },
   "client_total": [
-	  [7500],
-	  [7500]
+	  [15, 120, 480, 960, 1920, 3840, 7680, 15360, 30720, 61440]
   ],
   "client_processes_per_client_node": [
-	  [500],
-	  [500]
+	  [1, 8, 32, 64, 128, 256, 512, 1024, 2048, 4096]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -101,7 +91,7 @@
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
   "client_fanout": 16,
-  "batchsize": 25000,
+  "batchsize": 2000,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,
@@ -115,7 +105,7 @@
       "height": 600,
       "name": "tput-lat-p50",
       "series_indep_vars_idx": 0,
-      "series_titles": ["Multi-Paxos", "MDL"],
+      "series_titles": ["Multi-Paxos"],
       "width": 800,
       "x_indep_vars_idx": 1,
       "x_label": "Throughput (ops/s)",
@@ -128,14 +118,14 @@
   "plot_cdf_png_font": "DejaVu Sans,12",
   "plot_cdf_png_height": 600,
   "plot_cdf_png_width": 800,
-  "plot_cdf_series_title": ["Multi-Paxos", "MDL"],
+  "plot_cdf_series_title": ["Multi-Paxos"],
   "plot_cdf_x_label": "Latency (ms)",
   "plot_cdf_y_label": "Cumulative ratio of operations",
   "plot_directory_name": "plots",
   "plot_tput_lat_png_font": "DejaVu Sans,12",
   "plot_tput_lat_png_height": 600,
   "plot_tput_lat_png_width": 800,
-  "plot_tput_lat_series_title": ["Multi-Paxos", "MDL"],
+  "plot_tput_lat_series_title": ["Multi-Paxos"],
   "plot_tput_lat_x_label": "Throughput (ops/sec)",
   "plot_tput_lat_y_label": "Latency (ms)",
   "base_local_exp_directory": "/users/akalaba/MDLin/experiments/osdi24/results/tput-3",
@@ -171,7 +161,7 @@
   "project_name": "praxis-PG0",
   "stats_file_name": "stats.json",
   "server_bin_name": "server",
-  "server_cpuprofile": true,
+  "server_cpuprofile": false,
   "server_blockprofile": false,
   "server_debug_output": false,
   "server_durable": false,
