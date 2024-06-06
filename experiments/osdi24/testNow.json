@@ -31,27 +31,13 @@
    ],
   "orchestra_host": "us-west-1-0",
   "clients": [
-	  "client-0-0",
-	  "client-0-1",
-	  "client-0-2",
-	  "client-1-0",
-	  "us-west-1-1",
-	  "client-1-2",
-	  "client-2-0",
-	  "client-2-1",
-	  "client-2-2",
-	  "client-3-0",
-	  "client-3-1",
-	  "client-3-2",
-	  "client-4-0",
-	  "client-4-1",
-	  "client-4-2"
+	  "client-0-0"
   ],
   "server_regions": {
     "region1": ["eu-west-1-0"],
     "region2": ["eu-west-1-1"],
     "region3": ["eu-west-1-2"],
-    "region4": ["client-0-0", "client-0-1", "client-0-2", "client-1-0", "us-west-1-1", "client-1-2", "client-2-0", "client-2-1", "client-2-2", "client-3-0", "client-3-1", "client-3-2", "client-4-0", "client-4-1", "client-4-2"]
+    "region4": ["client-0-0"]
   },
   "region_rtt_latencies": {
       "region1": {
@@ -80,10 +66,10 @@
       }
  },
   "client_total": [
-	  [15, 120, 480, 960, 1920, 3840, 7680, 15360, 30720, 61440]
+	  [1, 2, 4, 8, 12]
   ],
   "client_processes_per_client_node": [
-	  [1, 8, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+	  [1, 2, 4, 8, 12]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,

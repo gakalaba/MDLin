@@ -55,7 +55,11 @@ type Replica struct {
 	batchingEnabled     bool
 	batchSize	    int
 	handleProposeCommands []state.Command
+	handleProposeIds []int32
+	handleProposePIDs []int64
 	handleProposeProposals []*genericsmr.Propose
+	ringIndexStart int64
+	ringIndexEnd int64
 }
 
 type InstanceStatus int
@@ -72,6 +76,7 @@ type Instance struct {
 	ballot int32
 	status InstanceStatus
 	batchSize int32
+	startIndex int64
 	lb     *LeaderBookkeeping
 }
 
@@ -107,7 +112,11 @@ func NewReplica(id int, peerAddrList []string, masterAddr string, masterPort int
 		batch,
 		batchSize,
 		make([]state.Command, MAX_BATCH),
-		make([]*genericsmr.Propose, MAX_BATCH),}
+		make([]int32, MAX_BATCH),
+		make([]int64, MAX_BATCH),
+		make([]*genericsmr.Propose, MAX_BATCH),
+		0,
+		0,}
 
 
 	log.Printf("BatchingEnabled = %v\n", r.batchingEnabled)
@@ -139,7 +148,7 @@ func (r *Replica) recordInstanceMetadata(inst *Instance) {
 }
 
 //write a sequence of commands to stable storage
-func (r *Replica) recordCommands(cmds []state.Command, batchSize int32) {
+func (r *Replica) recordCommands(cmds []state.Command, batchSize int32, startIndex int64) {
 	if !r.Durable {
 		return
 	}
@@ -148,7 +157,7 @@ func (r *Replica) recordCommands(cmds []state.Command, batchSize int32) {
 		return
 	}
 	for i := int32(0); i < batchSize; i++ {
-		cmds[i].Marshal(io.Writer(r.StableStore))
+		cmds[(startIndex + int64(i)) % MAX_BATCH].Marshal(io.Writer(r.StableStore))
 	}
 }
 
@@ -409,17 +418,20 @@ func (r *Replica) bcastPrepare(instance int32, ballot int32, toInfinity bool) {
 
 var pa paxosproto.Accept
 
-func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Command, batchSize int32) {
-	defer func() {
+func (r *Replica) bcastAccept(instance int32, ballot int32, command []state.Command, batchSize int32, cmdids []int32, pids []int64, startIndex int64) {
+	/*defer func() {
 		if err := recover(); err != nil {
 			log.Println("Accept bcast failed:", err)
 		}
-	}()
+	}()*/
 	pa.LeaderId = r.Id
 	pa.Instance = instance
 	pa.Ballot = ballot
 	pa.Command = command
 	pa.CommandCount = batchSize
+	pa.CommandId = cmdids
+	pa.PID = pids
+	pa.StartIndex = startIndex
 	args := &pa
 	//args := &paxosproto.Accept{r.Id, instance, ballot, command}
 
@@ -520,11 +532,20 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 	r.crtInstance++
 
 	//C2 := time.Now()
-	batchSize := len(r.ProposeChan) + 1
+	batchSize := int64(len(r.ProposeChan) + 1)
 	if batchSize > MAX_BATCH {
 		batchSize = MAX_BATCH
 	}
-	dlog.Printf("Batchsize = %d\n", batchSize)
+	end := r.ringIndexEnd
+	ringCapacity := MAX_BATCH - (r.ringIndexStart - end)
+	dlog.Printf("ring capacity = %v; start = %v, end = %v", ringCapacity, r.ringIndexStart, end)
+	if batchSize > ringCapacity {
+		batchSize = ringCapacity
+	}
+	if batchSize <= 0 {
+		return 0
+	}
+	dlog.Printf("Got HandlePropose with Batchsize = %d\n", batchSize)
 
 	//C3 := time.Now()
 	//cmds := make([]state.Command, batchSize)
@@ -532,18 +553,22 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 
 	//C4 := time.Now()
 	prop := propose
-	i := 0
+	i := int64(0)
 
 	//D := time.Now()
 	for i < (batchSize) {
-		dlog.Printf("cmds[%v] = ...", i)
-		r.handleProposeCommands[i] = prop.Command
-		r.handleProposeProposals[i] = prop
+		dlog.Printf("b_%v from PID %v, CommandId = %v", i, prop.Timestamp, prop.CommandId)
+		r.handleProposeCommands[(r.ringIndexStart + i) % MAX_BATCH] = prop.Command
+		r.handleProposeProposals[(r.ringIndexStart + i) % MAX_BATCH] = prop
+		r.handleProposeIds[(r.ringIndexStart + i) % MAX_BATCH] = prop.CommandId
+		r.handleProposePIDs[(r.ringIndexStart + i) % MAX_BATCH] = prop.Timestamp
 		i++
 		if i < (batchSize) {
 			prop = <-r.ProposeChan
 		}
 	}
+	oldRingIndex := r.ringIndexStart
+	r.ringIndexStart += batchSize
 
 	//E1 := time.Now()
 	//var E2, E3, E4, E5 time.Time
@@ -553,6 +578,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 			r.makeUniqueBallot(0),
 			PREPARING,
 			int32(batchSize),
+			oldRingIndex,
 			&LeaderBookkeeping{r.handleProposeProposals, 0, 0, 0, 0}}
 		r.bcastPrepare(instNo, r.makeUniqueBallot(0), true)
 		//dlog.Printf("Classic round for instance %d\n", instNo)
@@ -562,18 +588,19 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 			r.defaultBallot,
 			PREPARED,
 			int32(batchSize),
+			oldRingIndex,
 			&LeaderBookkeeping{r.handleProposeProposals, 0, 0, 0, 0}}
 
 		//E2 = time.Now()
 		r.recordInstanceMetadata(r.instanceSpace[instNo])
 		//E3 = time.Now()
-		r.recordCommands(r.handleProposeCommands, r.instanceSpace[instNo].batchSize)
+		r.recordCommands(r.handleProposeCommands, r.instanceSpace[instNo].batchSize, oldRingIndex)
 		//E4 = time.Now()
 		r.sync()
 		//E5 = time.Now()
 
 		//log.Printf("bcastAccepting %v proposals", len(cmds))
-		r.bcastAccept(instNo, r.defaultBallot, r.handleProposeCommands, int32(batchSize))
+		r.bcastAccept(instNo, r.defaultBallot, r.handleProposeCommands, int32(batchSize), r.handleProposeIds, r.handleProposePIDs, oldRingIndex)
 		//dlog.Printf("Fast round for instance %d\n", instNo)
 	}
 	/*F := time.Now()
@@ -592,7 +619,7 @@ func (r *Replica) handlePropose(propose *genericsmr.Propose) int {
 	log.Printf("E3 = %v", E4.Sub(E3).Microseconds())
 	log.Printf("E4 = %v", E5.Sub(E4).Microseconds())
 	log.Printf("E5 = %v", F.Sub(E5).Microseconds())*/
-	return batchSize
+	return int(batchSize)
 	//dlog.Printf("finished handlePropose %v\n", time.Now().UnixNano())
 }
 
@@ -627,23 +654,27 @@ func (r *Replica) handleAccept(accept *paxosproto.Accept) {
 
 	if inst == nil {
 		if accept.Ballot < r.defaultBallot {
-			areply = &paxosproto.AcceptReply{accept.Instance, FALSE, r.defaultBallot}
+			areply = &paxosproto.AcceptReply{accept.Instance, FALSE, r.defaultBallot, accept.CommandCount, nil, nil}
 		} else {
 			r.instanceSpace[accept.Instance] = &Instance{
 				accept.Command,
 				accept.Ballot,
 				ACCEPTED,
 				accept.CommandCount,
+				accept.StartIndex,
 				nil}
-			areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
+			for i := int32(0); i < accept.CommandCount; i++ {
+				dlog.Printf("Replica got HANDLE ACCEPT: PID = %v; CommandId = %v", accept.PID[(int64(i) + accept.StartIndex) % MAX_BATCH], accept.CommandId[(int64(i) + accept.StartIndex) % MAX_BATCH])
+			}
+			areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot, accept.CommandCount, accept.CommandId, accept.PID}
 		}
 	} else if inst.ballot > accept.Ballot {
-		areply = &paxosproto.AcceptReply{accept.Instance, FALSE, inst.ballot}
+		areply = &paxosproto.AcceptReply{accept.Instance, FALSE, inst.ballot, accept.CommandCount, nil, nil}
 	} else if inst.ballot < accept.Ballot {
 		inst.cmds = accept.Command
 		inst.ballot = accept.Ballot
 		inst.status = ACCEPTED
-		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, inst.ballot}
+		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, inst.ballot, accept.CommandCount, nil, nil}
 		if inst.lb != nil && inst.lb.clientProposals != nil {
 			//TODO: is this correct?
 			// try the proposal in a different instance
@@ -659,12 +690,12 @@ func (r *Replica) handleAccept(accept *paxosproto.Accept) {
 		if r.instanceSpace[accept.Instance].status != COMMITTED {
 			r.instanceSpace[accept.Instance].status = ACCEPTED
 		}
-		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot}
+		areply = &paxosproto.AcceptReply{accept.Instance, TRUE, r.defaultBallot, accept.CommandCount, nil, nil}
 	}
 
 	if areply.OK == TRUE {
 		r.recordInstanceMetadata(r.instanceSpace[accept.Instance])
-		r.recordCommands(accept.Command, accept.CommandCount)
+		r.recordCommands(accept.Command, accept.CommandCount, accept.StartIndex)
 		r.sync()
 	}
 
@@ -682,6 +713,7 @@ func (r *Replica) handleCommit(commit *paxosproto.Commit) {
 			commit.Ballot,
 			COMMITTED,
 			commit.CommandCount,
+			0,
 			nil}
 	} else {
 		r.instanceSpace[commit.Instance].cmds = commit.Command
@@ -699,7 +731,7 @@ func (r *Replica) handleCommit(commit *paxosproto.Commit) {
 	r.updateCommittedUpTo()
 
 	r.recordInstanceMetadata(r.instanceSpace[commit.Instance])
-	r.recordCommands(commit.Command, commit.CommandCount)
+	r.recordCommands(commit.Command, commit.CommandCount, 0)
 }
 
 func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
@@ -712,6 +744,7 @@ func (r *Replica) handleCommitShort(commit *paxosproto.CommitShort) {
 			commit.Ballot,
 			COMMITTED,
 			commit.Count,
+			0,
 			nil}
 	} else {
 		r.instanceSpace[commit.Instance].status = COMMITTED
@@ -763,7 +796,7 @@ func (r *Replica) handlePrepareReply(preply *paxosproto.PrepareReply) {
 			}
 			r.recordInstanceMetadata(r.instanceSpace[preply.Instance])
 			r.sync()
-			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds, inst.batchSize)
+			r.bcastAccept(preply.Instance, inst.ballot, inst.cmds, inst.batchSize, make([]int32, inst.batchSize), make([]int64, inst.batchSize), inst.startIndex)
 		}
 	} else {
 		// TODO: there is probably another active leader
@@ -815,6 +848,9 @@ func (r *Replica) handleAcceptReply(areply *paxosproto.AcceptReply) {
 					}
 				}
 			}*/
+			for i := int32(0); i < areply.CommandCount; i++ {
+				dlog.Printf("Replica got HANDLE ACCEPT REPLY: PID = %v; CommandId = %v", areply.PID[(int64(i)+inst.startIndex) % MAX_BATCH], areply.CommandId[(int64(i)+inst.startIndex) % MAX_BATCH])
+			}
 
 			r.recordInstanceMetadata(r.instanceSpace[areply.Instance])
 			r.sync() //is this necessary?
@@ -844,17 +880,23 @@ func (r *Replica) executeCommands() {
 		for i <= r.committedUpTo {
 			if r.instanceSpace[i].cmds != nil {
 				inst := r.instanceSpace[i]
+				offset := int32(inst.startIndex)
 				for j := int32(0); j < inst.batchSize; j++ {
-					val := inst.cmds[j].Execute(r.State)
+					val := inst.cmds[(offset + j) % MAX_BATCH].Execute(r.State)
+					r.ringIndexEnd++
+					if (r.IsLeader && (r.ringIndexEnd > r.ringIndexStart)) {
+						dlog.Printf("start = %v, end = %v", r.ringIndexStart, r.ringIndexEnd)
+						panic("PRODUCER CoNSUMER BORKE")
+					}
 					//dlog.Printf("command %v got EXECUTED at time %v\n", inst.lb.clientProposals[j].CommandId, time.Now().UnixNano())
 					if inst.lb != nil && inst.lb.clientProposals != nil {
-						dlog.Printf("BBB\n")
+						dlog.Printf("BBB PID = %v Command = %v\n", inst.lb.clientProposals[(offset + j) % MAX_BATCH].Timestamp, inst.lb.clientProposals[(offset + j) % MAX_BATCH].CommandId)
 						propreply := &genericsmrproto.ProposeReplyTS{
 							TRUE,
-							inst.lb.clientProposals[j].CommandId,
+							inst.lb.clientProposals[(offset + j) % MAX_BATCH].CommandId,
 							val,
-							inst.lb.clientProposals[j].Timestamp}
-						r.ReplyProposeTS(propreply, inst.lb.clientProposals[j].Reply)
+							inst.lb.clientProposals[(offset + j) % MAX_BATCH].Timestamp}
+						r.ReplyProposeTS(propreply, inst.lb.clientProposals[(offset + j) % MAX_BATCH].Reply)
 					}
 				}
 				i++

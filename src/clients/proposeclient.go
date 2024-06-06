@@ -31,6 +31,7 @@ func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader i
 	}
 	pc.RegisterRPC(new(genericsmrproto.ProposeReplyTS), clientproto.GEN_PROPOSE_REPLY,
 		pc.proposeReplyChan)
+	pc.propose.Timestamp = int64(id) // only need to set this once per client
 	return pc
 }
 
