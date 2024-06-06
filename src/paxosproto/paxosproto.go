@@ -33,8 +33,6 @@ type Accept struct {
 	Ballot   int32
 	Command  []state.Command
 	CommandCount int32
-	CommandId []int32
-	PID []int64
 	StartIndex int64
 }
 
@@ -42,9 +40,6 @@ type AcceptReply struct {
 	Instance int32
 	OK       uint8
 	Ballot   int32
-	CommandCount int32
-	CommandId []int32
-	PID []int64
 }
 
 type Commit struct {

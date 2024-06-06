@@ -252,30 +252,10 @@ func (t *Accept) Marshal(wire io.Writer) {
 	}
 	for i := int64(0); i < alen1; i++ {
 		t.Command[(i+t.StartIndex) % MAX_BATCH].Marshal(wire)
-		tmp32 = t.CommandId[(i+t.StartIndex) % MAX_BATCH]
-		bs = b[:4]
-		bs[0] = byte(tmp32)
-		bs[1] = byte(tmp32 >> 8)
-		bs[2] = byte(tmp32 >> 16)
-		bs[3] = byte(tmp32 >> 24)
-		wire.Write(bs)
-		tmp64 = t.PID[(i+t.StartIndex) % MAX_BATCH]
-		bs = b[:8]
-		bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
 	}
 }
 
 var theCommands = make([]state.Command, MAX_BATCH)
-var theCommandIds = make([]int32, MAX_BATCH)
-var thePIDs = make([]int64, MAX_BATCH)
 
 func (t *Accept) Unmarshal(rr io.Reader) error {
 	var wire byteReader
@@ -304,20 +284,8 @@ func (t *Accept) Unmarshal(rr io.Reader) error {
 	}
 	// t.Command = make([]state.Command, alen1)
 	t.Command = theCommands
-	t.CommandId = theCommandIds
-	t.PID = thePIDs
 	for i := int64(0); i < alen1; i++ {
 		t.Command[(i+t.StartIndex) % MAX_BATCH].Unmarshal(wire)
-		bs = b[:4]
-		if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-			return err
-		}
-		t.CommandId[(i+t.StartIndex) % MAX_BATCH] = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-		bs = b[:8]
-		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-			return err
-		}
-		t.PID[(i+t.StartIndex) % MAX_BATCH] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
 	}
 	t.CommandCount = int32(alen1)
 	return nil
@@ -375,44 +343,9 @@ func (t *AcceptReply) Marshal(wire io.Writer) {
 	bs[7] = byte(tmp32 >> 16)
 	bs[8] = byte(tmp32 >> 24)
 	wire.Write(bs)
-	bs = b[:]
-	alen1 := int64(t.CommandCount)
-	if wlen := binary.PutVarint(bs, alen1); wlen >= 0 {
-		wire.Write(b[0:wlen])
-	}
-	var tmp64 int64
-	for i := int64(0); i < alen1; i++ {
-		tmp32 = t.CommandId[i]
-		bs = b[:4]
-		bs[0] = byte(tmp32)
-		bs[1] = byte(tmp32 >> 8)
-		bs[2] = byte(tmp32 >> 16)
-		bs[3] = byte(tmp32 >> 24)
-		wire.Write(bs)
-		tmp64 = t.PID[i]
-		bs = b[:8]
-		bs[0] = byte(tmp64)
-		bs[1] = byte(tmp64 >> 8)
-		bs[2] = byte(tmp64 >> 16)
-		bs[3] = byte(tmp64 >> 24)
-		bs[4] = byte(tmp64 >> 32)
-		bs[5] = byte(tmp64 >> 40)
-		bs[6] = byte(tmp64 >> 48)
-		bs[7] = byte(tmp64 >> 56)
-		wire.Write(bs)
-	}
 }
 
-var theCommandIdsRep = make([]int32, MAX_BATCH)
-var thePIDsRep = make([]int64, MAX_BATCH)
-func (t *AcceptReply) Unmarshal(rr io.Reader) error {
-	var wire byteReader
-	var ok bool
-	if wire, ok = rr.(byteReader); !ok {
-		wire = bufio.NewReader(rr)
-	}
-
-
+func (t *AcceptReply) Unmarshal(wire io.Reader) error {
 	var b [9]byte
 	var bs []byte
 	bs = b[:9]
@@ -422,28 +355,6 @@ func (t *AcceptReply) Unmarshal(rr io.Reader) error {
 	t.Instance = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	t.OK = uint8(bs[4])
 	t.Ballot = int32((uint32(bs[5]) | (uint32(bs[6]) << 8) | (uint32(bs[7]) << 16) | (uint32(bs[8]) << 24)))
-
-	alen1, err := binary.ReadVarint(wire)
-	if err != nil {
-		return err
-	}
-
-	bs = b[:]
-	t.CommandId = theCommandIdsRep
-	t.PID = thePIDsRep
-	for i := int64(0); i < alen1; i++ {
-		bs = b[:4]
-		if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-			return err
-		}
-		t.CommandId[i] = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
-		bs = b[:8]
-		if _, err := io.ReadAtLeast(wire, bs, 8); err != nil {
-			return err
-		}
-		t.PID[i] = int64((uint64(bs[0]) | (uint64(bs[1]) << 8) | (uint64(bs[2]) << 16) | (uint64(bs[3]) << 24) | (uint64(bs[4]) << 32) | (uint64(bs[5]) << 40) | (uint64(bs[6]) << 48) | (uint64(bs[7]) << 56)))
-	}
-	t.CommandCount = int32(alen1)
 
 	return nil
 }
