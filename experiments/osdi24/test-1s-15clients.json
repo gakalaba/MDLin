@@ -91,7 +91,7 @@
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
   "client_fanout": 16,
-  "batchsize": 2000,
+  "batchsize": 25000,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,

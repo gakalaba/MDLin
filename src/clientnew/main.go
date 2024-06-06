@@ -261,7 +261,7 @@ func main() {
 	currRuntime := now.Sub(start)
 	for int(currRuntime.Seconds()) < *expLength {
 		//if *randSleep > 0 {
-		tt := r.Intn(1 * 1e6)
+		tt := r.Intn(100 * 1e6)
 		//dlog.Printf("Client sleeping for %v ms", tt/1e6)
 		time.Sleep(time.Duration(tt)) // randSleep ms
 		//}
