@@ -4,7 +4,7 @@ import (
 	"clients"
 	"dlog"
 	"flag"
-	//"fmt"
+	"fmt"
 	"log"
 	//"math/rand"
 	"os"
@@ -256,28 +256,29 @@ func main() {
 	start := time.Now()
 	now := start
 	currRuntime := now.Sub(start)
+	opString := "app"
 	for int(currRuntime.Seconds()) < *expLength {
 		/*if *randSleep > 0 {
 			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
 		}*/
 
 		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
-		//before := time.Now()
+		before := time.Now()
 		client.AppRequest([]state.Operation{state.PUT}, []int64{4})
 
-		//after := time.Now()
+		after := time.Now()
 
-		//count++
+		count++
 		//dlog.Printf("AppRequests attempted: %d\n", count)
 		//dlog.Printf("AppRequests attempted: %d at time %d\n", count, time.Now().UnixMilli())
 
-		/*currInt := int(currRuntime.Seconds())
+		currInt := int(currRuntime.Seconds())
 		if *rampUp <= currInt && currInt < *expLength-*rampDown {
 			lat := int64(after.Sub(before).Nanoseconds())
 			fmt.Printf("%s,%d,%d,%d\n", opString, lat, 0, count)
 			//fmt.Printf("%s,%d,%d,%d\n", retwisType, lat, 0, count)
 
-		}*/
+		}
 		now = time.Now()
 		currRuntime = now.Sub(start)
 	}
