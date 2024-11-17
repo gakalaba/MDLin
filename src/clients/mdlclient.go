@@ -95,6 +95,60 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 	return true, 0
 }
 
+func (c *MDLClient) OpenAppRequest(opTypes state.Operation, keys int64) {
+	fanout := len(keys)
+	//dlog.Printf("fanout = %v", fanout)
+	startTimes := make([]time.Time, fanout)
+	startIdx := c.opCount
+	var prevTag mdlinproto.Tag
+        // Doing this for the sake of cleaning the r.seen list in implementation
+        n := len(opTypes)
+	for i, opType := range opTypes {
+		k := keys[i]
+		l := c.GetShardFromKey(state.Key(k))
+		// Figure out the sequence number
+		if _, ok := c.seqnos[l]; !ok {
+			c.seqnos[l] = 0
+		} else {
+			c.seqnos[l]++
+		}
+		// Assign the sequence number and batch dependencies for this request
+		c.setSeqno(c.seqnos[l])
+                c.setTimestamp(i, n)
+		if i == 0 {
+			c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
+		} else {
+			c.propose.Predecessor = prevTag
+		}
+
+		startTimes[i] = time.Now()
+
+		if opType == state.GET {
+			c.Read(k)
+		} else if opType == state.PUT {
+			//dlog.Printf("type is Put!")
+			c.Write(k, int64(k))
+		} else {
+			c.CompareAndSwap(k, int64(k-1), int64(k))
+		}
+		if (i > 0 && !c.SSA) {
+			// Send the coordination request
+			// (Keep this after sending the request for now, since
+			// logic in the send function assumes request was send)
+			c.sendCoordinationRequest(prevTag, l)
+		}
+		prevTag = mdlinproto.Tag{K: state.Key(k), PID: int64(c.id), SeqNo: c.seqnos[l]}
+	}
+	/*success, _ := c.readReplies(startIdx, fanout, opTypes, keys, startTimes)
+	if !success {
+		//dlog.Printf("ProposeReply for PID %d - CommandId %d return OK=False\n", c.id, e)
+		return false, -1
+	}
+
+	return true, 0*/
+  return
+}
+
 func (c *MDLClient) Read(key int64) (bool, int64) {
 	commandId := c.opCount
 	c.opCount++
@@ -169,6 +223,35 @@ func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, mySha
 // 	c.sendPropose()
 // 	return c.readProposeReply(c.propose.CommandId)
 // }
+
+func (c *MDLClient) startAsynchReadReplies(doneChan chan bool, resultChan chan (int, int)) {
+  done := false
+  numReplies := 0
+  highestReplyCommandId := -1
+  for !done {
+    select {
+    case <-doneChan:
+      done = true
+      break
+    case reply := (<-c.proposeReplyChan).(*mdlinproto.ProposeReply):
+      if reply.OK == 0 {
+        panic("Client received FAIL response for request")
+      }
+      numReplies++
+      if reply.CommandId > highestReplyCommandId {
+        highestReplyCommandId = reply.CommandId
+      }
+      break
+    }
+  }
+  resultChan <- (numReplies, highestReplyCommand)
+}
+
+func (c *MDLClient) stopAsynchReadReplies(doneChan chan bool, resultChan chan (int, int)) (int, int) {
+  doneChan <- true
+  return <-resultChan
+
+}
 
 func (c *MDLClient) readReplies(startId int32, fanout int, opTypes []state.Operation,
 	keys []int64, startTimes []time.Time) (bool, int64) {

@@ -244,8 +244,10 @@ func main() {
   if err != nil {
     panic("problem making the zipfian generator :0")
   }*/
-	var count int32
-	count = 0
+	var sentcount int32
+	sentcount = 0
+  var doneChan chan bool
+  var resultChan chan (int, int)
 
 	go func(client clients.Client) {
 		time.Sleep(time.Duration(*expLength+1) * time.Second)
@@ -256,7 +258,8 @@ func main() {
 	start := time.Now()
 	now := start
 	currRuntime := now.Sub(start)
-	for int(currRuntime.Seconds()) < *expLength {
+	client.StartAsynchReadReplies(doneChan, resultChan)
+  for int(currRuntime.Seconds()) < *expLength {
 		/*if *randSleep > 0 {
 			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
 		}*/
@@ -267,7 +270,7 @@ func main() {
 
 		//after := time.Now()
 
-		//count++
+		sentcount++
 		//dlog.Printf("AppRequests attempted: %d\n", count)
 		//dlog.Printf("AppRequests attempted: %d at time %d\n", count, time.Now().UnixMilli())
 
@@ -281,7 +284,10 @@ func main() {
 		now = time.Now()
 		currRuntime = now.Sub(start)
 	}
-	log.Printf("Total App Events Logged: %d\n", count)
+  numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
+  log.Printf("numReplies pulled out = %d, highest command ID returned = %d", numReplies, count)
+	log.Printf("Total Attempted Logging of App Events: %d\n", sentcount)
+	log.Printf("Total Completed Logging of App Events: %d\n", count)
 	log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
 	log.Printf("Total Log Tput: %d\n", (count/currRuntime.Seconds()))
 	client.Finish()
