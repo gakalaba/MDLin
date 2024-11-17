@@ -4,16 +4,16 @@ import (
 	"clients"
 	"dlog"
 	"flag"
-	"fmt"
+	//"fmt"
 	"log"
-	"math/rand"
+	//"math/rand"
 	"os"
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
 	"state"
 	"time"
-  "zipfgenerator"
+  //"zipfgenerator"
 )
 
 var clientId *int = flag.Int(
@@ -283,7 +283,7 @@ func main() {
 	}
 	log.Printf("Total App Events Logged: %d\n", count)
 	log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
-	log.Printf("Total Log Tput: %d\n", (count/currRuntime.Seconds()))
+	log.Printf("Total Log Tput: %d\n", (count/int32(currRuntime.Seconds())))
 	client.Finish()
 }
 
@@ -298,7 +298,7 @@ func main() {
 redis_client.lpush("events", data)
 */
 
-func LogEventSequential(log int) {
+func LogEventSequential(log int64, client clients.Client) {
 	// lpush("events", data)
 	client.AppRequest([]state.Operation{state.PUT}, []int64{log})
 }
