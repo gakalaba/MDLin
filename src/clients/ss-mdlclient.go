@@ -80,6 +80,18 @@ func (c *SSMDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool,
 	return true, 0
 }
 
+func (c *SSMDLClient) OpenAppRequest(opTypes state.Operation, keys int64) {
+	return
+}
+
+func (c *SSMDLClient) StartAsynchReadReplies(doneChan chan bool, resultChan chan int) {
+	return
+}
+
+func (c *SSMDLClient) StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int) {
+	return 0,0
+}
+
 func (c *SSMDLClient) Read(key int64) (bool, int64) {
 	commandId := c.opCount
 	c.opCount++

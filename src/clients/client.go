@@ -40,6 +40,9 @@ type Client interface {
 	CompareAndSwap(key int64, oldValue int64,
 		newValue int64) (bool, int64)
 	AppRequest(opTypes []state.Operation, keys []int64) (bool, int64)
+	OpenAppRequest(opTypes state.Operation, keys int64)
+	StartAsynchReadReplies(doneChan chan bool, resultChan chan int)
+	StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int)
 	Finish()
 	ConnectToCoordinator()
 	// ConnectToReplicas()

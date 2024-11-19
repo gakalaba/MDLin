@@ -4,7 +4,7 @@ import (
 	"clients"
 	"dlog"
 	"flag"
-	"fmt"
+	//"fmt"
 	"log"
 	//"math/rand"
 	"os"
@@ -244,8 +244,7 @@ func main() {
   if err != nil {
     panic("problem making the zipfian generator :0")
   }*/
-	var count int32
-	count = 0
+	count := 0
 
 	go func(client clients.Client) {
 		time.Sleep(time.Duration(*expLength+1) * time.Second)
@@ -256,35 +255,107 @@ func main() {
 	start := time.Now()
 	now := start
 	currRuntime := now.Sub(start)
-	opString := "app"
+	//opString := "app"
+	dlog.Printf("starting grafana test!")
+	for int(currRuntime.Seconds()) < *expLength {
+		client.AppRequest([]state.Operation{state.PUT}, []int64{4})
+
+
+		count++
+
+		now = time.Now()
+		currRuntime = now.Sub(start)
+	}
+	log.Printf("THIS TEST DONE :)")
+	log.Printf("Total Completed Logging of App Events: %d\n", count)
+	log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
+	log.Printf("Total Log Tput: %d\n", (count/int(currRuntime.Seconds())))
+	client.Finish()
+}
+
+
+
+func poop() {
+	flag.Parse()
+
+
+	dlog.DLOG = *debug
+
+	runtime.GOMAXPROCS(2)
+
+	if *cpuProfile != "" {
+		f, err := os.Create(*cpuProfile)
+		if err != nil {
+			log.Fatalf("Error creating CPU profile file %s: %v\n", *cpuProfile, err)
+		}
+		pprof.StartCPUProfile(f)
+		interrupt := make(chan os.Signal, 1)
+		signal.Notify(interrupt)
+		go catchKill(interrupt)
+		defer pprof.StopCPUProfile()
+	}
+
+	client := createClient()
+
+	/*r := rand.New(rand.NewSource(time.Now().UnixNano()))
+  zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
+  if err != nil {
+    panic("problem making the zipfian generator :0")
+  }*/
+	var sentcount int32
+	sentcount = 0
+	doneChan := make(chan bool)
+	resultChan := make(chan int, 2)
+
+	go func(client clients.Client) {
+		time.Sleep(time.Duration(*expLength+1) * time.Second)
+		client.Finish()
+	}(client)
+
+	// Add these keys in the store 
+	start := time.Now()
+	now := start
+	currRuntime := now.Sub(start)
+	//for paxos:
+	//opString := "app"
+	go client.StartAsynchReadReplies(doneChan, resultChan)
+	log.Printf("starting grafana test!")
 	for int(currRuntime.Seconds()) < *expLength {
 		/*if *randSleep > 0 {
 			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
 		}*/
 
 		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
-		before := time.Now()
-		client.AppRequest([]state.Operation{state.PUT}, []int64{4})
+		//before := time.Now()
+		client.OpenAppRequest(state.PUT, int64(4))
 
-		after := time.Now()
+		//after := time.Now()
 
-		count++
+		//for paxos:
+		//count++
+		sentcount++
 		//dlog.Printf("AppRequests attempted: %d\n", count)
 		//dlog.Printf("AppRequests attempted: %d at time %d\n", count, time.Now().UnixMilli())
 
+		/*
+		for paxos:
 		currInt := int(currRuntime.Seconds())
 		if *rampUp <= currInt && currInt < *expLength-*rampDown {
 			lat := int64(after.Sub(before).Nanoseconds())
 			fmt.Printf("%s,%d,%d,%d\n", opString, lat, 0, count)
 			//fmt.Printf("%s,%d,%d,%d\n", retwisType, lat, 0, count)
 
-		}
+		}*/
 		now = time.Now()
 		currRuntime = now.Sub(start)
 	}
-	log.Printf("Total App Events Logged: %d\n", count)
+	log.Printf("TEST DONE")
+	numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
+	log.Printf("numReplies pulled out = %d, highest command ID returned = %d", numReplies, count)
+	log.Printf("Total Attempted Logging of App Events: %d\n", sentcount)
+	log.Printf("Total Completed Logging of App Events: %d\n", count)
 	log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
-	log.Printf("Total Log Tput: %d\n", (count/int32(currRuntime.Seconds())))
+	log.Printf("Total Log Tput: %d\n", (count/int(currRuntime.Seconds())))
 	client.Finish()
 }
 
