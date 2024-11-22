@@ -405,38 +405,32 @@ func LogoutTransformed(client clients.Client, zipf *zipfgenerator.ZipfGenerator)
 /*
 get '/api/reset-password' ("username", "email") do
   id = $r.get("username.to.id:#{username.downcase}")
+  if !id {
+    return nil
+  }
   $r.hgetall("user:#{id}")
-  if (cond) {
+
+  if cond(user) {
     $r.hset("user:#{id}","pwd_reset",Time.now.to_i)
   }
 end
 */
-func ResetPasswordSequential(users int64, auth int64, client clients.Client,
+func ResetPasswordSequential(username int64, client clients.Client,
 				zipf *zipfgenerator.ZipfGenerator) {
-	// $userid = $r->hget("users",$username);
-	client.AppRequest([]state.Operation{state.GET}, []int64{users})
-	// $realpassword = $r->hget("user:$userid","password");
-	userid := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
-
-	// $authsecret = $r->hget("user:$userid","auth");
-	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
-
-	// setcookie("auth",$authsecret,time()+3600*24*365);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{auth})
+  client.AppRequest([]state.Operation{state.GET}, []int64{username})
+	user_id = int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+  client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 }
 
-func ResetPasswordTransformed(users int64, auth int64, client clients.Client,
+func ResetPasswordTransformed(username int64, client clients.Client,
 				zipf *zipfgenerator.ZipfGenerator) {
-	// $userid = $r->hget("users",$username);
-	client.AppRequest([]state.Operation{state.GET}, []int64{users})
-
-	// $realpassword = $r->hget("user:$userid","password");
-	// $authsecret = $r->hget("user:$userid","auth");
-	// setcookie("auth",$authsecret,time()+3600*24*365);
-	userid := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET, state.GET, state.GET}, []int64{userid, userid, auth})
+  client.AppRequest([]state.Operation{state.GET}, []int64{username})
+	user_id = int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+  client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 }
+
 //***********************************************************//
 //*************** Lamernewz CreateAccount *******************//
 //***********************************************************//
