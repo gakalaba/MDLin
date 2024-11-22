@@ -374,7 +374,6 @@ func LoginTransformed(username int64, client clients.Client, zipf *zipfgenerator
 //********************* Lamernewz Logout ********************//
 //***********************************************************//
 // Based on https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L651C1-L651C22
-
 /*
 post '/api/logout' ($user) do
   $r.del("auth:#{user['auth']}")
@@ -383,45 +382,22 @@ post '/api/logout' ($user) do
   $r.set("auth:#{new_auth_token}",user['id'])
 end
 */
-func LogoutSequential(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	// Follow makes call to isLoggedIn()
-	// if ($userid = $r->hget("auths",$authcookie)) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
-	// if ($r->hget("user:$userid","auth") != $authcookie)
-	user_id := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-	// isLoggedIn makes call to loadUserInfo()
-	// $User['username'] = $r->hget("user:$userid","username");
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-
-
-	// Always assume the user is logged in
-	// $r->zadd("followers:".$uid,time(),$User['id']);
-	followers := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT}, []int64{followers})
-	// $r->zadd("following:".$User['id'],time(),$uid);
-	following := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT}, []int64{following})
+func LogoutSequential(client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	authuser := int64(zipf.Uint64())
+	user := int64(zipf.Uint64())
+	authnewauthtoken := int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.PUT}, []int64{authuser})
+	client.AppRequest([]state.Operation{state.PUT}, []int64{user})
+	client.AppRequest([]state.Operation{state.PUT}, []int64{authnewauthtoken})
 }
 
-func LogoutTransformed(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	// Follow makes call to isLoggedIn() - must be sequential because of ICF
-	// if ($userid = $r->hget("auths",$authcookie)) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
-	// if ($r->hget("user:$userid","auth") != $authcookie)
-	user_id := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-	// isLoggedIn makes call to loadUserInfo()
-	// $User['username'] = $r->hget("user:$userid","username");
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-
-	// Always assume the user is logged in
-	// $r->zadd("followers:".$uid,time(),$User['id']);
-	// $r->zadd("following:".$User['id'],time(),$uid);
-	followers := int64(zipf.Uint64())
-	following := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT, state.PUT}, []int64{followers, following})
+func LogoutTransformed(client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	authuser := int64(zipf.Uint64())
+	user := int64(zipf.Uint64())
+	authnewauthtoken := int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT}, []int64{authuser, user, authnewauthtoken})
 }
+
 //***********************************************************//
 //**************** Lamernewz ResetPassword ******************//
 //***********************************************************//
