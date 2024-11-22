@@ -653,16 +653,16 @@ func InsertNewsTransformed(users int64, users_by_time int64, next_user_id int64,
 
 /*
 post '/api/submit' ("title","news_id",:url,:text) do
-  // news = get_news_by_id()
-    $r.hgetall("news:#{nid}")
-    if [] {
-      return
+  //news = get_news_by_id(news_id)
+    news = $r.hgetall("news:#{nid}")
+    if !news {
+      return []
     }
-    $r.hmset("news:#{n["id"]}","rank",real_rank)
-    $r.zadd("news.top",real_rank,n["id"])
-    $r.hget("user:#{n["user_id"]}","username")
+    $r.hmset("news:#{news["id"]}","rank",real_rank)
+    $r.zadd("news.top",real_rank,news["id"])
+    $r.hget("user:#{news["user_id"]}","username")
 
-    if $user {
+    if $user { //$user is a global variable!
       $r.zscore("news.up:#{n["id"]}",$user["id"])
       $r.zscore("news.down:#{n["id"]}",$user["id"])
     }
@@ -731,27 +731,29 @@ func EditNewsTransformed(users_by_time int64, timeline int64,
 	client.AppRequest(opTypes, keys)
 }
 
-///***********************************************************//
-//***************** Lamernewz Deletenews ********************//
-//***********************************************************//
+//************************************************************//
+//****************** Lamernewz DeleteNews ********************//
+//************************************************************//
 // Based on https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L814
 /*
 post '/api/delnews' (news_id) do
-  // news = get_news_by_id()
-    $r.hgetall("news:#{nid}")
-    if [] {
-      return
+  //news = get_news_by_id(news_id)
+    news = $r.hgetall("news:#{nid}")
+    if !news {
+      return []
     }
-    $r.hmset("news:#{n["id"]}","rank",real_rank)
-    $r.zadd("news.top",real_rank,n["id"])
-    $r.hget("user:#{n["user_id"]}","username")
+    $r.hmset("news:#{news["id"]}","rank",real_rank)
+    $r.zadd("news.top",real_rank,news["id"])
+    $r.hget("user:#{news["user_id"]}","username")
 
-    if $user {
+    if $user { //$user is a global variable!
       $r.zscore("news.up:#{n["id"]}",$user["id"])
       $r.zscore("news.down:#{n["id"]}",$user["id"])
     }
-    //
-
+  //
+  $r.hmset("news:#{news_id}","del",1)
+  $r.zrem("news.top",news_id)
+  $r.zrem("news.cron",news_id)
 end
 */
 
@@ -828,62 +830,758 @@ func DeleteNewsTransformed(users int64, auths int64, timeline int64,
 	client.AppRequest(opTypes, keys)
 
 }
+
+//************************************************************//
+//******************* Lamernewz VoteNews *********************//
+//************************************************************//
+// https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L832
 /*
-func PostNaive(post_id int64, timeline int64, next_post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	followers := int64(zipf.Uint64()) % 100
-	total := 5+followers
-	done := make([]int, total)
-	// $postid = $r->incr("next_post_id");
-	go func(i int) {
-		client.AppRequest([]state.Operation{state.CAS}, []int64{next_post_id})
-		done[i] = 1
-	}(0)
+post '/api/votenews' ("news_id","vote_type") do
+  //news = get_news_by_id(news_id)
+    news = $r.hgetall("news:#{nid}")
+    if !news {
+      return []
+    }
+    $r.hmset("news:#{news["id"]}","rank",real_rank)
+    $r.zadd("news.top",real_rank,news["id"])
+    $r.hget("user:#{news["user_id"]}","username")
 
-	// $r->hmset("post:$postid","user_id",$User['id'],"time",time(),"body",$status);
-	go func(i int) {
-		client.AppRequest([]state.Operation{state.PUT}, []int64{post_id})
-		done[i] = 1
-	}(1)
+    if $user { //$user is a global variable!
+      $r.zscore("news.up:#{n["id"]}",$user["id"])
+      $r.zscore("news.down:#{n["id"]}",$user["id"])
+    }
+  //
+  if !news {
+    return false
+  }
+  if $r.zscore("news.up:#{news_id}",user_id) or
+       $r.zscore("news.down:#{news_id}",user_id) {
+         return
+  }
+  karma = $r.hget(userkey,"karma")
+  if karma > val {
+    return false
+  }
+  if $r.zadd("news.#{vote_type}:#{news_id}", Time.now.to_i, user_id) {
+    $r.hincrby("news:#{news_id}",vote_type,1)
+  }
+  if vote_type == up {
+    $r.zadd("user.saved:#{user_id}", Time.now.to_i, news_id)
+  }
+  // score = compute news()
+    upvotes = $r.zrange("news.up:#{news["id"]}",0,-1,:withscores => true)
+    downvotes = $r.zrange("news.down:#{news["id"]}",0,-1,:withscores => true)
+  //
+  news["score"] = score
+  rank = compute_news_rank(news)
+  $r.hmset("news:#{news_id}",
+        "score",score,
+        "rank",rank)
+  $r.zadd("news.top",rank,news_id)
 
-	// $followers = $r->zrange("followers:".$User['id'],0,-1);
-	go func(i int) {
-		client.AppRequest([]state.Operation{state.GET}, []int64{int64(zipf.Uint64())})
-		done[i] = 1
-	}(2)
+  userkey = "user:#{user_id}"
+  $r.hincrby(userkey,"karma",increment)
+end
+*/
 
-	//foreach($followers as $fid) {
-	//	$r->lpush("posts:$fid",$postid);
-	
-	for i := int64(0); i < followers; i++ {
-		func(j int64) {
-			go client.AppRequest([]state.Operation{state.PUT}, []int64{int64(r.Uint64())})
-			done[j] = 1
-		}(3 + i)
+func VoteNewsSequential(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn()
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
+		// $username = $r->hget("user:$userid","username");
+		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 	}
+}
 
-	// $r->lpush("timeline",$postid);
-	go func(i int64) {
-		client.AppRequest([]state.Operation{state.PUT}, []int64{timeline})
-		done[i] = 1
-	}(3+followers)
-	//$r->ltrim("timeline",0,1000);
-	go func(i int64) {
-		client.AppRequest([]state.Operation{state.CAS}, []int64{timeline})
-		done[i] = 1
-	}(4+followers)
+func VoteNewsTransformed(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
 
-	complete := false
-	for !complete {
-		complete = true
-		for i :=int64(0); i < total; i++ {
-			if done[i] == 0 {
-				complete = false
-				break
-			}
-		}
+	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	var opTypes []state.Operation
+        var keys []int64
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		// $username = $r->hget("user:$userid","username");
+		keys = append(keys, postid)
+		keys = append(keys, user_id)
+		opTypes = append(opTypes, state.GET)
+		opTypes = append(opTypes, state.GET)
 	}
-}*/
+	client.AppRequest(opTypes, keys)
+
+}
+
+//************************************************************//
+//***************** Lamernewz PostComment ********************//
+//************************************************************//
+// Based on https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L857
+/*
+post '/api/postcomment' ("news_id","comment_id","parent_id",:comment) do
+  //news = get_news_by_id(news_id)
+    news = $r.hgetall("news:#{nid}")
+    if !news {
+      return []
+    }
+    $r.hmset("news:#{news["id"]}","rank",real_rank)
+    $r.zadd("news.top",real_rank,news["id"])
+    $r.hget("user:#{news["user_id"]}","username")
+
+    if $user { //$user is a global variable!
+      $r.zscore("news.up:#{n["id"]}",$user["id"])
+      $r.zscore("news.down:#{n["id"]}",$user["id"])
+    }
+  //
+  if !news {
+    return false
+  }
+
+  if r.hget(key,comment_id) {
+    return false
+  }
+
+  // commend_id = insert
+    if comment['parent_id'] != -1 {
+      if !r.hget(key,comment['parent_id']) {
+        return false
+      }
+      id = r.hincrby(key,:nextid,1)
+      r.hset(key,id,comment.to_json)
+    }
+  //
+
+  if !comment_id {
+    return false
+  }
+
+  $r.hincrby("news:#{news_id}","comments",1);
+  $r.zadd("user.comments:#{user_id}",
+            Time.now.to_i,
+            news_id.to_s+"-"+comment_id.to_s);
+  if $r.exists("user:#{p['user_id']}") {
+    $r.hincrby("user:#{p['user_id']}","replies",1)
+  }
+end
+*/
+
+func PostCommentSequential(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn()
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
+		// $username = $r->hget("user:$userid","username");
+		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	}
+}
+
+func PostCommentTransformed(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	var opTypes []state.Operation
+        var keys []int64
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		// $username = $r->hget("user:$userid","username");
+		keys = append(keys, postid)
+		keys = append(keys, user_id)
+		opTypes = append(opTypes, state.GET)
+		opTypes = append(opTypes, state.GET)
+	}
+	client.AppRequest(opTypes, keys)
+}
+
+//************************************************************//
+//***************** Lamernewz DeleteComment ********************//
+//************************************************************//
+// Based on https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L1858
+/*
+post '/api/postcomment' ("news_id","comment_id","parent_id",:comment) do
+  //news = get_news_by_id(news_id)
+    news = $r.hgetall("news:#{nid}")
+    if !news {
+      return []
+    }
+    $r.hmset("news:#{news["id"]}","rank",real_rank)
+    $r.zadd("news.top",real_rank,news["id"])
+    $r.hget("user:#{news["user_id"]}","username")
+
+    if $user { //$user is a global variable!
+      $r.zscore("news.up:#{n["id"]}",$user["id"])
+      $r.zscore("news.down:#{n["id"]}",$user["id"])
+    }
+  //
+  if !news {
+    return false
+  }
+
+  c = r.hget(key, comment_id)
+  if !c or !(c['ctime']) {
+    return false
+  }
+
+  old = r.hget(key,comment_id)
+  if !old {
+    return false
+  }
+  comment = merge(old, updates)
+  r.hset(key,comment_id,comment)
+
+  $r.hincrby("news:#{news_id}","comments",-1);
+end
+*/
+
+func DeleteCommentSequential(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn()
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
+		// $username = $r->hget("user:$userid","username");
+		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	}
+}
+
+func DeleteCommentTransformed(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	var opTypes []state.Operation
+        var keys []int64
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		// $username = $r->hget("user:$userid","username");
+		keys = append(keys, postid)
+		keys = append(keys, user_id)
+		opTypes = append(opTypes, state.GET)
+		opTypes = append(opTypes, state.GET)
+	}
+	client.AppRequest(opTypes, keys)
+
+}
+
+
+//************************************************************//
+//***************** Lamernewz UpdateProfile ******************//
+//************************************************************//
+// Based on https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L887
+/*
+post '/api/updateprofile' (:about, :email, :password) do
+  if cond(password) {
+    $r.hmset("user:#{$user['id']}","password",
+            hash_password(params[:password],$user['salt']))
+  }
+  $r.hmset("user:#{$user['id']}",
+        "about", params[:about][0..4095],
+        "email", params[:email][0..255])
+end
+*/
+
+func UpdateProfileSequential(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn()
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
+		// $username = $r->hget("user:$userid","username");
+		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	}
+}
+
+func UpdateProfileTransformed(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	var opTypes []state.Operation
+        var keys []int64
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		// $username = $r->hget("user:$userid","username");
+		keys = append(keys, postid)
+		keys = append(keys, user_id)
+		opTypes = append(opTypes, state.GET)
+		opTypes = append(opTypes, state.GET)
+	}
+	client.AppRequest(opTypes, keys)
+
+}
+
+//************************************************************//
+//***************** Lamernewz VoteComment ********************//
+//************************************************************//
+// Based on https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L913
+/*
+post '/api/votecomment' ("comment_id","vote_type") do
+  if !r.hget(news_id, comment_id) {
+    return false
+  }
+
+  //Comments.edit(news_id,comment_id,{vote_type.to_s => varray})
+  old = r.hget(key,comment_id)
+  return false if !old
+  comment = JSON.parse(old).merge(updates)
+  r.hset(key,comment_id,comment.to_json)
+
+end
+*/
+
+func VoteCommentSequential(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn()
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
+		// $username = $r->hget("user:$userid","username");
+		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	}
+}
+
+func VoteCommentTransformed(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	var opTypes []state.Operation
+        var keys []int64
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		// $username = $r->hget("user:$userid","username");
+		keys = append(keys, postid)
+		keys = append(keys, user_id)
+		opTypes = append(opTypes, state.GET)
+		opTypes = append(opTypes, state.GET)
+	}
+	client.AppRequest(opTypes, keys)
+
+}
+
+
+//************************************************************//
+//******************* Lamernewz GetNews **********************//
+//************************************************************//
+// https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L939
+/*
+post '/api/getnews' (start, count) do
+  numitems = $r.zcard("news.cron")
+  news_ids = $r.zrevrange("news.cron",start,start+(count-1))
+  //news = get_news_by_id(news_id)
+    news = $r.hgetall("news:#{nid}")
+    if !news {
+      return []
+    }
+    $r.hmset("news:#{news["id"]}","rank",real_rank)
+    $r.zadd("news.top",real_rank,news["id"])
+    $r.hget("user:#{news["user_id"]}","username")
+
+    if $user { //$user is a global variable!
+      $r.zscore("news.up:#{n["id"]}",$user["id"])
+      $r.zscore("news.down:#{n["id"]}",$user["id"])
+    }
+  //
+end
+*/
+
+func GetNewsSequential(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn()
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
+		// $username = $r->hget("user:$userid","username");
+		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	}
+}
+
+func GetNewsTransformed(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	var opTypes []state.Operation
+        var keys []int64
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		// $username = $r->hget("user:$userid","username");
+		keys = append(keys, postid)
+		keys = append(keys, user_id)
+		opTypes = append(opTypes, state.GET)
+		opTypes = append(opTypes, state.GET)
+	}
+	client.AppRequest(opTypes, keys)
+
+}
+
+
+//************************************************************//
+//***************** Lamernewz GetComments ********************//
+//************************************************************//
+// Based on https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L958
+/*
+get  '/api/getcomments/:news_id' (news_id) do  
+  //news = get_news_by_id(news_id)
+    news = $r.hgetall("news:#{nid}")
+    if !news {
+      return []
+    }
+    $r.hmset("news:#{news["id"]}","rank",real_rank)
+    $r.zadd("news.top",real_rank,news["id"])
+    $r.hget("user:#{news["user_id"]}","username")
+
+    if $user { //$user is a global variable!
+      $r.zscore("news.up:#{n["id"]}",$user["id"])
+      $r.zscore("news.down:#{n["id"]}",$user["id"])
+    }
+  //
+  thread = r.hgetall(thread_key(news_id))
+  for i in range(replies) {
+    $r.hgetall("user:#{id}")
+  }
+end
+*/
+
+func GetCommentsSequential(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn()
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
+		// $username = $r->hget("user:$userid","username");
+		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	}
+}
+
+func GetCommentsTransformed(users int64, auths int64, timeline int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	// $userid = $r->hget("users",gt("u"))
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+
+	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
+	// if ($userid = $r->hget("auths",$authcookie)) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
+	// if ($r->hget("user:$userid","auth") != $authcookie)
+	user_id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+	// isLoggedIn makes call to loadUserInfo()
+	// $User['username'] = $r->hget("user:$userid","username");
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+
+	following := int64(zipf.Uint64())
+	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+
+	// Profile makes call to showUserPostsWithPagination()
+	// showUserPostsWithPagination() makes call to showUserPosts()
+	// $posts = $r->lrange("timeline",0,50);
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
+	posts := 10
+	var opTypes []state.Operation
+        var keys []int64
+	for i := 0; i < posts; i++ {
+		// showUserPosts() makes call to showPost()
+		// $post = $r->hgetall("post:$id");
+		postid := int64(zipf.Uint64())
+		// $username = $r->hget("user:$userid","username");
+		keys = append(keys, postid)
+		keys = append(keys, user_id)
+		opTypes = append(opTypes, state.GET)
+		opTypes = append(opTypes, state.GET)
+	}
+	client.AppRequest(opTypes, keys)
+
+}
 
 func catchKill(interrupt chan os.Signal) {
 	<-interrupt
