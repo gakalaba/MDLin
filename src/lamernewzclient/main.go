@@ -349,77 +349,25 @@ func main() {
 /*
 get '/api/login' ("username", "password") do
   id = $r.get("username.to.id:#{username.downcase}")
+  if !id {
+    return nil
+  }
   $r.hgetall("user:#{id}")
 end
 */
 
-func LoginSequential(post_id int64, timeline int64, next_post_id int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	var opTypes []state.Operation
-	var keys []int64
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	// $postid = $r->incr("next_post_id");
-	client.AppRequest([]state.Operation{state.CAS}, []int64{next_post_id})
-
-	// $r->hmset("post:$postid","user_id",$User['id'],"time",time(),"body",$status);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{post_id})
-
-	// $followers = $r->zrange("followers:".$User['id'],0,-1);
-	client.AppRequest([]state.Operation{state.GET}, []int64{int64(zipf.Uint64())})
-	followers := 1 + (int64(zipf.Uint64()) % 100)
-
-	/* 
-	foreach($followers as $fid) {
-		$r->lpush("posts:$fid",$postid);
-	}*/
-	keys = nil
-	opTypes = nil
-	for i := int64(0); i < followers; i++ {
-		keys = append(keys, int64(r.Uint64()))
-		opTypes = append(opTypes, state.PUT)
-	}
-	client.AppRequest(opTypes, keys)
-
-	// $r->lpush("timeline",$postid);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{timeline})
-	//$r->ltrim("timeline",0,1000);
-	client.AppRequest([]state.Operation{state.CAS}, []int64{timeline})
+func LoginSequential(username int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	//r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	client.AppRequest([]state.Operation{state.GET}, []int64{username})
+	user_id = int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 }
 
-func LoginTransformed(post_id int64, timeline int64, next_post_id int64,
-		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	var opTypes []state.Operation
-	var keys []int64
+func LoginTransformed(username int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	//r := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	// $postid = $r->incr("next_post_id");
-	// $followers = $r->zrange("followers:".$User['id'],0,-1);
-	client.AppRequest([]state.Operation{state.CAS, state.GET}, []int64{next_post_id, int64(zipf.Uint64())})
-	followers := 1 + int64(zipf.Uint64()) % 100
-	//followers := 10
-
-	// $r->hmset("post:$postid","user_id",$User['id'],"time",time(),"body",$status);
-	keys = nil
-	opTypes = nil
-	keys = append(keys, post_id)
-	opTypes = append(opTypes, state.PUT)
-
-	/* 
-	foreach($followers as $fid) {
-		$r->lpush("posts:$fid",$postid);
-	}*/
-	for i := int64(0); i < followers; i++ {
-		keys = append(keys, int64(zipf.Uint64()))
-		//keys = append(keys, int64(r.Uint64()))
-		opTypes = append(opTypes, state.PUT)
-	}
-
-	// $r->lpush("timeline",$postid);
-	// $r->ltrim("timeline",0,1000);
-	keys = append(keys, timeline)
-	opTypes = append(opTypes, state.PUT)
-	keys = append(keys, timeline)
-	opTypes = append(opTypes, state.CAS)
-	client.AppRequest(opTypes, keys)
+	client.AppRequest([]state.Operation{state.GET}, []int64{username})
+	user_id = int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 }
 
 //***********************************************************//
@@ -1611,9 +1559,7 @@ def get_news_by_id(news_ids) {
 */
 func get_news_by_idSequential(newsid int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-
   client.AppRequest([]state.Operation{state.GET}, []int64{newsid})
-
   news = int64(zipf.Uint64())
   newstop = int64(zipf.Uint64())
   user_n = int64(zipf.Uint64())
@@ -1628,10 +1574,10 @@ func get_news_by_idSequential(newsid int64,
 
 func get_news_by_idTransformed(newsid int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-  var opTypes []state.Operation
+  /*var opTypes []state.Operation
   var keys []int64
   keys = append(keys, user_id)
-	opTypes = append(opTypes, state.GET)
+	opTypes = append(opTypes, state.GET)*/
   client.AppRequest([]state.Operation{state.GET}, []int64{newsid})
   news = int64(zipf.Uint64())
   newstop = int64(zipf.Uint64())
