@@ -1580,7 +1580,66 @@ func GetCommentsTransformed(users int64, auths int64, timeline int64,
 		opTypes = append(opTypes, state.GET)
 	}
 	client.AppRequest(opTypes, keys)
+}
 
+/******************************************************************************/
+/******************************************************************************/
+/********************************** HELPERS ***********************************/
+/******************************************************************************/
+/******************************************************************************/
+
+
+//************************************************************//
+//********************** get_news_by_id **********************//
+//************************************************************//
+// Based on https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L958
+/*
+def get_news_by_id(news_ids) {  
+  news = $r.hgetall("news:#{nid}")
+  if !news {
+    return []
+  }
+  $r.hmset("news:#{news["id"]}","rank",real_rank)
+  $r.zadd("news.top",real_rank,news["id"])
+  $r.hget("user:#{news["user_id"]}","username")
+  
+  if $user { //$user is a global variable!
+    $r.zscore("news.up:#{n["id"]}",$user["id"])
+    $r.zscore("news.down:#{n["id"]}",$user["id"])
+  }
+}
+*/
+func get_news_by_idSequential(newsid int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+
+  client.AppRequest([]state.Operation{state.GET}, []int64{newsid})
+
+  news = int64(zipf.Uint64())
+  newstop = int64(zipf.Uint64())
+  user_n = int64(zipf.Uint64())
+  newsup = int64(zipf.Uint64())
+  newsdown = int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT}, []int64{news})
+	client.AppRequest([]state.Operation{state.PUT}, []int64{newstop})
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_n})
+	client.AppRequest([]state.Operation{state.GET}, []int64{newsup})
+	client.AppRequest([]state.Operation{state.GET}, []int64{newsdown})
+}
+
+func get_news_by_idTransformed(newsid int64,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+  var opTypes []state.Operation
+  var keys []int64
+  keys = append(keys, user_id)
+	opTypes = append(opTypes, state.GET)
+  client.AppRequest([]state.Operation{state.GET}, []int64{newsid})
+  news = int64(zipf.Uint64())
+  newstop = int64(zipf.Uint64())
+  user_n = int64(zipf.Uint64())
+  newsup = int64(zipf.Uint64())
+  newsdown = int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT, state.PUT, state.GET, state.GET, state.GET},
+                        []int64{news, newstop, user_n, newsup, newsdown})
 }
 
 func catchKill(interrupt chan os.Signal) {
