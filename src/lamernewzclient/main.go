@@ -437,9 +437,14 @@ func ResetPasswordTransformed(username int64, client clients.Client,
 // Based on https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L729
 /*
 post '/api/create_account' ("username", "password") do
-  if $r.exists("username.to.id:#{username.downcase}")
-  if $r.exists(key)
-  else $r.setex(key,delay,1)
+  if $r.exists("username.to.id:#{username.downcase}") {
+    return
+  }
+  key = "limit:tags"
+  if $r.exists(key) {
+    return
+  }
+  $r.setex(key,delay,1)
 
   id = $r.incr("users.count")
   auth_token = get_rand
@@ -466,31 +471,38 @@ post '/api/create_account' ("username", "password") do
 end
 */
 
-func CreateAccountSequential(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	userid := int64(zipf.Uint64())
-	// $oldauthsecret = $r->hget("user:$userid","auth");
-	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
+func CreateAccountSequential(username int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{username})
+  key := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{key})
+	client.AppRequest([]state.Operation{state.PUT}, []int64{key})
 
-	// $r->hset("user:$userid","auth",$newauthsecret);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{userid})
+  userscount := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.CAS}, []int64{userscount})
+  id := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT}, []int64{id})
 
-	//$r->hset("auths",$newauthsecret,$userid);
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
-
-	//$r->hdel("auths",$oldauthsecret);
-	client.AppRequest([]state.Operation{state.CAS}, []int64{auths})
+	client.AppRequest([]state.Operation{state.PUT}, []int64{username})
+  auth := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT}, []int64{auth})
+	client.AppRequest([]state.Operation{state.PUT}, []int64{id})
 }
 
-func CreateAccountTransformed(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	userid := int64(zipf.Uint64())
-	// $oldauthsecret = $r->hget("user:$userid","auth");
-	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
+func CreateAccountTransformed(username int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+	client.AppRequest([]state.Operation{state.GET}, []int64{username})
+  key := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{key})
 
-	// $r->hset("user:$userid","auth",$newauthsecret);
-	// $r->hset("auths",$newauthsecret,$userid);
-	// $r->hdel("auths",$oldauthsecret);
-	client.AppRequest([]state.Operation{state.PUT, state.GET, state.CAS}, []int64{userid, auths, auths})
+  userscount := int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.PUT, state.CAS}, []int64{key, userscount})
+  id := int64(zipf.Uint64())
+
+  auth := int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT}, []int64{id, username, auth})
+
+	client.AppRequest([]state.Operation{state.PUT}, []int64{id})
 }
+
 //***********************************************************//
 //****************** Lamernewz InsertNews *******************//
 //***********************************************************//
