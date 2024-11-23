@@ -512,6 +512,9 @@ post '/api/submit' ("title","news_id",:url,:text) do
   if $r.ttl("user:#{$user['id']}:submitted_recently") > 0 {
     return
   }
+  if $r.get("url:"+url)) {
+    return
+  }
   news_id = $r.incr("news.count")
   $r.hmset("news:#{news_id}",
         "id", news_id,
@@ -767,6 +770,7 @@ func DeleteNewsTransformed(users int64, auths int64, timeline int64,
 // https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L832
 /*
 post '/api/votenews' ("news_id","vote_type") do
+  user = r.hgetall("user:#{user_id}")
   //news = get_news_by_id(news_id)
     news = $r.hgetall("news:#{nid}")
     if !news {
@@ -781,14 +785,15 @@ post '/api/votenews' ("news_id","vote_type") do
       $r.zscore("news.down:#{n["id"]}",$user["id"])
     }
   //
-  if !news {
+  if !news || !user {
     return false
   }
   if $r.zscore("news.up:#{news_id}",user_id) or
        $r.zscore("news.down:#{news_id}",user_id) {
          return
   }
-  karma = $r.hget(userkey,"karma")
+  
+  karma = $r.hget("user:#{user_id}","karma")
   if karma > val {
     return false
   }
@@ -814,38 +819,22 @@ post '/api/votenews' ("news_id","vote_type") do
 end
 */
 
-func VoteNewsSequential(users int64, auths int64, timeline int64,
+func VoteNewsSequential(news_id int64, user_id int64, vote_type int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	// $userid = $r->hget("users",gt("u"))
-	client.AppRequest([]state.Operation{state.GET}, []int64{users})
-
-	// Profile makes call to isLoggedIn()
-	// if ($userid = $r->hget("auths",$authcookie)) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
-	// if ($r->hget("user:$userid","auth") != $authcookie)
-	user_id := int64(zipf.Uint64())
 	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-	// isLoggedIn makes call to loadUserInfo()
-	// $User['username'] = $r->hget("user:$userid","username");
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+  get_news_by_idSequential(news_id, client, zipf)
 
-	following := int64(zipf.Uint64())
-	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
-	client.AppRequest([]state.Operation{state.GET}, []int64{following})
 
-	// Profile makes call to showUserPostsWithPagination()
-	// showUserPostsWithPagination() makes call to showUserPosts()
-	// $posts = $r->lrange("timeline",0,50);
-	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
-	posts := 10
-	for i := 0; i < posts; i++ {
-		// showUserPosts() makes call to showPost()
-		// $post = $r->hgetall("post:$id");
-		postid := int64(zipf.Uint64())
-		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
-		// $username = $r->hget("user:$userid","username");
-		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-	}
+	newsup := int64(zipf.Uint64())
+	newsdown := int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.GET}, []int64{newsup})
+  client.AppRequest([]state.Operation{state.GET}, []int64{newsdown})
+
+  client.AppRequest([]state.Operation{state.GET}, []int64{n})
+
+  client.AppRequest([]state.Operation{state.GET}, []int64{newsdown})
+  client.AppRequest([]state.Operation{state.GET}, []int64{newsdown})
+
 }
 
 func VoteNewsTransformed(users int64, auths int64, timeline int64,
