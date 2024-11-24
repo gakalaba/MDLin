@@ -821,60 +821,48 @@ end
 
 func VoteNewsSequential(news_id int64, user_id int64, vote_type int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-  get_news_by_idSequential(news_id, client, zipf)
 
+  client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+  keys := get_news_by_idSequential(news_id, user_id, false, client, zipf)
 
-	newsup := int64(zipf.Uint64())
-	newsdown := int64(zipf.Uint64())
+	newsup := keys[0]
+	newsdown := keys[1]
   client.AppRequest([]state.Operation{state.GET}, []int64{newsup})
   client.AppRequest([]state.Operation{state.GET}, []int64{newsdown})
 
-  client.AppRequest([]state.Operation{state.GET}, []int64{n})
+  client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 
-  client.AppRequest([]state.Operation{state.GET}, []int64{newsdown})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{vote_type})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{news_id})
+
+  saveduser := int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.PUT}, []int64{saveduser})
+
+  client.AppRequest([]state.Operation{state.GET}, []int64{newsup})
   client.AppRequest([]state.Operation{state.GET}, []int64{newsdown})
 
+  client.AppRequest([]state.Operation{state.PUT}, []int64{news_id})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{NewsTop})
+
+  client.AppRequest([]state.Operation{state.PUT}, []int64{user_id})
 }
 
-func VoteNewsTransformed(users int64, auths int64, timeline int64,
+func VoteNewsTransformed(news_id int64, user_id int64, vote_type int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	// $userid = $r->hget("users",gt("u"))
-	client.AppRequest([]state.Operation{state.GET}, []int64{users})
 
-	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
-	// if ($userid = $r->hget("auths",$authcookie)) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
-	// if ($r->hget("user:$userid","auth") != $authcookie)
-	user_id := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-	// isLoggedIn makes call to loadUserInfo()
-	// $User['username'] = $r->hget("user:$userid","username");
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+  // Passing in first op into get_news_by_id, to group them together
+  keys := get_news_by_idTransformed(news_id, user_id, false, client, zipf, []state.Operation{state.GET}, []int64{user_id}, nil, nil)
 
-	following := int64(zipf.Uint64())
-	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
-	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+	newsup := keys[0]
+	newsdown := keys[1]
+  client.AppRequest([]state.Operation{state.GET, state.GET}, []int64{newsup, newsdown})
 
-	// Profile makes call to showUserPostsWithPagination()
-	// showUserPostsWithPagination() makes call to showUserPosts()
-	// $posts = $r->lrange("timeline",0,50);
-	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
-	posts := 10
-	var opTypes []state.Operation
-        var keys []int64
-	for i := 0; i < posts; i++ {
-		// showUserPosts() makes call to showPost()
-		// $post = $r->hgetall("post:$id");
-		postid := int64(zipf.Uint64())
-		// $username = $r->hget("user:$userid","username");
-		keys = append(keys, postid)
-		keys = append(keys, user_id)
-		opTypes = append(opTypes, state.GET)
-		opTypes = append(opTypes, state.GET)
-	}
-	client.AppRequest(opTypes, keys)
+  client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 
+  saveduser := int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT, state.GET, state.GET}, []int64{vote_type, news_id, saveduser, newsup, newsdown})
+
+  client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT}, []int64{news_id, NewsTop, user_id})
 }
 
 //************************************************************//
@@ -1518,8 +1506,10 @@ def get_news_by_id(news_ids) {
   if !news {
     return []
   }
-  $r.hmset("news:#{news["id"]}","rank",real_rank)
-  $r.zadd("news.top",real_rank,news["id"])
+  if opt {
+    $r.hmset("news:#{news["id"]}","rank",real_rank)
+    $r.zadd("news.top",real_rank,news["id"])
+  }
   $r.hget("user:#{news["user_id"]}","username")
   
   if $user { //$user is a global variable!
@@ -1528,35 +1518,41 @@ def get_news_by_id(news_ids) {
   }
 }
 */
-func get_news_by_idSequential(newsid int64,
-		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-  client.AppRequest([]state.Operation{state.GET}, []int64{newsid})
-  news = int64(zipf.Uint64())
-  newstop = int64(zipf.Uint64())
-  user_n = int64(zipf.Uint64())
+func get_news_by_idSequential(news_id int64, user_id int64, opt bool,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator) []int64 {
+  client.AppRequest([]state.Operation{state.GET}, []int64{news_id})
   newsup = int64(zipf.Uint64())
   newsdown = int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT}, []int64{news})
-	client.AppRequest([]state.Operation{state.PUT}, []int64{newstop})
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_n})
+	if opt {
+    client.AppRequest([]state.Operation{state.PUT}, []int64{news_id})
+    client.AppRequest([]state.Operation{state.PUT}, []int64{NewsTop})
+  }
+  client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 	client.AppRequest([]state.Operation{state.GET}, []int64{newsup})
 	client.AppRequest([]state.Operation{state.GET}, []int64{newsdown})
+
+  return []int64{newsup, newsdown}
 }
 
-func get_news_by_idTransformed(newsid int64,
-		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+func get_news_by_idTransformed(news_id int64, user_id int64, opt bool,
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator,
+    opsbefore []state.Operation, keysbefore []int64,
+    opsafter []state.Operation, keysafter []int64) []int64 {
   /*var opTypes []state.Operation
   var keys []int64
   keys = append(keys, user_id)
 	opTypes = append(opTypes, state.GET)*/
-  client.AppRequest([]state.Operation{state.GET}, []int64{newsid})
-  news = int64(zipf.Uint64())
-  newstop = int64(zipf.Uint64())
-  user_n = int64(zipf.Uint64())
+  client.AppRequest(append(opsbefore, []state.Operation{state.GET}), append(keysbefore, []int64{news_id}))
   newsup = int64(zipf.Uint64())
   newsdown = int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT, state.PUT, state.GET, state.GET, state.GET},
-                        []int64{news, newstop, user_n, newsup, newsdown})
+	if opt {
+    client.AppRequest(append([]state.Operation{state.PUT, state.PUT, state.GET, state.GET, state.GET}, opsafter),
+                        append([]int64{news_id, NewsTop, user_id, newsup, newsdown}, keysafter))
+  } else {
+    client.AppRequest(append([]state.Operation{state.GET, state.GET, state.GET}, opsafter),
+                        append([]int64{user_id, newsup, newsdown}, keysafter))
+  }
+  return []int64{newsup, newsdown}
 }
 
 func catchKill(interrupt chan os.Signal) {
