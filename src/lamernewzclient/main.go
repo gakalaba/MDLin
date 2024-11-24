@@ -859,8 +859,9 @@ func VoteNewsTransformed(news_id int64, user_id int64, vote_type int64,
 
   client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 
+  client.AppRequest([]state.Operation{state.PUT}, []int64{vote_type})
   saveduser := int64(zipf.Uint64())
-  client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT, state.GET, state.GET}, []int64{vote_type, news_id, saveduser, newsup, newsdown})
+  client.AppRequest([]state.Operation{state.PUT, state.PUT, state.GET, state.GET}, []int64{news_id, saveduser, newsup, newsdown})
 
   client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT}, []int64{news_id, NewsTop, user_id})
 }
