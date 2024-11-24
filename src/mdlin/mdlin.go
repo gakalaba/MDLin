@@ -484,7 +484,7 @@ func (r *Replica) processCCEntry(cmds []state.Command, tags []mdlinproto.Tag) {
   // Add to ordered log
   instNo := r.addEntryToOrderedLog(r.crtInstance, cmds, ts_chain, proposals, ACCEPTED)
   r.crtInstance++
-  // Add to seen map
+  // Add requests to seen map when they have possible successors
   if (proposals[0].Timestamp == 1) {
     dlog.Printf("Adding t = %v to seen!\n", tags[0])
     r.seen[tags[0]] = r.instanceSpace[instNo]

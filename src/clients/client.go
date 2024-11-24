@@ -40,13 +40,14 @@ type Client interface {
 	CompareAndSwap(key int64, oldValue int64,
 		newValue int64) (bool, int64)
 	AppRequest(opTypes []state.Operation, keys []int64) (bool, int64)
-	Finish()
+  Finish()
 	ConnectToCoordinator()
 	// ConnectToReplicas()
 	// DetermineLeader()
 	// DetermineReplicaPings()
 	// DelayRPC(replica int, opCode uint8)
 }
+
 
 type AbstractClient struct {
 	id                 int32
