@@ -838,78 +838,41 @@ post '/api/postcomment' ("news_id","comment_id","parent_id",:comment) do
 end
 */
 
-func PostCommentSequential(users int64, auths int64, timeline int64,
+func PostCommentSequential(news_id int64, user_id int64, timeline int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	// $userid = $r->hget("users",gt("u"))
-	client.AppRequest([]state.Operation{state.GET}, []int64{users})
 
-	// Profile makes call to isLoggedIn()
-	// if ($userid = $r->hget("auths",$authcookie)) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
-	// if ($r->hget("user:$userid","auth") != $authcookie)
-	user_id := int64(zipf.Uint64())
+  get_news_by_idSequential(news_id, user_id, false, client, zipf)
+
+  threadkey := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{threadkey})
+
+  client.AppRequest([]state.Operation{state.GET}, []int64{threadkey})
+	client.AppRequest([]state.Operation{state.PUT}, []int64{threadkey})
+	client.AppRequest([]state.Operation{state.PUT}, []int64{threadkey})
+
+  client.AppRequest([]state.Operation{state.PUT}, []int64{news_id})
+  user_comments := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.PUT}, []int64{user_comments})
 	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-	// isLoggedIn makes call to loadUserInfo()
-	// $User['username'] = $r->hget("user:$userid","username");
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-
-	following := int64(zipf.Uint64())
-	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
-	client.AppRequest([]state.Operation{state.GET}, []int64{following})
-
-	// Profile makes call to showUserPostsWithPagination()
-	// showUserPostsWithPagination() makes call to showUserPosts()
-	// $posts = $r->lrange("timeline",0,50);
-	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
-	posts := 10
-	for i := 0; i < posts; i++ {
-		// showUserPosts() makes call to showPost()
-		// $post = $r->hgetall("post:$id");
-		postid := int64(zipf.Uint64())
-		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
-		// $username = $r->hget("user:$userid","username");
-		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-	}
+	client.AppRequest([]state.Operation{state.PUT}, []int64{user_id})
 }
 
-func PostCommentTransformed(users int64, auths int64, timeline int64,
+func PostCommentTransformed(news_id int64, user_id int64, timeline int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	// $userid = $r->hget("users",gt("u"))
-	client.AppRequest([]state.Operation{state.GET}, []int64{users})
 
-	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
-	// if ($userid = $r->hget("auths",$authcookie)) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
-	// if ($r->hget("user:$userid","auth") != $authcookie)
-	user_id := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-	// isLoggedIn makes call to loadUserInfo()
-	// $User['username'] = $r->hget("user:$userid","username");
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
+  get_news_by_idTransformed(news_id, user_id, false, client, zipf, nil, nil, nil, nil)
 
-	following := int64(zipf.Uint64())
-	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
-	client.AppRequest([]state.Operation{state.GET}, []int64{following})
+  threadkey := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{threadkey})
 
-	// Profile makes call to showUserPostsWithPagination()
-	// showUserPostsWithPagination() makes call to showUserPosts()
-	// $posts = $r->lrange("timeline",0,50);
-	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
-	posts := 10
-	var opTypes []state.Operation
-        var keys []int64
-	for i := 0; i < posts; i++ {
-		// showUserPosts() makes call to showPost()
-		// $post = $r->hgetall("post:$id");
-		postid := int64(zipf.Uint64())
-		// $username = $r->hget("user:$userid","username");
-		keys = append(keys, postid)
-		keys = append(keys, user_id)
-		opTypes = append(opTypes, state.GET)
-		opTypes = append(opTypes, state.GET)
-	}
-	client.AppRequest(opTypes, keys)
+  client.AppRequest([]state.Operation{state.GET}, []int64{threadkey})
+	client.AppRequest([]state.Operation{state.PUT}, []int64{threadkey})
+	client.AppRequest([]state.Operation{state.PUT}, []int64{threadkey})
+
+  user_comments := int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.PUT, state.PUT, state.GET, state.PUT}, []int64{news_id, user_comments, user_id, user_id})
 }
+
 
 //************************************************************//
 //***************** Lamernewz DeleteComment ********************//
