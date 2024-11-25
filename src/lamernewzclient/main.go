@@ -641,7 +641,7 @@ func EditNewsTransformed(news_id int64, user_id int64, url int64,
 //************************************************************//
 // Based on https://github.com/antirez/lamernews/blob/d08bf6baa81216805561f3e5500e43a9dc32c7df/app.rb#L814
 /*
-post '/api/delnews' (news_id) do
+post '/api/delnews' (news_id, user_id) do
   //news = get_news_by_id(news_id)
     news = $r.hgetall("news:#{nid}")
     if !news {
@@ -662,78 +662,20 @@ post '/api/delnews' (news_id) do
 end
 */
 
-func DeleteNewsSequential(users int64, auths int64, timeline int64,
+func DeleteNewsSequential(user_id int64, news_id int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	// $userid = $r->hget("users",gt("u"))
-	client.AppRequest([]state.Operation{state.GET}, []int64{users})
 
-	// Profile makes call to isLoggedIn()
-	// if ($userid = $r->hget("auths",$authcookie)) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
-	// if ($r->hget("user:$userid","auth") != $authcookie)
-	user_id := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-	// isLoggedIn makes call to loadUserInfo()
-	// $User['username'] = $r->hget("user:$userid","username");
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-
-	following := int64(zipf.Uint64())
-	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
-	client.AppRequest([]state.Operation{state.GET}, []int64{following})
-
-	// Profile makes call to showUserPostsWithPagination()
-	// showUserPostsWithPagination() makes call to showUserPosts()
-	// $posts = $r->lrange("timeline",0,50);
-	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
-	posts := 10
-	for i := 0; i < posts; i++ {
-		// showUserPosts() makes call to showPost()
-		// $post = $r->hgetall("post:$id");
-		postid := int64(zipf.Uint64())
-		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
-		// $username = $r->hget("user:$userid","username");
-		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-	}
+	get_news_by_idSequential(news_id, user_id, false, client, zipf)
+  client.AppRequest([]state.Operation{state.PUT}, []int64{news_id})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{NewsTop})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{NewsCron})
 }
 
-func DeleteNewsTransformed(users int64, auths int64, timeline int64,
+func DeleteNewsSequential(user_id int64, news_id int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	// $userid = $r->hget("users",gt("u"))
-	client.AppRequest([]state.Operation{state.GET}, []int64{users})
 
-	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
-	// if ($userid = $r->hget("auths",$authcookie)) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
-	// if ($r->hget("user:$userid","auth") != $authcookie)
-	user_id := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-	// isLoggedIn makes call to loadUserInfo()
-	// $User['username'] = $r->hget("user:$userid","username");
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
-
-	following := int64(zipf.Uint64())
-	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
-	client.AppRequest([]state.Operation{state.GET}, []int64{following})
-
-	// Profile makes call to showUserPostsWithPagination()
-	// showUserPostsWithPagination() makes call to showUserPosts()
-	// $posts = $r->lrange("timeline",0,50);
-	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
-	posts := 10
-	var opTypes []state.Operation
-        var keys []int64
-	for i := 0; i < posts; i++ {
-		// showUserPosts() makes call to showPost()
-		// $post = $r->hgetall("post:$id");
-		postid := int64(zipf.Uint64())
-		// $username = $r->hget("user:$userid","username");
-		keys = append(keys, postid)
-		keys = append(keys, user_id)
-		opTypes = append(opTypes, state.GET)
-		opTypes = append(opTypes, state.GET)
-	}
-	client.AppRequest(opTypes, keys)
-
+	get_news_by_idTransformed(news_id, user_id, false, client, zipf, nil, nil, nil, nil)
+  client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT}, []int64{news_id, NewsTop, NewsCron})
 }
 
 //************************************************************//
