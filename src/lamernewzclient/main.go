@@ -537,48 +537,51 @@ post '/api/submit' ("title","news_id",:url,:text) do
 end
 */
 
-func InsertNewsSequential(users int64, users_by_time int64, next_user_id int64,
-		auths int64, auth int64, client clients.Client,
-		zipf *zipfgenerator.ZipfGenerator) {
-	// if ($r->hget("users",$username))
-	client.AppRequest([]state.Operation{state.GET}, []int64{users})
+func InsertNewsSequential(user_id int64, url int64,
+    client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 
-	// $userid = $r->incr("next_user_id");
-	client.AppRequest([]state.Operation{state.CAS}, []int64{next_user_id})
+  submitted_recently := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{submitted_recently})
 
-	// $r->hset("users",$username,$userid);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{users})
+  client.AppRequest([]state.Operation{state.GET}, []int64{url})
 
-	// $r->hmset("user:$userid", "username",$username, "password",$password, "auth",$authsecret);
-	userid := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT}, []int64{userid})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{NewsCount})
 
-	// $r->hset("auths",$authsecret,$userid);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{auths})
+  news_id := int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.PUT}, []int64{news_id})
 
-	// $r->zadd("users_by_time",time(),$username);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{users_by_time})
+  // news_id int64, user_id int64, vote_type int64
+  vote_type := int64(zipf.Uint64())
+  VoteNewsSequential(news_id, user_id, vote_type)
 
-	// setcookie("auth",$authsecret,time()+3600*24*365);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{auth})
+  user_posted := int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.PUT}, []int64{user_posted})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{NewsCron})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{NewsTop})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{url})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{user_id})
 }
 
-func InsertNewsTransformed(users int64, users_by_time int64, next_user_id int64,
-		auths int64, auth int64, client clients.Client,
-		zipf *zipfgenerator.ZipfGenerator) {
-	// if ($r->hget("users",$username))
-	// $userid = $r->incr("next_user_id");
-	client.AppRequest([]state.Operation{state.GET, state.CAS}, []int64{users, next_user_id})
+func InsertNewsTransformed(user_id int64, url int64,
+    client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 
-	// $r->hset("users",$username,$userid);
-	// $r->hmset("user:$userid", "username",$username, "password",$password, "auth",$authsecret);
-	// $r->hset("auths",$authsecret,$userid);
-	// $r->zadd("users_by_time",time(),$username);
-	// setcookie("auth",$authsecret,time()+3600*24*365);
-	userid := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT, state.PUT, state.PUT},
-						[]int64{users, userid, auths, users_by_time, auth})
+  submitted_recently := int64(zipf.Uint64())
+	client.AppRequest([]state.Operation{state.GET}, []int64{submitted_recently})
+
+  client.AppRequest([]state.Operation{state.GET}, []int64{url})
+
+  client.AppRequest([]state.Operation{state.PUT}, []int64{NewsCount})
+
+  // news_id int64, user_id int64, vote_type int64
+  news_id := int64(zipf.Uint64())
+  vote_type := int64(zipf.Uint64())
+  user_posted := int64(zipf.Uint64())
+  VoteNewsTransformed(news_id, user_id, vote_type, client, zipf, []state.Operation{state.PUT}, []int64{news_id},
+                                                     []state.Operation{state.PUT, state.PUT}, []int64{user_posted, NewsCron})
+
+  client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT}, []int64{NewsTop, url, user_id})
 }
+
 //***********************************************************//
 //******************* Lamernewz EditNews ********************//
 //***********************************************************//
@@ -848,10 +851,15 @@ func VoteNewsSequential(news_id int64, user_id int64, vote_type int64,
 }
 
 func VoteNewsTransformed(news_id int64, user_id int64, vote_type int64,
-		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+		client clients.Client, zipf *zipfgenerator.ZipfGenerator,
+    opsbefore []state.Operation, keysbefore []int64,
+    opsafter []state.Operation, keysafter []int64) {
 
   // Passing in first op into get_news_by_id, to group them together
-  keys := get_news_by_idTransformed(news_id, user_id, false, client, zipf, []state.Operation{state.GET}, []int64{user_id}, nil, nil)
+  keys := get_news_by_idTransformed(news_id, user_id, false, client, zipf,
+            append(opsbefore, []state.Operation{state.GET}),
+            append(keysbefore, []int64{user_id}),
+            nil, nil)
 
 	newsup := keys[0]
 	newsdown := keys[1]
@@ -863,7 +871,8 @@ func VoteNewsTransformed(news_id int64, user_id int64, vote_type int64,
   saveduser := int64(zipf.Uint64())
   client.AppRequest([]state.Operation{state.PUT, state.PUT, state.GET, state.GET}, []int64{news_id, saveduser, newsup, newsdown})
 
-  client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT}, []int64{news_id, NewsTop, user_id})
+  client.AppRequest(append([]state.Operation{state.PUT, state.PUT, state.PUT}, opsafter),
+                              append([]int64{news_id, NewsTop, user_id}, keysafter))
 }
 
 //************************************************************//
