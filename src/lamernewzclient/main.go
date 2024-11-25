@@ -618,53 +618,22 @@ post '/api/submit' ("title","news_id",:url,:text) do
 end
 */
 
-
-
-func EditNewsSequential(users_by_time int64, timeline int64,
+func EditNewsSequential(news_id int64, user_id int64, url int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	// showTimeline makes call to showLastUsers()
-	// $users = $r->zrevrange("users_by_time",0,9);
-	client.AppRequest([]state.Operation{state.GET}, []int64{users_by_time})
-
-	// showTimeline makes call to showUserPosts()
-	// $posts = $r->lrange("timeline",0,50);
-	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
-	posts := 50
-	for i := 0; i < posts; i++ {
-		// showUserPosts() makes call to showPost()
-		// $post = $r->hgetall("post:$id");
-		postid := int64(zipf.Uint64())
-		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
-		// $username = $r->hget("user:$userid","username");
-		userid := int64(zipf.Uint64())
-		client.AppRequest([]state.Operation{state.GET}, []int64{userid})
-	}
+  get_news_by_idSequential(news_id, user_id, false, client, zipf)
+  client.AppRequest([]state.Operation{state.GET}, []int64{url})
+  oldurl := int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.PUT}, []int64{oldurl})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{url})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{news_id})
 }
 
-func EditNewsTransformed(users_by_time int64, timeline int64,
+func EditNewsTransformed(news_id int64, user_id int64, url int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
-	// showTimeline makes call to showLastUsers()
-	// $users = $r->zrevrange("users_by_time",0,9);
-	client.AppRequest([]state.Operation{state.GET}, []int64{users_by_time})
-
-	// showTimeline makes call to showUserPosts()
-	// $posts = $r->lrange("timeline",0,50);
-	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
-	posts := 50
-	var opTypes []state.Operation
-        var keys []int64
-	for i := 0; i < posts; i++ {
-		// showUserPosts() makes call to showPost()
-		// $post = $r->hgetall("post:$id");
-		postid := int64(zipf.Uint64())
-		// $username = $r->hget("user:$userid","username");
-		userid := int64(zipf.Uint64())
-		keys = append(keys, postid)
-		keys = append(keys, userid)
-		opTypes = append(opTypes, state.GET)
-		opTypes = append(opTypes, state.GET)
-	}
-	client.AppRequest(opTypes, keys)
+  get_news_by_idTransformed(news_id, user_id, false, client, zipf, nil, nil, nil, nil)
+  client.AppRequest([]state.Operation{state.GET}, []int64{url})
+  oldurl := int64(zipf.Uint64())
+  client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT}, []int64{oldurl, url, news_id})
 }
 
 //************************************************************//
