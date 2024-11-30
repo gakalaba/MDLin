@@ -217,7 +217,7 @@ func Max(a int64, b int64) int64 {
 	}
 }
 
-func main() {
+func poop() {
 	flag.Parse()
 
 
@@ -275,7 +275,7 @@ func main() {
 
 
 
-func poop() {
+func main() {
 	flag.Parse()
 
 
@@ -321,45 +321,35 @@ func poop() {
 	go client.StartAsynchReadReplies(doneChan, resultChan)
 	log.Printf("starting grafana test!")
 	for int(currRuntime.Seconds()) < *expLength {
-		/*if *randSleep > 0 {
-			time.Sleep(time.Duration(r.Intn(*randSleep * 1e6))) // randSleep ms
-		}*/
 
-		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
-		//before := time.Now()
+		delayBetweenRequests(50)
 		client.OpenAppRequest(state.PUT, int64(4))
 
-		//after := time.Now()
 
-		//for paxos:
-		//count++
 		sentcount++
-		//dlog.Printf("AppRequests attempted: %d\n", count)
-		//dlog.Printf("AppRequests attempted: %d at time %d\n", count, time.Now().UnixMilli())
 
-		/*
-		for paxos:
-		currInt := int(currRuntime.Seconds())
-		if *rampUp <= currInt && currInt < *expLength-*rampDown {
-			lat := int64(after.Sub(before).Nanoseconds())
-			fmt.Printf("%s,%d,%d,%d\n", opString, lat, 0, count)
-			//fmt.Printf("%s,%d,%d,%d\n", retwisType, lat, 0, count)
-
-		}*/
 		now = time.Now()
 		currRuntime = now.Sub(start)
 	}
 	log.Printf("TEST DONE")
 	numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
 	log.Printf("numReplies pulled out = %d, highest command ID returned = %d", numReplies, count)
-	log.Printf("Total Attempted Logging of App Events: %d\n", sentcount)
+	log.Printf("Total Attempted Logging of App Events (MP Completed): %d\n", sentcount)
 	log.Printf("Total Completed Logging of App Events: %d\n", count)
 	log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
 	log.Printf("Total Log Tput: %d\n", (count/int(currRuntime.Seconds())))
+	log.Printf("Total Log Tput (MP): %d\n", (int(sentcount)/int(currRuntime.Seconds())))
 	client.Finish()
 }
 
-
+func delayBetweenRequests(ns int64) {
+	start := time.Now()
+	for true {
+		if time.Now().Sub(start).Nanoseconds() >= ns {
+			return
+		}
+	}
+}
 
 //***********************************************************//
 //********************** Event Logging **********************//
