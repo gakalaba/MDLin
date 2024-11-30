@@ -258,7 +258,7 @@ func main() {
 
 
 
-  lamernewzTypes := [12]string{"login", "logout", "reset_password", "create_account", "submit_news", "delete_news", "vote_news", "post_comment", "update_profile", "vote_comment", "get_news", "get_comments"}
+  lamernewzTypes := [12]string{"Login", "Logout", "ResetPassword", "CreateAccount", "UpdateProfile", "InsertNews", "EditNews", "DeleteNews", "VoteNews", "PostComment", "VoteComment", "GetNews", "GetComments"}
 	selector := 0
 
 	start := time.Now()
@@ -275,37 +275,54 @@ func main() {
 		if (opType < 2) {
 			// Login 2%
 			selector = 0
-			//dlog.Printf("Client %v about to issue Login at time %v\n", *clientId, time.Now().UnixMilli())
 			LoginTransformed(users, auth, client, zipf)
 		} else if (opType < 4) {
 			// Logout 2%
 			selector = 1
-			//dlog.Printf("Client %v about to issue Logout at time %v\n", *clientId, time.Now().UnixMilli())
 			LogoutTransformed(auths, client, zipf)
 		} else if (opType < 5) {
-			// Register 1%
+			// ResetPassword 1%
 			selector = 2
-			//dlog.Printf("Client %v about to issue Register at time %v\n", *clientId, time.Now().UnixMilli())
-			RegisterTransformed(users, users_by_time, next_user_id, auths, auth, client, zipf)
-		} else if (opType < 15) {
-			// Post 10%
+			ResetPasswordTransformed(users, users_by_time, next_user_id, auths, auth, client, zipf)
+		} else if (opType < 6) {
+			// CreateAccount 1%
 			selector = 3
-			//dlog.Printf("Client %v about to issue Post at time %v\n", *clientId, time.Now().UnixMilli())
-			PostTransformed(post_id, global_timeline, next_post_id, client, zipf)
-		} else if (opType < 35) {
-			// Follow 20%
+			CreateAccountTransformed(post_id, global_timeline, next_post_id, client, zipf)
+		} else if (opType < 8) {
+			// UpdateProfile 2%
 			selector = 4
-			//dlog.Printf("Client %v about to issue Follow at time %v\n", *clientId, time.Now().UnixMilli())
-			FollowTransformed(auths, client, zipf)
-		} else if (opType < 85) {
-			// ShowTimeline 50%
+			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
+		} else if (opType < 14) {
+			// InsertNews 6%
 			selector = 5
-			//dlog.Printf("Client %v about to issue ShowTimeline at time %v\n", *clientId, time.Now().UnixMilli())
+			FollowTransformed(auths, client, zipf)
+		} else if (opType < 18) {
+			// EditNews 4%
+			selector = 6
+			EditNews()
+		} else if (opType < 20) {
+			// DeleteNews 2%
+			selector = 7
+			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
+		} else if (opType < 35) {
+			// VoteNews 15%
+			selector = 8
+			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
+		} else if (opType < 40) {
+			// PostComment 5%
+			selector = 9
+			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
+		} else if (opType < 50) {
+			// VoteComment 10%
+			selector = 10
+			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
+		} else if (opType < 75) {
+			// GetNews 25%
+			selector = 11
 			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
 		} else {
-			// Profile 15%
-			selector = 6
-			//dlog.Printf("Client %v about to issue Profile at time %v\n", *clientId, time.Now().UnixMilli())
+			// GetComments 25%
+			selector = 12
 			ProfileTransformed(users, auths, global_timeline, client, zipf)
 		}
 
