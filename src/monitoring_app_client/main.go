@@ -320,9 +320,11 @@ func main() {
 	//opString := "app"
 	go client.StartAsynchReadReplies(doneChan, resultChan)
 	log.Printf("starting grafana test!")
+	ns := int64(400000)
 	for int(currRuntime.Seconds()) < *expLength {
 
-		delayBetweenRequests(50)
+		delay_start := time.Now()
+		// delayBetweenRequests(200000)
 		client.OpenAppRequest(state.PUT, int64(4))
 
 
@@ -330,6 +332,7 @@ func main() {
 
 		now = time.Now()
 		currRuntime = now.Sub(start)
+		for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
 	}
 	log.Printf("TEST DONE")
 	numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
