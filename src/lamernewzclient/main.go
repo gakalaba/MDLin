@@ -207,6 +207,7 @@ func Max(a int64, b int64) int64 {
 		return b
 	}
 }
+var TheNewsTop int64
 
 func main() {
 	flag.Parse()
@@ -244,21 +245,19 @@ func main() {
 	}(client)
 
 	// Add these keys in the store 
-	global_timeline := int64(zipf.Uint64())
-	next_post_id := int64(zipf.Uint64())
-	next_user_id := int64(zipf.Uint64())
-	auths := int64(zipf.Uint64())
-	auth := int64(zipf.Uint64())
-	users := int64(zipf.Uint64())
-	users_by_time := int64(zipf.Uint64())
-	ops := []state.Operation{state.PUT, state.PUT, state.PUT, state.PUT, state.PUT, state.PUT, state.PUT}
-	appState := []int64{global_timeline, next_post_id, next_user_id, auths, auth, users, users_by_time}
-	client.AppRequest(ops, appState)
-  post_id := int64(0)
+	username := int64(zipf.Uint64())
+	user_id := int64(zipf.Uint64())
+	NewsCount := int64(zipf.Uint64())
+	NewsCron := int64(zipf.Uint64())
+	TheNewsTop = int64(zipf.Uint64())
+
+	//ops := []state.Operation{state.PUT, state.PUT, state.PUT, state.PUT, state.PUT, state.PUT, state.PUT}
+	//appState := []int64{ users_by_time}
+	//client.AppRequest(ops, appState)
 
 
 
-  lamernewzTypes := [12]string{"Login", "Logout", "ResetPassword", "CreateAccount", "UpdateProfile", "InsertNews", "EditNews", "DeleteNews", "VoteNews", "PostComment", "VoteComment", "GetNews", "GetComments"}
+  lamernewzTypes := [13]string{"Login", "Logout", "ResetPassword", "CreateAccount", "UpdateProfile", "InsertNews", "EditNews", "DeleteNews", "VoteNews", "PostComment", "VoteComment", "GetNews", "GetComments"}
 	selector := 0
 
 	start := time.Now()
@@ -275,59 +274,58 @@ func main() {
 		if (opType < 2) {
 			// Login 2%
 			selector = 0
-			LoginTransformed(users, auth, client, zipf)
+			LoginTransformed(username, client, zipf)
 		} else if (opType < 4) {
 			// Logout 2%
 			selector = 1
-			LogoutTransformed(auths, client, zipf)
+			LogoutTransformed(client, zipf)
 		} else if (opType < 5) {
 			// ResetPassword 1%
 			selector = 2
-			ResetPasswordTransformed(users, users_by_time, next_user_id, auths, auth, client, zipf)
+			ResetPasswordTransformed(username, client, zipf)
 		} else if (opType < 6) {
 			// CreateAccount 1%
 			selector = 3
-			CreateAccountTransformed(post_id, global_timeline, next_post_id, client, zipf)
+			CreateAccountTransformed(username, client, zipf)
 		} else if (opType < 8) {
 			// UpdateProfile 2%
 			selector = 4
-			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
+			UpdateProfileTransformed(user_id, client, zipf)
 		} else if (opType < 14) {
 			// InsertNews 6%
 			selector = 5
-			FollowTransformed(auths, client, zipf)
+			InsertNewsTransformed(user_id, NewsCount, NewsCron, TheNewsTop, client, zipf)
 		} else if (opType < 18) {
 			// EditNews 4%
 			selector = 6
-			EditNews()
+			EditNewsTransformed(user_id, client, zipf)
 		} else if (opType < 20) {
 			// DeleteNews 2%
 			selector = 7
-			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
+			DeleteNewsTransformed(user_id, TheNewsTop, NewsCron, client, zipf)
 		} else if (opType < 35) {
 			// VoteNews 15%
 			selector = 8
-			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
+			VoteNewsTransformed(user_id, TheNewsTop, client, zipf, nil, nil, nil, nil)
 		} else if (opType < 40) {
 			// PostComment 5%
 			selector = 9
-			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
+			PostCommentTransformed(user_id, client, zipf)
 		} else if (opType < 50) {
 			// VoteComment 10%
 			selector = 10
-			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
+			VoteCommentTransformed(client, zipf)
 		} else if (opType < 75) {
 			// GetNews 25%
 			selector = 11
-			ShowTimelineTransformed(users_by_time, global_timeline, client, zipf)
+			GetLatestNewsTransformed(user_id, NewsCron, client, zipf)
 		} else {
 			// GetComments 25%
 			selector = 12
-			ProfileTransformed(users, auths, global_timeline, client, zipf)
+			GetCommentsTransformed(user_id, client, zipf)
 		}
 
 		after := time.Now()
-		post_id++
                 //dlog.Printf("!!!!POST took %d microseconds\n", int64(after.Sub(before).Microseconds()))
 
 		opString := "app"
@@ -376,14 +374,14 @@ end
 func LoginSequential(username int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	//r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	client.AppRequest([]state.Operation{state.GET}, []int64{username})
-	user_id = int64(zipf.Uint64())
+	user_id := int64(zipf.Uint64())
   client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 }
 
 func LoginTransformed(username int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	//r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	client.AppRequest([]state.Operation{state.GET}, []int64{username})
-	user_id = int64(zipf.Uint64())
+	user_id := int64(zipf.Uint64())
   client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 }
 
@@ -435,7 +433,7 @@ end
 func ResetPasswordSequential(username int64, client clients.Client,
 				zipf *zipfgenerator.ZipfGenerator) {
   client.AppRequest([]state.Operation{state.GET}, []int64{username})
-	user_id = int64(zipf.Uint64())
+  user_id := int64(zipf.Uint64())
   client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
   client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 }
@@ -443,7 +441,7 @@ func ResetPasswordSequential(username int64, client clients.Client,
 func ResetPasswordTransformed(username int64, client clients.Client,
 				zipf *zipfgenerator.ZipfGenerator) {
   client.AppRequest([]state.Operation{state.GET}, []int64{username})
-	user_id = int64(zipf.Uint64())
+  user_id := int64(zipf.Uint64())
   client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
   client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 }
@@ -554,8 +552,8 @@ post '/api/submit' ("title","news_id",:url,:text) do
 end
 */
 
-func InsertNewsSequential(user_id int64, url int64,
-    client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+func InsertNewsSequential(user_id int64, url int64, NewsCount int64,
+    NewsCron int64, NewsTop int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 
   submitted_recently := int64(zipf.Uint64())
 	client.AppRequest([]state.Operation{state.GET}, []int64{submitted_recently})
@@ -569,7 +567,7 @@ func InsertNewsSequential(user_id int64, url int64,
 
   // news_id int64, user_id int64, vote_type int64
   vote_type := int64(zipf.Uint64())
-  VoteNewsSequential(news_id, user_id, vote_type)
+  VoteNewsSequential(news_id, user_id, vote_type, NewsTop, client, zipf)
 
   user_posted := int64(zipf.Uint64())
   client.AppRequest([]state.Operation{state.PUT}, []int64{user_posted})
@@ -579,21 +577,21 @@ func InsertNewsSequential(user_id int64, url int64,
   client.AppRequest([]state.Operation{state.PUT}, []int64{user_id})
 }
 
-func InsertNewsTransformed(user_id int64, url int64,
-    client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+func InsertNewsTransformed(user_id int64, NewsCount int64,
+    NewsCron int64, NewsTop int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 
   submitted_recently := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{submitted_recently})
+  client.AppRequest([]state.Operation{state.GET}, []int64{submitted_recently})
 
+  url := int64(zipf.Uint64())
   client.AppRequest([]state.Operation{state.GET}, []int64{url})
 
   client.AppRequest([]state.Operation{state.PUT}, []int64{NewsCount})
 
   // news_id int64, user_id int64, vote_type int64
-  news_id := int64(zipf.Uint64())
-  vote_type := int64(zipf.Uint64())
   user_posted := int64(zipf.Uint64())
-  VoteNewsTransformed(news_id, user_id, vote_type, client, zipf, []state.Operation{state.PUT}, []int64{news_id},
+  news_id := int64(zipf.Uint64())
+  VoteNewsTransformed(user_id, NewsTop, client, zipf, []state.Operation{state.PUT}, []int64{news_id},
                                                      []state.Operation{state.PUT, state.PUT}, []int64{user_posted, NewsCron})
 
   client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT}, []int64{NewsTop, url, user_id})
@@ -645,8 +643,10 @@ func EditNewsSequential(news_id int64, user_id int64, url int64,
   client.AppRequest([]state.Operation{state.PUT}, []int64{news_id})
 }
 
-func EditNewsTransformed(news_id int64, user_id int64, url int64,
+func EditNewsTransformed(user_id int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+  news_id := int64(zipf.Uint64())
+  url := int64(zipf.Uint64())
   get_news_by_idTransformed(news_id, user_id, false, client, zipf, nil, nil, nil, nil)
   client.AppRequest([]state.Operation{state.GET}, []int64{url})
   oldurl := int64(zipf.Uint64())
@@ -679,7 +679,7 @@ post '/api/delnews' (news_id, user_id) do
 end
 */
 
-func DeleteNewsSequential(user_id int64, news_id int64,
+func DeleteNewsSequential(user_id int64, news_id int64, NewsTop int64, NewsCron int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 
 	get_news_by_idSequential(news_id, user_id, false, client, zipf)
@@ -688,10 +688,11 @@ func DeleteNewsSequential(user_id int64, news_id int64,
   client.AppRequest([]state.Operation{state.PUT}, []int64{NewsCron})
 }
 
-func DeleteNewsSequential(user_id int64, news_id int64,
+func DeleteNewsTransformed(user_id int64, NewsTop int64, NewsCron int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 
-	get_news_by_idTransformed(news_id, user_id, false, client, zipf, nil, nil, nil, nil)
+  news_id := int64(zipf.Uint64())
+  get_news_by_idTransformed(news_id, user_id, false, client, zipf, nil, nil, nil, nil)
   client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT}, []int64{news_id, NewsTop, NewsCron})
 }
 
@@ -750,7 +751,7 @@ post '/api/votenews' ("news_id","vote_type") do
 end
 */
 
-func VoteNewsSequential(news_id int64, user_id int64, vote_type int64,
+func VoteNewsSequential(news_id int64, user_id int64, vote_type int64, NewsTop int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 
   client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
@@ -778,15 +779,17 @@ func VoteNewsSequential(news_id int64, user_id int64, vote_type int64,
   client.AppRequest([]state.Operation{state.PUT}, []int64{user_id})
 }
 
-func VoteNewsTransformed(news_id int64, user_id int64, vote_type int64,
+func VoteNewsTransformed(user_id int64, NewsTop int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator,
     opsbefore []state.Operation, keysbefore []int64,
     opsafter []state.Operation, keysafter []int64) {
 
+  news_id := int64(zipf.Uint64())
+  vote_type := int64(zipf.Uint64())
   // Passing in first op into get_news_by_id, to group them together
   keys := get_news_by_idTransformed(news_id, user_id, false, client, zipf,
-            append(opsbefore, []state.Operation{state.GET}),
-            append(keysbefore, []int64{user_id}),
+            append(opsbefore, state.GET),
+            append(keysbefore, user_id),
             nil, nil)
 
 	newsup := keys[0]
@@ -799,8 +802,8 @@ func VoteNewsTransformed(news_id int64, user_id int64, vote_type int64,
   saveduser := int64(zipf.Uint64())
   client.AppRequest([]state.Operation{state.PUT, state.PUT, state.GET, state.GET}, []int64{news_id, saveduser, newsup, newsdown})
 
-  client.AppRequest(append([]state.Operation{state.PUT, state.PUT, state.PUT}, opsafter),
-                              append([]int64{news_id, NewsTop, user_id}, keysafter))
+  client.AppRequest(append([]state.Operation{state.PUT, state.PUT, state.PUT}, opsafter...),
+                              append([]int64{news_id, NewsTop, user_id}, keysafter...))
 }
 
 //************************************************************//
@@ -874,9 +877,10 @@ func PostCommentSequential(news_id int64, user_id int64,
 	client.AppRequest([]state.Operation{state.PUT}, []int64{user_id})
 }
 
-func PostCommentTransformed(news_id int64, user_id int64,
+func PostCommentTransformed(user_id int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 
+  news_id := int64(zipf.Uint64())
   get_news_by_idTransformed(news_id, user_id, false, client, zipf, nil, nil, nil, nil)
 
   threadkey := int64(zipf.Uint64())
@@ -945,16 +949,16 @@ func DeleteCommentSequential(user_id int64, news_id int64,
   client.AppRequest([]state.Operation{state.PUT}, []int64{news_id})
 }
 
-func DeleteCommentSequential(user_id int64, news_id int64,
+func DeleteCommentTransformed(user_id int64, news_id int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 
   get_news_by_idTransformed(news_id, user_id, false, client, zipf, nil, nil, nil, nil)
 
   threadkey := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{threadkey})
+  client.AppRequest([]state.Operation{state.GET}, []int64{threadkey})
 
   client.AppRequest([]state.Operation{state.GET}, []int64{threadkey})
-	client.AppRequest([]state.Operation{state.PUT}, []int64{threadkey})
+  client.AppRequest([]state.Operation{state.PUT}, []int64{threadkey})
 
   client.AppRequest([]state.Operation{state.PUT}, []int64{news_id})
 }
@@ -1046,7 +1050,7 @@ post '/api/getnews' (start, count) do
 end
 */
 
-func GetNewsSequential(news_id int64,
+func GetNewsSequential(user_id int64, news_id int64, NewsCron int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 
   client.AppRequest([]state.Operation{state.GET}, []int64{NewsCron})
@@ -1055,12 +1059,12 @@ func GetNewsSequential(news_id int64,
   get_news_by_idSequential(news_id, user_id, true, client, zipf)
 }
 
-func GetNewsTransformed(news_id int64,
-		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
+func GetLatestNewsTransformed(user_id int64, NewsCron int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 
   client.AppRequest([]state.Operation{state.GET, state.GET}, []int64{NewsCron, NewsCron})
 
-  get_news_by_idSequential(news_id, user_id, true, client, zipf, nil, nil, nil, nil)
+  news_id := int64(zipf.Uint64())
+  get_news_by_idTransformed(news_id, user_id, true, client, zipf, nil, nil, nil, nil)
 }
 
 //************************************************************//
@@ -1108,9 +1112,10 @@ func GetCommentsSequential(user_id int64, news_id int64,
   client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 }
 
-func GetCommentsTransformed(user_id int64, news_id int64,
+func GetCommentsTransformed(user_id int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 
+  news_id := int64(zipf.Uint64())
   get_news_by_idTransformed(news_id, user_id, true, client, zipf, nil, nil, nil, nil)
 
 	threadkey := int64(zipf.Uint64())
@@ -1158,11 +1163,11 @@ def get_news_by_id(news_ids) {
 func get_news_by_idSequential(news_id int64, user_id int64, opt bool,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) []int64 {
   client.AppRequest([]state.Operation{state.GET}, []int64{news_id})
-  newsup = int64(zipf.Uint64())
-  newsdown = int64(zipf.Uint64())
+  newsup := int64(zipf.Uint64())
+  newsdown := int64(zipf.Uint64())
 	if opt {
     client.AppRequest([]state.Operation{state.PUT}, []int64{news_id})
-    client.AppRequest([]state.Operation{state.PUT}, []int64{NewsTop})
+    client.AppRequest([]state.Operation{state.PUT}, []int64{TheNewsTop})
   }
   client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 	client.AppRequest([]state.Operation{state.GET}, []int64{newsup})
@@ -1179,15 +1184,15 @@ func get_news_by_idTransformed(news_id int64, user_id int64, opt bool,
   var keys []int64
   keys = append(keys, user_id)
 	opTypes = append(opTypes, state.GET)*/
-  client.AppRequest(append(opsbefore, []state.Operation{state.GET}), append(keysbefore, []int64{news_id}))
-  newsup = int64(zipf.Uint64())
-  newsdown = int64(zipf.Uint64())
+  client.AppRequest(append(opsbefore, state.GET), append(keysbefore, news_id))
+  newsup := int64(zipf.Uint64())
+  newsdown := int64(zipf.Uint64())
 	if opt {
-    client.AppRequest(append([]state.Operation{state.PUT, state.PUT, state.GET, state.GET, state.GET}, opsafter),
-                        append([]int64{news_id, NewsTop, user_id, newsup, newsdown}, keysafter))
+    client.AppRequest(append([]state.Operation{state.PUT, state.PUT, state.GET, state.GET, state.GET}, opsafter...),
+                        append([]int64{news_id, TheNewsTop, user_id, newsup, newsdown}, keysafter...))
   } else {
-    client.AppRequest(append([]state.Operation{state.GET, state.GET, state.GET}, opsafter),
-                        append([]int64{user_id, newsup, newsdown}, keysafter))
+    client.AppRequest(append([]state.Operation{state.GET, state.GET, state.GET}, opsafter...),
+                        append([]int64{user_id, newsup, newsdown}, keysafter...))
   }
   return []int64{newsup, newsdown}
 }
