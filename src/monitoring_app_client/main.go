@@ -333,9 +333,9 @@ func main() {
 		currRuntime = now.Sub(start)
 		for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
 	}
-	log.Printf("TEST DONE")
 	//numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
 	count := client.GrabHighestResponse()
+	log.Printf("TEST DONE")
 	//log.Printf("numReplies pulled out = %d, highest command ID returned = %d", numReplies, count)
 	log.Printf("Total Attempted Logging of App Events (MP Completed): %d\n", sentcount)
 	log.Printf("Total Completed Logging of App Events: %d\n", count)

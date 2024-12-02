@@ -114,10 +114,17 @@ func (c *AsynchClient) GrabHighestResponse() int32 {
 }
 
 func (c *AsynchClient) AppResponse(commandId int32) (state.Value, uint8) {
-  c.mapMu.Lock()
-  reply := c.repliesMap[commandId]
-  delete(c.repliesMap, commandId)
-  c.mapMu.Unlock()
+  for true {
+	  c.mapMu.Lock()
+	  reply, OK := c.repliesMap[commandId]
+	  if OK {
+		  delete(c.repliesMap, commandId)
+		  c.mapMu.Unlock()
+		  break
+	  }
+	  c.mapMu.Unlock()
+	  time.Sleep(100000)
+  }
   //go cleanMap(request.CommandId)
   return reply.Value, reply.OK
 }
@@ -141,14 +148,14 @@ func (c *AsynchClient) asynchReadReplies() {
 	for true {
 		reply := (<-c.proposeReplyChan).(*mdlinproto.ProposeReply)
 		c.mu.Lock()
-    if reply.CommandId > c.latestReceived {
-      c.latestReceived = reply.CommandId
-    }
-    c.mu.Unlock()
-    c.mapMu.Lock()
-    c.repliesMap[reply.CommandId] = reply
-    c.mapMu.Unlock()
-  }
+		if reply.CommandId > c.latestReceived {
+			c.latestReceived = reply.CommandId
+		}
+		c.mu.Unlock()
+		c.mapMu.Lock()
+		c.repliesMap[reply.CommandId] = reply
+		c.mapMu.Unlock()
+	}
 }
 
 func (c *AsynchClient) Read(key int64) (bool, int64) {
