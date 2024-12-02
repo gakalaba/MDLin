@@ -104,7 +104,22 @@ func (c *MDLClient) AppResponse(request mdlinproto.Propose) (state.Value, uint8)
   reply := c.repliesMap[request.CommandId]
   delete(c.repliesMap, request.CommandId)
   c.mapMu.Unlock()
+  //go cleanMap(request.CommandId)
   return reply.Value, reply.OK
+}
+
+func (c *MDLClient) cleanMap(bound int32) {
+  var keysToDelete map[int32]true
+  c.mapMu.Lock()
+  for k, _ := range c.repliesMap {
+    if k < bound {
+      keysToDelete[k] = true
+    }
+  }
+
+  for _, k := range keysToDelete {
+    delete(c.repliesMap, k)
+  c.mapMu.Unlock()
 }
 
 func (c *MDLClient) asynchReadReplies() {
