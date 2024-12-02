@@ -64,35 +64,8 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (boo
 	return true, 0
 }
 
-func (c *ProposeClient) OpenAppRequest(opType state.Operation, k int64) {
-	//before := time.Now()
-	//var opTypeStr string
-	//var success bool
-	if opType == state.GET {
-		//opTypeStr = "read"
-		c.Read(k)
-	} else if opType == state.PUT {
-		//opTypeStr = "write"
-		c.Write(k, int64(k))
-	} else {
-		//opTypeStr = "rmw"
-		c.CompareAndSwap(k, int64(k-1), int64(k))
-	}
-	/*if success {
-		return true, 0
-		//lat := after.Sub(before).Nanoseconds()
-		//fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
-	} else {
-		return false, -1
-	}*/
-}
-
-func (c *ProposeClient) StartAsynchReadReplies(doneChan chan bool, resultChan chan int) {
-	return
-}
-
-func (c *ProposeClient) StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int) {
-	return 0,0
+func (c *ProposeClient) AppResponse(request mdlinproto.Propose) (state.Value, uint8) {
+  return 0,0
 }
 
 func (c *ProposeClient) Read(key int64) (bool, int64) {

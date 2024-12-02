@@ -292,16 +292,8 @@ func (c *GryffClient) AppRequest(opTypes []state.Operation, keys []int64) (bool,
 	return true, 0
 }
 
-func (c *GryffClient) OpenAppRequest(opTypes state.Operation, keys int64) {
-	return
-}
-
-func (c *GryffClient) StartAsynchReadReplies(doneChan chan bool, resultChan chan int) {
-	return
-}
-
-func (c *GryffClient) StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int) {
-	return 0,0
+func (c *GryffClient) AppResponse(request mdlinproto.Propose) (state.Value, uint8) {
+  return 0,0
 }
 
 /**

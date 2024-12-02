@@ -100,16 +100,8 @@ func (c *AbdClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 	return true, 0
 }
 
-func (c *AbdClient) OpenAppRequest(opTypes state.Operation, keys int64) {
-	return
-}
-
-func (c *AbdClient) StartAsynchReadReplies(doneChan chan bool, resultChan chan int) {
-	return
-}
-
-func (c *AbdClient) StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int) {
-	return 0,0
+func (c *AbdClient) AppResponse(request mdlinproto.Propose) (state.Value, uint8) {
+  return 0, 0
 }
 
 func (c *AbdClient) Read(key int64) (bool, int64) {

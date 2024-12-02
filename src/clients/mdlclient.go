@@ -9,7 +9,6 @@ import (
 	"mdlinproto"
 	"state"
 	"time"
-  "sync"
 )
 
 type MDLClient struct {
@@ -22,9 +21,6 @@ type MDLClient struct {
 	noLeader         bool
 	seqnos           map[int]int64
 	SSA		 bool
-	latestReceived   int32
-  lastSentTag      mdlinproto.Tag
-  mu               sync.Mutex
 }
 
 func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
@@ -42,8 +38,6 @@ func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 	}
 	pc.propose.PID = int64(id) // only need to set this once per client
 	pc.RegisterRPC(new(mdlinproto.ProposeReply), clientproto.MDL_PROPOSE_REPLY, pc.proposeReplyChan)
-  pc.latestReceived = -1
-  go pc.asynchReadReplies()
 	return pc
 }
 
@@ -66,7 +60,6 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		}
 		// Assign the sequence number and batch dependencies for this request
 		c.setSeqno(c.seqnos[l])
-    c.setCommandId()
     c.setTimestamp(i, n)
 		if i == 0 {
 			c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
@@ -101,9 +94,12 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 	return true, 0
 }
 
-var prevOpenTag mdlinproto.Tag
+func (c *MDLClient) AppResponse(request mdlinproto.Propose) (state.Value, uint8) {
+  return 0,0
+}
 
-func (c *MDLClient) OpenAppRequest(opType state.Operation, key int64) {
+var prevOpenTag mdlinproto.Tag
+func (c *MDLClient) openAppRequest(opType state.Operation, key int64) {
 	//var prevTag mdlinproto.Tag
         // Doing this for the sake of cleaning the r.seen list in implementation
         n := 1
@@ -142,111 +138,44 @@ func (c *MDLClient) OpenAppRequest(opType state.Operation, key int64) {
 	return
 }
 
-
-func (c *MDLClient) AsynchAppRequest(opType state.Operation, key int64) {
-  // TODO how to clear r.seen list in impl?? c.setTimestamp(0, n)
-	l := c.GetShardFromKey(state.Key(key))
-	// Figure out the sequence number
-	if _, ok := c.seqnos[l]; !ok {
-		c.seqnos[l] = 0
-	} else {
-		c.seqnos[l]++
-	}
-	// Assign the sequence number and batch dependencies for this request
-	c.setSeqno(c.seqnos[l])
-  myCommandId := c.setCommandId()
-
-  c.mu.Lock()
-  lastReceived := c.latestReceived
-  c.mu.Unlock()
-
-	// TODO
-	// We should set the predecessor tag based on whether we are concurrent with the previous sent request
-  sendCoord := false
-  if lastReceived == (myCommandId-1) {
-		c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
-	} else {
-    sendCoord = true
-		c.propose.Predecessor = c.lastSentTag
-	}
-
-	if opType == state.GET {
-		c.Read(key)
-	} else if opType == state.PUT {
-		//dlog.Printf("type is Put!")
-		c.Write(key, int64(key))
-	} else {
-		c.CompareAndSwap(key, int64(key-1), int64(key))
-	}
-
-	// TODO
-	// We should only send this if we assigned a predecessor... and it should be whatever our predecessor tag is!
-	if (sendCoord && !c.SSA) {
-		// Send the coordination request
-		// (Keep this after sending the request for now, since
-		// logic in the send function assumes request was send)
-		c.sendCoordinationRequest(c.lastSentTag, l)
-	}
-	lastSentTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
-	return
-}
-
-func (c *MDLClient) AsynchReceiveReply() {
-}
-
-func (c *MDLClient) asynchReadReplies() {
-	for true {
-		reply := (<-c.proposeReplyChan).(*mdlinproto.ProposeReply)
-		c.mu.Lock()
-    if reply.CommandId > c.latestReceived {
-      c.latestReceived = reply.CommandId
-    }
-    c.mu.Unlock()
-
-    if reply.OK == 0 {
-			dlog.Println("Client received FAIL response for request")
-			return false, int64(reply.CommandId)
-		} else {
-    }
-  }
-}
-
 func (c *MDLClient) Read(key int64) (bool, int64) {
-	c.preparePropose(state.GET, key, 0)
+  commandId := c.opCount
+  c.opCount++
+  c.preparePropose(commandId, key, 0)
+  c.propose.Command.Op = state.GET
 	c.sendPropose()
 	return true, 0
 }
 
 func (c *MDLClient) Write(key int64, value int64) bool {
 	//dlog.Printf("inside write...")
-	c.preparePropose(state.PUT, key, value)
+  commandId := c.opCount
+  c.opCount++
+	c.preparePropose(commandId, key, value)
+  c.propose.Command.Op = state.PUT
 	c.sendPropose()
 	return true
 }
 
 func (c *MDLClient) CompareAndSwap(key int64, oldValue int64,
 	newValue int64) (bool, int64) {
-	c.preparePropose(state.CAS, key, newValue)
+  commandId := c.opCount
+  c.opCount++
+	c.preparePropose(commandId, key, newValue)
 	c.propose.Command.OldValue = state.Value(newValue)
+  c.propose.Command.Op = state.CAS
 	c.sendPropose()
 	return true, 0
 }
 
-func (c *MDLClient) preparePropose(opType state.Operation, key int64, value int64) {
-	c.propose.Command.K = state.Key(key)
+func (c *MDLClient) preparePropose(commandId int32, key int64, value int64) {
+       c.propose.CommandId = commandId
+       c.propose.Command.K = state.Key(key)
 	c.propose.Command.V = state.Value(value)
-  c.propose.Command.Op = opType
 }
 
 func (c *MDLClient) setSeqno(seqno int64) {
 	c.propose.SeqNo = seqno
-}
-
-func (c *MDLClient) setCommandId() int32 {
-  commandId := c.opCount
-  c.opCount++
-  c.propose.CommandId = commandId
-  return commandId
 }
 
 func (c *MDLClient) setTimestamp(i int, n int) {
@@ -284,7 +213,7 @@ func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, mySha
 // 	return c.readProposeReply(c.propose.CommandId)
 // }
 
-func (c *MDLClient) StartAsynchReadReplies(doneChan chan bool, resultChan chan int) {
+func (c *MDLClient) startAsynchReadReplies(doneChan chan bool, resultChan chan int) {
   done := false
   numReplies := 0
   highestReplyCommandId := -1
@@ -312,14 +241,13 @@ func (c *MDLClient) StartAsynchReadReplies(doneChan chan bool, resultChan chan i
   resultChan <- highestReplyCommandId
 }
 
-func (c *MDLClient) StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int) {
+func (c *MDLClient) stopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int) {
   dlog.Printf("Calling stop on client!")
   doneChan <- true
   dlog.Printf("pushed on done chan")
   numReplies := <-resultChan
   highestReplyCommand := <-resultChan
   return numReplies, highestReplyCommand
-
 }
 
 func (c *MDLClient) readReplies(startId int32, fanout int, opTypes []state.Operation,
