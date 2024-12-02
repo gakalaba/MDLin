@@ -95,7 +95,7 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 	return true, 0
 }
 
-var prevTag mdlinproto.Tag
+var prevOpenTag mdlinproto.Tag
 
 func (c *MDLClient) OpenAppRequest(opType state.Operation, key int64) {
 	//var prevTag mdlinproto.Tag
@@ -114,6 +114,49 @@ func (c *MDLClient) OpenAppRequest(opType state.Operation, key int64) {
 	if c.seqnos[l] == 0 {
 		c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
 	} else {
+		c.propose.Predecessor = prevOpenTag
+	}
+
+	if opType == state.GET {
+		c.Read(key)
+	} else if opType == state.PUT {
+		//dlog.Printf("type is Put!")
+		c.Write(key, int64(key))
+	} else {
+		c.CompareAndSwap(key, int64(key-1), int64(key))
+	}
+	if (c.seqnos[l] > 0 && !c.SSA) {
+		// Send the coordination request
+		// (Keep this after sending the request for now, since
+		// logic in the send function assumes request was send)
+		c.sendCoordinationRequest(prevOpenTag, l)
+	}
+	prevOpenTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
+	return
+}
+
+
+var prevTag mdlinproto.Tag
+func (c *MDLClient) AsynchAppRequest(opType state.Operation, key int64) {
+	//var prevTag mdlinproto.Tag
+        // Doing this for the sake of cleaning the r.seen list in implementation
+        n := 1
+	l := c.GetShardFromKey(state.Key(key))
+	// Figure out the sequence number
+	if _, ok := c.seqnos[l]; !ok {
+		c.seqnos[l] = 0
+	} else {
+		c.seqnos[l]++
+	}
+	// Assign the sequence number and batch dependencies for this request
+	c.setSeqno(c.seqnos[l])
+        c.setTimestamp(0, n)
+
+  // TODO
+  // We should set the predecessor tag based on whether we are concurrent with the previous sent request
+  if c.seqnos[l] == 0 {
+		c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
+	} else {
 		c.propose.Predecessor = prevTag
 	}
 
@@ -125,6 +168,9 @@ func (c *MDLClient) OpenAppRequest(opType state.Operation, key int64) {
 	} else {
 		c.CompareAndSwap(key, int64(key-1), int64(key))
 	}
+
+  // TODO
+  // We should only send this if we assigned a predecessor... and it should be whatever our predecessor tag is!
 	if (c.seqnos[l] > 0 && !c.SSA) {
 		// Send the coordination request
 		// (Keep this after sending the request for now, since
