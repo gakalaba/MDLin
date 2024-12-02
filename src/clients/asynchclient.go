@@ -25,6 +25,8 @@ type MDLClient struct {
 	latestReceived   int32
   lastSentTag      mdlinproto.Tag
   mu               sync.Mutex
+  mapMu               sync.Mutex
+  repliesMap       map[int32]mdlinproto.ProposeReply
 }
 
 func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
@@ -47,103 +49,11 @@ func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 	return pc
 }
 
-func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
-	fanout := len(keys)
-	//dlog.Printf("fanout = %v", fanout)
-	startTimes := make([]time.Time, fanout)
-	startIdx := c.opCount
-	var prevTag mdlinproto.Tag
-        // Doing this for the sake of cleaning the r.seen list in implementation
-        n := len(opTypes)
-	for i, opType := range opTypes {
-		k := keys[i]
-		l := c.GetShardFromKey(state.Key(k))
-		// Figure out the sequence number
-		if _, ok := c.seqnos[l]; !ok {
-			c.seqnos[l] = 0
-		} else {
-			c.seqnos[l]++
-		}
-		// Assign the sequence number and batch dependencies for this request
-		c.setSeqno(c.seqnos[l])
-    c.setCommandId()
-    c.setTimestamp(i, n)
-		if i == 0 {
-			c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
-		} else {
-			c.propose.Predecessor = prevTag
-		}
-
-		startTimes[i] = time.Now()
-
-		if opType == state.GET {
-			c.Read(k)
-		} else if opType == state.PUT {
-			//dlog.Printf("type is Put!")
-			c.Write(k, int64(k))
-		} else {
-			c.CompareAndSwap(k, int64(k-1), int64(k))
-		}
-		if (i > 0 && !c.SSA) {
-			// Send the coordination request
-			// (Keep this after sending the request for now, since
-			// logic in the send function assumes request was send)
-			c.sendCoordinationRequest(prevTag, l)
-		}
-		prevTag = mdlinproto.Tag{K: state.Key(k), PID: int64(c.id), SeqNo: c.seqnos[l]}
-	}
-	success, _ := c.readReplies(startIdx, fanout, opTypes, keys, startTimes)
-	if !success {
-		//dlog.Printf("ProposeReply for PID %d - CommandId %d return OK=False\n", c.id, e)
-		return false, -1
-	}
-
-	return true, 0
-}
-
-var prevOpenTag mdlinproto.Tag
-
-func (c *MDLClient) OpenAppRequest(opType state.Operation, key int64) {
-	//var prevTag mdlinproto.Tag
-        // Doing this for the sake of cleaning the r.seen list in implementation
-        n := 1
-	l := c.GetShardFromKey(state.Key(key))
-	// Figure out the sequence number
-	if _, ok := c.seqnos[l]; !ok {
-		c.seqnos[l] = 0
-	} else {
-		c.seqnos[l]++
-	}
-	// Assign the sequence number and batch dependencies for this request
-	c.setSeqno(c.seqnos[l])
-  c.setCommandId()
-  c.setTimestamp(0, n)
-	if c.seqnos[l] == 0 {
-		c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
-	} else {
-		c.propose.Predecessor = prevOpenTag
-	}
-
-	if opType == state.GET {
-		c.Read(key)
-	} else if opType == state.PUT {
-		//dlog.Printf("type is Put!")
-		c.Write(key, int64(key))
-	} else {
-		c.CompareAndSwap(key, int64(key-1), int64(key))
-	}
-	if (c.seqnos[l] > 0 && !c.SSA) {
-		// Send the coordination request
-		// (Keep this after sending the request for now, since
-		// logic in the send function assumes request was send)
-		c.sendCoordinationRequest(prevOpenTag, l)
-	}
-	prevOpenTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
-	return
-}
-
-
-func (c *MDLClient) AsynchAppRequest(opType state.Operation, key int64) {
+func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) mdlinproto.Propose {
+  if len(opTypes) > 1 || len(keys) > 1 {
+    panic("Can only send one request at a time with AppRequest")
+  }
+  key := keys[0]
   // TODO how to clear r.seen list in impl?? c.setTimestamp(0, n)
 	l := c.GetShardFromKey(state.Key(key))
 	// Figure out the sequence number
@@ -160,7 +70,6 @@ func (c *MDLClient) AsynchAppRequest(opType state.Operation, key int64) {
   lastReceived := c.latestReceived
   c.mu.Unlock()
 
-	// TODO
 	// We should set the predecessor tag based on whether we are concurrent with the previous sent request
   sendCoord := false
   if lastReceived == (myCommandId-1) {
@@ -170,16 +79,15 @@ func (c *MDLClient) AsynchAppRequest(opType state.Operation, key int64) {
 		c.propose.Predecessor = c.lastSentTag
 	}
 
-	if opType == state.GET {
+	if opType[0] == state.GET {
 		c.Read(key)
-	} else if opType == state.PUT {
+	} else if opType[0] == state.PUT {
 		//dlog.Printf("type is Put!")
 		c.Write(key, int64(key))
 	} else {
 		c.CompareAndSwap(key, int64(key-1), int64(key))
 	}
 
-	// TODO
 	// We should only send this if we assigned a predecessor... and it should be whatever our predecessor tag is!
 	if (sendCoord && !c.SSA) {
 		// Send the coordination request
@@ -188,10 +96,15 @@ func (c *MDLClient) AsynchAppRequest(opType state.Operation, key int64) {
 		c.sendCoordinationRequest(c.lastSentTag, l)
 	}
 	lastSentTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
-	return
+	return c.propose
 }
 
-func (c *MDLClient) AsynchReceiveReply() {
+func (c *MDLClient) AppResponse(request mdlinproto.Propose) (state.Value, uint8) {
+  c.mapMu.Lock()
+  reply := c.repliesMap[request.CommandId]
+  delete(c.repliesMap, request.CommandId)
+  c.mapMu.Unlock()
+  return reply.Value, reply.OK
 }
 
 func (c *MDLClient) asynchReadReplies() {
@@ -202,12 +115,9 @@ func (c *MDLClient) asynchReadReplies() {
       c.latestReceived = reply.CommandId
     }
     c.mu.Unlock()
-
-    if reply.OK == 0 {
-			dlog.Println("Client received FAIL response for request")
-			return false, int64(reply.CommandId)
-		} else {
-    }
+    c.mapMu.Lock()
+    c.repliesMap[reply.CommandId] = reply
+    c.mapMu.Unlock()
   }
 }
 
@@ -319,7 +229,6 @@ func (c *MDLClient) StopAsynchReadReplies(doneChan chan bool, resultChan chan in
   numReplies := <-resultChan
   highestReplyCommand := <-resultChan
   return numReplies, highestReplyCommand
-
 }
 
 func (c *MDLClient) readReplies(startId int32, fanout int, opTypes []state.Operation,
