@@ -100,7 +100,7 @@ func (c *AbdClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 	return true, 0
 }
 
-func (c *AbdClient) AppResponse(request mdlinproto.Propose) (state.Value, uint8) {
+func (c *AbdClient) AppResponse(commandId int32) (state.Value, uint8) {
   return 0, 0
 }
 

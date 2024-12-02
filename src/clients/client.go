@@ -43,7 +43,7 @@ type Client interface {
 	//OpenAppRequest(opTypes state.Operation, keys int64)
 	//StartAsynchReadReplies(doneChan chan bool, resultChan chan int)
 	//StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int)
-	AppResponse(request mdlinproto.Propose) (state.Value, uint8)
+	AppResponse(commandId int32) (state.Value, uint8)
   Finish()
 	ConnectToCoordinator()
 	// ConnectToReplicas()

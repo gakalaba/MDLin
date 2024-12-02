@@ -64,7 +64,7 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (boo
 	return true, 0
 }
 
-func (c *ProposeClient) AppResponse(request mdlinproto.Propose) (state.Value, uint8) {
+func (c *ProposeClient) AppResponse(commandId int32) (state.Value, uint8) {
   return 0,0
 }
 

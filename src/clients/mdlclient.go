@@ -94,7 +94,7 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 	return true, 0
 }
 
-func (c *MDLClient) AppResponse(request mdlinproto.Propose) (state.Value, uint8) {
+func (c *MDLClient) AppResponse(commandId int32) (state.Value, uint8) {
   return 0,0
 }
 
@@ -112,7 +112,6 @@ func (c *MDLClient) openAppRequest(opType state.Operation, key int64) {
 	}
 	// Assign the sequence number and batch dependencies for this request
 	c.setSeqno(c.seqnos[l])
-  c.setCommandId()
   c.setTimestamp(0, n)
 	if c.seqnos[l] == 0 {
 		c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}

@@ -80,7 +80,7 @@ func (c *SSMDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool,
 	return true, 0
 }
 
-func (c *SSMDLClient) AppResponse(request mdlinproto.Propose) (state.Value, uint8) {
+func (c *SSMDLClient) AppResponse(commandId int32) (state.Value, uint8) {
   return 0,0
 }
 

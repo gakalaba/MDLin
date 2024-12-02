@@ -12,7 +12,7 @@ import (
   "sync"
 )
 
-type MDLClient struct {
+type AsynchClient struct {
 	*AbstractClient
 	proposeReplyChan chan fastrpc.Serializable
 	propose          *mdlinproto.Propose
@@ -24,14 +24,14 @@ type MDLClient struct {
 	SSA		 bool
 	latestReceived   int32
   lastSentTag      mdlinproto.Tag
-  mu               sync.Mutex
-  mapMu               sync.Mutex
-  repliesMap       map[int32]mdlinproto.ProposeReply
+  mu               *sync.Mutex
+  mapMu            *sync.Mutex
+  repliesMap       map[int32]*mdlinproto.ProposeReply
 }
 
-func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
-	fast bool, noLeader bool, SSA bool) *MDLClient {
-	pc := &MDLClient{
+func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
+	fast bool, noLeader bool, SSA bool) *AsynchClient {
+	pc := &AsynchClient{
 		NewAbstractClient(id, masterAddr, masterPort, forceLeader, statsFile),
 		make(chan fastrpc.Serializable, genericsmr.CHAN_BUFFER_SIZE), // proposeReplyChan
 		new(mdlinproto.Propose),             // propose
@@ -41,15 +41,19 @@ func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 		noLeader,                            // noLeader
 		make(map[int]int64),
 		SSA,
+		-1,
+		mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1},
+		new(sync.Mutex),
+		new(sync.Mutex),
+		make(map[int32]*mdlinproto.ProposeReply),
 	}
 	pc.propose.PID = int64(id) // only need to set this once per client
 	pc.RegisterRPC(new(mdlinproto.ProposeReply), clientproto.MDL_PROPOSE_REPLY, pc.proposeReplyChan)
-  pc.latestReceived = -1
   go pc.asynchReadReplies()
 	return pc
 }
 
-func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) mdlinproto.Propose {
+func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
   if len(opTypes) > 1 || len(keys) > 1 {
     panic("Can only send one request at a time with AppRequest")
   }
@@ -79,9 +83,9 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) mdlinpro
 		c.propose.Predecessor = c.lastSentTag
 	}
 
-	if opType[0] == state.GET {
+	if opTypes[0] == state.GET {
 		c.Read(key)
-	} else if opType[0] == state.PUT {
+	} else if opTypes[0] == state.PUT {
 		//dlog.Printf("type is Put!")
 		c.Write(key, int64(key))
 	} else {
@@ -95,21 +99,21 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) mdlinpro
 		// logic in the send function assumes request was send)
 		c.sendCoordinationRequest(c.lastSentTag, l)
 	}
-	lastSentTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
-	return c.propose
+	c.lastSentTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
+	return true, int64(c.propose.CommandId)
 }
 
-func (c *MDLClient) AppResponse(request mdlinproto.Propose) (state.Value, uint8) {
+func (c *AsynchClient) AppResponse(commandId int32) (state.Value, uint8) {
   c.mapMu.Lock()
-  reply := c.repliesMap[request.CommandId]
-  delete(c.repliesMap, request.CommandId)
+  reply := c.repliesMap[commandId]
+  delete(c.repliesMap, commandId)
   c.mapMu.Unlock()
   //go cleanMap(request.CommandId)
   return reply.Value, reply.OK
 }
 
-func (c *MDLClient) cleanMap(bound int32) {
-  var keysToDelete map[int32]true
+func (c *AsynchClient) cleanMap(bound int32) {
+  var keysToDelete map[int32]bool
   c.mapMu.Lock()
   for k, _ := range c.repliesMap {
     if k < bound {
@@ -117,12 +121,13 @@ func (c *MDLClient) cleanMap(bound int32) {
     }
   }
 
-  for _, k := range keysToDelete {
+  for k, _ := range keysToDelete {
     delete(c.repliesMap, k)
+  }
   c.mapMu.Unlock()
 }
 
-func (c *MDLClient) asynchReadReplies() {
+func (c *AsynchClient) asynchReadReplies() {
 	for true {
 		reply := (<-c.proposeReplyChan).(*mdlinproto.ProposeReply)
 		c.mu.Lock()
@@ -136,20 +141,20 @@ func (c *MDLClient) asynchReadReplies() {
   }
 }
 
-func (c *MDLClient) Read(key int64) (bool, int64) {
+func (c *AsynchClient) Read(key int64) (bool, int64) {
 	c.preparePropose(state.GET, key, 0)
 	c.sendPropose()
 	return true, 0
 }
 
-func (c *MDLClient) Write(key int64, value int64) bool {
+func (c *AsynchClient) Write(key int64, value int64) bool {
 	//dlog.Printf("inside write...")
 	c.preparePropose(state.PUT, key, value)
 	c.sendPropose()
 	return true
 }
 
-func (c *MDLClient) CompareAndSwap(key int64, oldValue int64,
+func (c *AsynchClient) CompareAndSwap(key int64, oldValue int64,
 	newValue int64) (bool, int64) {
 	c.preparePropose(state.CAS, key, newValue)
 	c.propose.Command.OldValue = state.Value(newValue)
@@ -157,31 +162,31 @@ func (c *MDLClient) CompareAndSwap(key int64, oldValue int64,
 	return true, 0
 }
 
-func (c *MDLClient) preparePropose(opType state.Operation, key int64, value int64) {
+func (c *AsynchClient) preparePropose(opType state.Operation, key int64, value int64) {
 	c.propose.Command.K = state.Key(key)
 	c.propose.Command.V = state.Value(value)
   c.propose.Command.Op = opType
 }
 
-func (c *MDLClient) setSeqno(seqno int64) {
+func (c *AsynchClient) setSeqno(seqno int64) {
 	c.propose.SeqNo = seqno
 }
 
-func (c *MDLClient) setCommandId() int32 {
+func (c *AsynchClient) setCommandId() int32 {
   commandId := c.opCount
   c.opCount++
   c.propose.CommandId = commandId
   return commandId
 }
 
-func (c *MDLClient) setTimestamp(i int, n int) {
+func (c *AsynchClient) setTimestamp(i int, n int) {
         c.propose.Timestamp = 1
         if (i == n-1) {
           c.propose.Timestamp = 0
         }
 }
 
-func (c *MDLClient) sendPropose() {
+func (c *AsynchClient) sendPropose() {
 	shard := c.GetShardFromKey(c.propose.Command.K)
 	//dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, SeqNo %v, PID %v, Predecessor %v at time %v}", shard, c.propose.CommandId, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, time.Now().UnixMilli()))
 
@@ -190,7 +195,7 @@ func (c *MDLClient) sendPropose() {
 	c.writers[shard].Flush()
 }
 
-func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, myShard int) {
+func (c *AsynchClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, myShard int) {
 	shard := c.GetShardFromKey(predecessorTag.K)
 	//dlog.Printf("Sending CoordinationRequest to shard %d on behalf of CommandId %v at time %v\n", shard, c.propose.CommandId, time.Now().UnixMilli())
 
@@ -204,12 +209,12 @@ func (c *MDLClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, mySha
 	c.writers[shard].Flush()
 }
 
-// func (c *MDLClient) sendProposeAndReadReply() (bool, int64) {
+// func (c *AsynchClient) sendProposeAndReadReply() (bool, int64) {
 // 	c.sendPropose()
 // 	return c.readProposeReply(c.propose.CommandId)
 // }
 
-func (c *MDLClient) StartAsynchReadReplies(doneChan chan bool, resultChan chan int) {
+func (c *AsynchClient) StartAsynchReadReplies(doneChan chan bool, resultChan chan int) {
   done := false
   numReplies := 0
   highestReplyCommandId := -1
@@ -237,7 +242,7 @@ func (c *MDLClient) StartAsynchReadReplies(doneChan chan bool, resultChan chan i
   resultChan <- highestReplyCommandId
 }
 
-func (c *MDLClient) StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int) {
+func (c *AsynchClient) StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int) {
   dlog.Printf("Calling stop on client!")
   doneChan <- true
   dlog.Printf("pushed on done chan")
@@ -246,7 +251,7 @@ func (c *MDLClient) StopAsynchReadReplies(doneChan chan bool, resultChan chan in
   return numReplies, highestReplyCommand
 }
 
-func (c *MDLClient) readReplies(startId int32, fanout int, opTypes []state.Operation,
+func (c *AsynchClient) readReplies(startId int32, fanout int, opTypes []state.Operation,
 	keys []int64, startTimes []time.Time) (bool, int64) {
 	//rarray := make([]int, fanout)
 	rarray := make([]int, fanout)
@@ -298,7 +303,7 @@ func (c *MDLClient) readReplies(startId int32, fanout int, opTypes []state.Opera
 	return true, int64(fanout)
 }
 
-// func (c *MDLClient) readProposeReply(commandId int32) (bool, int64) {
+// func (c *AsynchClient) readProposeReply(commandId int32) (bool, int64) {
 // 	for !c.shutdown {
 // 		reply := (<-c.proposeReplyChan).(*mdlinproto.ProposeReply)
 // 		if reply.OK == 0 {
@@ -313,7 +318,7 @@ func (c *MDLClient) readReplies(startId int32, fanout int, opTypes []state.Opera
 // 	return false, 0
 // }
 
-func (c *MDLClient) filterdeps(deps []mdlinproto.Tag, k state.Key) []mdlinproto.Tag {
+func (c *AsynchClient) filterdeps(deps []mdlinproto.Tag, k state.Key) []mdlinproto.Tag {
 	result := make([]mdlinproto.Tag, 0)
 	myLeader := c.GetShardFromKey(k)
 	for _, d := range deps {

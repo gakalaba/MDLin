@@ -292,7 +292,7 @@ func (c *GryffClient) AppRequest(opTypes []state.Operation, keys []int64) (bool,
 	return true, 0
 }
 
-func (c *GryffClient) AppResponse(request mdlinproto.Propose) (state.Value, uint8) {
+func (c *GryffClient) AppResponse(commandId int32) (state.Value, uint8) {
   return 0,0
 }
 
