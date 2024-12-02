@@ -9,6 +9,7 @@ import (
 	"mdlinproto"
 	"state"
 	"time"
+  "sync"
 )
 
 type MDLClient struct {
@@ -22,7 +23,8 @@ type MDLClient struct {
 	seqnos           map[int]int64
 	SSA		 bool
 	latestReceived   int32
-	lastSent         *mdlinproto.Propose
+  lastSentTag      mdlinproto.Tag
+  mu               sync.Mutex
 }
 
 func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
@@ -40,7 +42,7 @@ func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 	}
 	pc.propose.PID = int64(id) // only need to set this once per client
 	pc.RegisterRPC(new(mdlinproto.ProposeReply), clientproto.MDL_PROPOSE_REPLY, pc.proposeReplyChan)
-
+  pc.latestReceived = -1
 	return pc
 }
 
@@ -63,7 +65,8 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		}
 		// Assign the sequence number and batch dependencies for this request
 		c.setSeqno(c.seqnos[l])
-                c.setTimestamp(i, n)
+    c.setCommandId()
+    c.setTimestamp(i, n)
 		if i == 0 {
 			c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
 		} else {
@@ -112,7 +115,8 @@ func (c *MDLClient) OpenAppRequest(opType state.Operation, key int64) {
 	}
 	// Assign the sequence number and batch dependencies for this request
 	c.setSeqno(c.seqnos[l])
-        c.setTimestamp(0, n)
+  c.setCommandId()
+  c.setTimestamp(0, n)
 	if c.seqnos[l] == 0 {
 		c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
 	} else {
@@ -138,9 +142,8 @@ func (c *MDLClient) OpenAppRequest(opType state.Operation, key int64) {
 }
 
 
-var prevTag mdlinproto.Tag
 func (c *MDLClient) AsynchAppRequest(opType state.Operation, key int64) {
-        // TODO how to clear r.seen list in impl??
+  // TODO how to clear r.seen list in impl?? c.setTimestamp(0, n)
 	l := c.GetShardFromKey(state.Key(key))
 	// Figure out the sequence number
 	if _, ok := c.seqnos[l]; !ok {
@@ -148,17 +151,22 @@ func (c *MDLClient) AsynchAppRequest(opType state.Operation, key int64) {
 	} else {
 		c.seqnos[l]++
 	}
-	mySeqNo := c.seqnos[l]
 	// Assign the sequence number and batch dependencies for this request
 	c.setSeqno(c.seqnos[l])
-        c.setTimestamp(0, n)
+  myCommandId := c.setCommandId()
+
+  c.mu.Lock()
+  lastReceived := c.latestReceived
+  c.mu.Unlock()
 
 	// TODO
 	// We should set the predecessor tag based on whether we are concurrent with the previous sent request
-	if c.seqnos[l] == 0 {
+  sendCoord := false
+  if lastReceived == (myCommandId-1) {
 		c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
 	} else {
-		c.propose.Predecessor = prevTag
+    sendCoord = true
+		c.propose.Predecessor = c.lastSentTag
 	}
 
 	if opType == state.GET {
@@ -172,54 +180,60 @@ func (c *MDLClient) AsynchAppRequest(opType state.Operation, key int64) {
 
 	// TODO
 	// We should only send this if we assigned a predecessor... and it should be whatever our predecessor tag is!
-	if (c.seqnos[l] > 0 && !c.SSA) {
+	if (sendCoord && !c.SSA) {
 		// Send the coordination request
 		// (Keep this after sending the request for now, since
 		// logic in the send function assumes request was send)
-		c.sendCoordinationRequest(prevTag, l)
+		c.sendCoordinationRequest(c.lastSentTag, l)
 	}
-	prevTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
+	lastSentTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
 	return
 }
 
+func (c *MDLClient) AsynchReceiveReply() {
+  c.mu.Lock()
+  thisCommandId
+  if thisCommandId > c.latestReceived {
+    c.latestReceived = thisCommandId
+  }
+  c.mu.Unlock()
+
 func (c *MDLClient) Read(key int64) (bool, int64) {
-	commandId := c.opCount
-	c.opCount++
-	c.preparePropose(commandId, key, 0)
-	c.propose.Command.Op = state.GET
+	c.preparePropose(state.GET, key, 0)
 	c.sendPropose()
 	return true, 0
 }
 
 func (c *MDLClient) Write(key int64, value int64) bool {
 	//dlog.Printf("inside write...")
-	commandId := c.opCount
-	c.opCount++
-	c.preparePropose(commandId, key, value)
-	c.propose.Command.Op = state.PUT
+	c.preparePropose(state.PUT, key, value)
 	c.sendPropose()
 	return true
 }
 
 func (c *MDLClient) CompareAndSwap(key int64, oldValue int64,
 	newValue int64) (bool, int64) {
-	commandId := c.opCount
-	c.opCount++
-	c.preparePropose(commandId, key, newValue)
+	c.preparePropose(state.CAS, key, newValue)
 	c.propose.Command.OldValue = state.Value(newValue)
-	c.propose.Command.Op = state.CAS
 	c.sendPropose()
 	return true, 0
 }
 
-func (c *MDLClient) preparePropose(commandId int32, key int64, value int64) {
-	c.propose.CommandId = commandId
+func (c *MDLClient) preparePropose(opType state.Operation, key int64, value int64) {
 	c.propose.Command.K = state.Key(key)
 	c.propose.Command.V = state.Value(value)
+  c.propose.Command.Op = opType
 }
 
 func (c *MDLClient) setSeqno(seqno int64) {
 	c.propose.SeqNo = seqno
+}
+
+func (c *MDLClient) setCommandId() int32 {
+  commandId := c.opCount
+  c.opCount++
+  c.propose.CommandId = commandId
+  return commandId
 }
 
 func (c *MDLClient) setTimestamp(i int, n int) {
