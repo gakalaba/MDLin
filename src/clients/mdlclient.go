@@ -60,7 +60,7 @@ func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 		}
 		// Assign the sequence number and batch dependencies for this request
 		c.setSeqno(c.seqnos[l])
-    c.setTimestamp(i, n)
+		 c.setTimestamp(i, n)
 		if i == 0 {
 			c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
 		} else {
@@ -138,38 +138,38 @@ func (c *MDLClient) openAppRequest(opType state.Operation, key int64) {
 }
 
 func (c *MDLClient) Read(key int64) (bool, int64) {
-  commandId := c.opCount
-  c.opCount++
-  c.preparePropose(commandId, key, 0)
-  c.propose.Command.Op = state.GET
+	commandId := c.opCount
+	c.opCount++
+	c.preparePropose(commandId, key, 0)
+	c.propose.Command.Op = state.GET
 	c.sendPropose()
 	return true, 0
 }
 
 func (c *MDLClient) Write(key int64, value int64) bool {
 	//dlog.Printf("inside write...")
-  commandId := c.opCount
-  c.opCount++
+	commandId := c.opCount
+	c.opCount++
 	c.preparePropose(commandId, key, value)
-  c.propose.Command.Op = state.PUT
+	c.propose.Command.Op = state.PUT
 	c.sendPropose()
 	return true
 }
 
 func (c *MDLClient) CompareAndSwap(key int64, oldValue int64,
 	newValue int64) (bool, int64) {
-  commandId := c.opCount
-  c.opCount++
+	commandId := c.opCount
+	c.opCount++
 	c.preparePropose(commandId, key, newValue)
 	c.propose.Command.OldValue = state.Value(newValue)
-  c.propose.Command.Op = state.CAS
+	c.propose.Command.Op = state.CAS
 	c.sendPropose()
 	return true, 0
 }
 
 func (c *MDLClient) preparePropose(commandId int32, key int64, value int64) {
-       c.propose.CommandId = commandId
-       c.propose.Command.K = state.Key(key)
+	c.propose.CommandId = commandId
+	c.propose.Command.K = state.Key(key)
 	c.propose.Command.V = state.Value(value)
 }
 
