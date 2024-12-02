@@ -84,6 +84,10 @@ func (c *SSMDLClient) AppResponse(commandId int32) (state.Value, uint8) {
   return 0,0
 }
 
+func (c *SSMDLClient) GrabHighestResponse() int32 {
+	return 0
+}
+
 func (c *SSMDLClient) Read(key int64) (bool, int64) {
 	commandId := c.opCount
 	c.opCount++

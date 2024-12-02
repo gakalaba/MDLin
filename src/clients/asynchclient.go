@@ -103,6 +103,16 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64) (bool
 	return true, int64(c.propose.CommandId)
 }
 
+/***********************************************************************/
+/*************For Grafana Testing Only!! Not for Austin's API **********/
+/***********************************************************************/
+func (c *AsynchClient) GrabHighestResponse() int32 {
+	c.mu.Lock()
+	result := c.latestReceived
+	c.mu.Unlock()
+	return result
+}
+
 func (c *AsynchClient) AppResponse(commandId int32) (state.Value, uint8) {
   c.mapMu.Lock()
   reply := c.repliesMap[commandId]

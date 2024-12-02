@@ -198,7 +198,7 @@ func createClient() clients.Client {
 		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true)
 	case "mdl":
-		return clients.NewMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewAsynchClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true, *singleShardAware)
 	case "ss-mdl":
 		return clients.NewSSMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
@@ -304,8 +304,8 @@ func main() {
   }*/
 	var sentcount int32
 	sentcount = 0
-	doneChan := make(chan bool)
-	resultChan := make(chan int, 2)
+	//doneChan := make(chan bool)
+	//resultChan := make(chan int, 2)
 
 	go func(client clients.Client) {
 		time.Sleep(time.Duration(*expLength+1) * time.Second)
@@ -318,14 +318,13 @@ func main() {
 	currRuntime := now.Sub(start)
 	//for paxos:
 	//opString := "app"
-	go client.StartAsynchReadReplies(doneChan, resultChan)
 	log.Printf("starting grafana test!")
 	ns := int64(400000)
 	for int(currRuntime.Seconds()) < *expLength {
 
 		delay_start := time.Now()
 		// delayBetweenRequests(200000)
-		client.OpenAppRequest(state.PUT, int64(4))
+		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(4)})
 
 
 		sentcount++
@@ -335,12 +334,13 @@ func main() {
 		for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
 	}
 	log.Printf("TEST DONE")
-	numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
-	log.Printf("numReplies pulled out = %d, highest command ID returned = %d", numReplies, count)
+	//numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
+	count := client.GrabHighestResponse()
+	//log.Printf("numReplies pulled out = %d, highest command ID returned = %d", numReplies, count)
 	log.Printf("Total Attempted Logging of App Events (MP Completed): %d\n", sentcount)
 	log.Printf("Total Completed Logging of App Events: %d\n", count)
 	log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
-	log.Printf("Total Log Tput: %d\n", (count/int(currRuntime.Seconds())))
+	log.Printf("Total Log Tput: %d\n", (count/int32(currRuntime.Seconds())))
 	log.Printf("Total Log Tput (MP): %d\n", (int(sentcount)/int(currRuntime.Seconds())))
 	client.Finish()
 }

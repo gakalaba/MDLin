@@ -68,6 +68,10 @@ func (c *ProposeClient) AppResponse(commandId int32) (state.Value, uint8) {
   return 0,0
 }
 
+func (c *ProposeClient) GrabHighestResponse() int32 {
+	return 0
+}
+
 func (c *ProposeClient) Read(key int64) (bool, int64) {
 	commandId := c.opCount
 	c.opCount++

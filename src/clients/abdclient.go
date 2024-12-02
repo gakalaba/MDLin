@@ -104,6 +104,10 @@ func (c *AbdClient) AppResponse(commandId int32) (state.Value, uint8) {
   return 0, 0
 }
 
+func (c *AbdClient) GrabHighestResponse() int32 {
+	return 0
+}
+
 func (c *AbdClient) Read(key int64) (bool, int64) {
 	return c.doOp(key, 0, false)
 }

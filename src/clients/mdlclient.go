@@ -98,6 +98,10 @@ func (c *MDLClient) AppResponse(commandId int32) (state.Value, uint8) {
   return 0,0
 }
 
+func (c *MDLClient) GrabHighestResponse() int32 {
+	return 0
+}
+
 var prevOpenTag mdlinproto.Tag
 func (c *MDLClient) openAppRequest(opType state.Operation, key int64) {
 	//var prevTag mdlinproto.Tag

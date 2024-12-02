@@ -44,6 +44,7 @@ type Client interface {
 	//StartAsynchReadReplies(doneChan chan bool, resultChan chan int)
 	//StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int)
 	AppResponse(commandId int32) (state.Value, uint8)
+	GrabHighestResponse() int32
   Finish()
 	ConnectToCoordinator()
 	// ConnectToReplicas()

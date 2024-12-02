@@ -296,6 +296,10 @@ func (c *GryffClient) AppResponse(commandId int32) (state.Value, uint8) {
   return 0,0
 }
 
+func (c *GryffClient) GrabHighestResponse() int32 {
+	return 0
+}
+
 /**
  * Begin Read related procedures
  */
