@@ -261,11 +261,11 @@ func main() {
 	//for paxos:
 	//opString := "app"
 	log.Printf("starting grafana test!")
-	//ns := int64(1200000)
+	ns := int64(1200000)
 	time.Sleep(time.Duration(*rampUp) * time.Second)
 	for int(currRuntime.Seconds()) < *expLength {
 
-		//delay_start := time.Now()
+		delay_start := time.Now()
 		// delayBetweenRequests(200000)
 		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(4)})
 
@@ -274,7 +274,7 @@ func main() {
 
 		now = time.Now()
 		currRuntime = now.Sub(start)
-		//for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
+		for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
 	}
 	//numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
 	count := client.GrabHighestResponse() + 1
