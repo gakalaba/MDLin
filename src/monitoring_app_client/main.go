@@ -217,64 +217,6 @@ func Max(a int64, b int64) int64 {
 	}
 }
 
-func poop() {
-	flag.Parse()
-
-
-	dlog.DLOG = *debug
-
-	runtime.GOMAXPROCS(2)
-
-	if *cpuProfile != "" {
-		f, err := os.Create(*cpuProfile)
-		if err != nil {
-			log.Fatalf("Error creating CPU profile file %s: %v\n", *cpuProfile, err)
-		}
-		pprof.StartCPUProfile(f)
-		interrupt := make(chan os.Signal, 1)
-		signal.Notify(interrupt)
-		go catchKill(interrupt)
-		defer pprof.StopCPUProfile()
-	}
-
-	client := createClient()
-
-	/*r := rand.New(rand.NewSource(time.Now().UnixNano()))
-  zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
-  if err != nil {
-    panic("problem making the zipfian generator :0")
-  }*/
-	count := 0
-
-	go func(client clients.Client) {
-		time.Sleep(time.Duration(*expLength+1) * time.Second)
-		client.Finish()
-	}(client)
-
-	// Add these keys in the store 
-	start := time.Now()
-	now := start
-	currRuntime := now.Sub(start)
-	//opString := "app"
-	dlog.Printf("starting grafana test!")
-	for int(currRuntime.Seconds()) < *expLength {
-		client.AppRequest([]state.Operation{state.PUT}, []int64{4})
-
-
-		count++
-
-		now = time.Now()
-		currRuntime = now.Sub(start)
-	}
-	log.Printf("THIS TEST DONE :)")
-	log.Printf("Total Completed Logging of App Events: %d\n", count)
-	log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
-	log.Printf("Total Log Tput: %d\n", (count/int(currRuntime.Seconds())))
-	client.Finish()
-}
-
-
-
 func main() {
 	flag.Parse()
 
@@ -319,7 +261,8 @@ func main() {
 	//for paxos:
 	//opString := "app"
 	log.Printf("starting grafana test!")
-	ns := int64(400000)
+	ns := int64(1200000)
+	time.Sleep(time.Duration(*rampUp) * time.Second)
 	for int(currRuntime.Seconds()) < *expLength {
 
 		delay_start := time.Now()
@@ -340,8 +283,9 @@ func main() {
 	log.Printf("Total Attempted Logging of App Events (MP Completed): %d\n", sentcount)
 	log.Printf("Total Completed Logging of App Events: %d\n", count)
 	log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
-	log.Printf("Total Log Tput: %d\n", (count/int32(currRuntime.Seconds())))
-	log.Printf("Total Log Tput (MP): %d\n", (int(sentcount)/int(currRuntime.Seconds())))
+	log.Printf("Experiment rampUp %v and rampDown %v\n", *rampUp, *rampDown)
+	log.Printf("Total Log Tput: %d\n", (int(count)/(int(currRuntime.Seconds())-*rampUp)))
+	log.Printf("Total Log Tput (MP): %d\n", (int(sentcount)/(int(currRuntime.Seconds())-*rampUp)))
 	client.Finish()
 }
 

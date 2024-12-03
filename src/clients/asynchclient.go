@@ -120,13 +120,13 @@ func (c *AsynchClient) AppResponse(commandId int32) (state.Value, uint8) {
 	  if OK {
 		  delete(c.repliesMap, commandId)
 		  c.mapMu.Unlock()
-		  break
+		  return reply.Value, reply.OK
 	  }
 	  c.mapMu.Unlock()
 	  time.Sleep(100000)
   }
   //go cleanMap(request.CommandId)
-  return reply.Value, reply.OK
+  return 0, 0
 }
 
 func (c *AsynchClient) cleanMap(bound int32) {
