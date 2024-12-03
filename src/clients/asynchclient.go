@@ -124,7 +124,8 @@ func (c *AsynchClient) AppResponse(commandId int32) (state.Value, uint8) {
 	  c.mapMu.Lock()
 	  reply, OK := c.repliesMap[commandId]
 	  if OK {
-		  delete(c.repliesMap, commandId)
+		  // For the purposes of double await, we will NOT delete the value
+		  //delete(c.repliesMap, commandId)
 		  c.mapMu.Unlock()
 		  return reply.Value, reply.OK
 	  }
