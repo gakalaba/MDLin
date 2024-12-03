@@ -68,6 +68,9 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64) (bool
 	}
 	// Assign the sequence number and batch dependencies for this request
 	c.setSeqno(c.seqnos[l])
+	//c.setTimestamp(i, n)
+	c.setTimestamp()
+
   myCommandId := c.setCommandId()
 
   c.mu.Lock()
@@ -77,9 +80,11 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64) (bool
 	// We should set the predecessor tag based on whether we are concurrent with the previous sent request
   sendCoord := false
   if lastReceived == (myCommandId-1) {
+	  dlog.Printf("CommandId %v is NOT concurrent", myCommandId)
 		c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
 	} else {
     sendCoord = true
+	  dlog.Printf("CommandId %v is Concurrent with CommandId %v", myCommandId, lastReceived+1)
 		c.propose.Predecessor = c.lastSentTag
 	}
 
@@ -97,6 +102,7 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64) (bool
 		// Send the coordination request
 		// (Keep this after sending the request for now, since
 		// logic in the send function assumes request was send)
+		dlog.Printf("AND is sending coord req to %v", c.lastSentTag)
 		c.sendCoordinationRequest(c.lastSentTag, l)
 	}
 	c.lastSentTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
@@ -196,11 +202,12 @@ func (c *AsynchClient) setCommandId() int32 {
   return commandId
 }
 
-func (c *AsynchClient) setTimestamp(i int, n int) {
+func (c *AsynchClient) setTimestamp() {
         c.propose.Timestamp = 1
-        if (i == n-1) {
+        // TODO How will we clean r.seen??
+	/*if (i == n-1) {
           c.propose.Timestamp = 0
-        }
+        }*/
 }
 
 func (c *AsynchClient) sendPropose() {
