@@ -102,7 +102,7 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64) (bool
 		// Send the coordination request
 		// (Keep this after sending the request for now, since
 		// logic in the send function assumes request was send)
-		dlog.Printf("AND is sending coord req to %v", c.lastSentTag)
+		dlog.Printf("AND is sending coord req to %v on shard %v", c.lastSentTag, l)
 		c.sendCoordinationRequest(c.lastSentTag, l)
 	}
 	c.lastSentTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
