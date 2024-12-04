@@ -271,7 +271,7 @@ func (c *GryffClient) HandleOverwrite(key state.Key, newValue state.Value,
  * End gryffcommon.IGryffCoordinator methods
  */
 
-func (c *GryffClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
+func (c *GryffClient) AppRequest(opTypes []state.Operation, keys []int64, oldValue []int64, newValue []int64) (bool, int64) {
 	for i, opType := range opTypes {
 		k := keys[i]
 

@@ -264,7 +264,7 @@ func main() {
 	for int(currRuntime.Seconds()) < *expLength {
 
 		//delay_start := time.Now()
-		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(key)})
+		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(key)}, []int64{4}, nil)
 
 
 		sentcount++
@@ -294,20 +294,6 @@ func delayBetweenRequests(ns int64) {
 			return
 		}
 	}
-}
-
-//***********************************************************//
-//********************** Event Logging **********************//
-//***********************************************************//
-// Based on https://github.com/netdata/netdata/blob/4d04a96ff572d09e81dcf8a28c134ecc2d16b278/src/collectors/diskspace.plugin/plugin_diskspace.c#L298
-
-/*
-redis_client.lpush("events", data)
-*/
-
-func LogEventSequential(log int64, client clients.Client) {
-	// lpush("events", data)
-	client.AppRequest([]state.Operation{state.PUT}, []int64{log})
 }
 
 func catchKill(interrupt chan os.Signal) {

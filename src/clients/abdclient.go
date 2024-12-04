@@ -79,7 +79,7 @@ func NewAbdClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 	return abdc
 }
 
-func (c *AbdClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
+func (c *AbdClient) AppRequest(opTypes []state.Operation, keys []int64, oldValue []int64, newValue []int64) (bool, int64) {
 	for i, opType := range opTypes {
 		k := keys[i]
 

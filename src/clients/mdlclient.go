@@ -41,7 +41,7 @@ func NewMDLClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 	return pc
 }
 
-func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
+func (c *MDLClient) AppRequest(opTypes []state.Operation, keys []int64, oldValue []int64, newValue []int64) (bool, int64) {
 	fanout := len(keys)
 	//dlog.Printf("fanout = %v", fanout)
 	startTimes := make([]time.Time, fanout)

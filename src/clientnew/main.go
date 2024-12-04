@@ -296,7 +296,7 @@ func main() {
 
 		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
 		before := time.Now()
-		success, _ = client.AppRequest(opTypes, keys)
+		success, _ = client.AppRequest(opTypes, keys, nil, nil)
 		after := time.Now()
                 //dlog.Printf("!!!!Paxos APP level write took %d microseconds\n", int64(after.Sub(before).Microseconds()))
 
