@@ -254,27 +254,25 @@ func main() {
 		client.Finish()
 	}(client)
 
-	// Add these keys in the store 
+	log.Printf("starting grafana test!")
+	//ns := int64(1200000)
+	key := 0
 	start := time.Now()
 	now := start
 	currRuntime := now.Sub(start)
-	//for paxos:
-	//opString := "app"
-	log.Printf("starting grafana test!")
-	ns := int64(1200000)
 	time.Sleep(time.Duration(*rampUp) * time.Second)
 	for int(currRuntime.Seconds()) < *expLength {
 
-		delay_start := time.Now()
-		// delayBetweenRequests(200000)
-		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(4)})
+		//delay_start := time.Now()
+		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(key)})
 
 
 		sentcount++
+		key++
 
 		now = time.Now()
 		currRuntime = now.Sub(start)
-		for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
+		//for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
 	}
 	//numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
 	count := client.GrabHighestResponse() + 1
