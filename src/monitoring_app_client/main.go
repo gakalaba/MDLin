@@ -264,7 +264,7 @@ func main() {
 	for int(currRuntime.Seconds()) < *expLength {
 
 		//delay_start := time.Now()
-		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(key)}, []int64{4}, nil)
+		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(key)}, nil, []int64{4})
 
 
 		sentcount++
