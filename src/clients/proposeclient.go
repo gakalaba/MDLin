@@ -34,7 +34,7 @@ func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader i
 	return pc
 }
 
-func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
+func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64, oldValues []int64, newValues []int64) (bool, int64) {
 	for i, opType := range opTypes {
 		k := keys[i]
 
@@ -46,10 +46,10 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (boo
 			success, _ = c.Read(k)
 		} else if opType == state.PUT {
 			//opTypeStr = "write"
-			success = c.Write(k, int64(k))
+			success = c.Write(k, newValues[i])
 		} else {
 			//opTypeStr = "rmw"
-			success, _ = c.CompareAndSwap(k, int64(k-1), int64(k))
+			success, _ = c.CompareAndSwap(k, oldValues[i], newValues[i])
 		}
 		//after := time.Now()
 

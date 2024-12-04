@@ -53,8 +53,8 @@ func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader in
 	return pc
 }
 
-func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
-  if len(opTypes) > 1 || len(keys) > 1 {
+func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldValues []int64, newValues []int64) (bool, int64) {
+  if len(opTypes) > 1 || len(keys) > 1 || len(oldValues) > 1 || len(newValues) > 1 {
     panic("Can only send one request at a time with AppRequest")
   }
   key := keys[0]
@@ -92,9 +92,9 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64) (bool
 		c.Read(key)
 	} else if opTypes[0] == state.PUT {
 		//dlog.Printf("type is Put!")
-		c.Write(key, int64(key))
+		c.Write(key, newValues[0])
 	} else {
-		c.CompareAndSwap(key, int64(key-1), int64(key))
+		c.CompareAndSwap(key, oldValues[0], newValues[0])
 	}
 
 	// We should only send this if we assigned a predecessor... and it should be whatever our predecessor tag is!
