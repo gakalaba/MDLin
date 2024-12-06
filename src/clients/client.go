@@ -202,8 +202,8 @@ func (c *AbstractClient) connectToLeader(i int) bool {
 	}
 
 	log.Printf("Connected to leader %d with connection %s\n", i, c.leaders[i].LocalAddr().String())
-	c.readers[i] = bufio.NewReaderSize(c.leaders[i], 1)
-	c.writers[i] = bufio.NewWriterSize(c.leaders[i], 1)
+	c.readers[i] = bufio.NewReaderSize(c.leaders[i], 16)
+	c.writers[i] = bufio.NewWriterSize(c.leaders[i], 16)
 
 	var idBytes [4]byte
 	idBytesS := idBytes[:4]

@@ -573,8 +573,8 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 // Listen for client traffic
 func (r *Replica) clientListener(conn net.Conn) {
 	var err error
-	reader := bufio.NewReaderSize(conn, 1)
-	writer := bufio.NewWriterSize(conn, 1)
+	reader := bufio.NewReaderSize(conn, 16)
+	writer := bufio.NewWriterSize(conn, 16)
 
 	var idBytes [4]byte
 	idBytesS := idBytes[:4]
