@@ -54,6 +54,7 @@ func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader in
 }
 
 func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldValues []int64, newValues []int64) (bool, int64) {
+	//A := time.Now()
   if len(opTypes) > 1 || len(keys) > 1 || len(oldValues) > 1 || len(newValues) > 1 {
     panic("Can only send one request at a time with AppRequest")
   }
@@ -73,6 +74,7 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldVa
 
   myCommandId := c.setCommandId()
 
+  //B := time.Now()
   c.mu.Lock()
   lastReceived := c.latestReceived
   c.mu.Unlock()
@@ -80,14 +82,15 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldVa
 	// We should set the predecessor tag based on whether we are concurrent with the previous sent request
   sendCoord := false
   if lastReceived == (myCommandId-1) {
-	  dlog.Printf("CommandId %v is NOT concurrent", myCommandId)
+	  //dlog.Printf("CommandId %v is NOT concurrent", myCommandId)
 		c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
 	} else {
     sendCoord = true
-	  dlog.Printf("CommandId %v is Concurrent with CommandId %v", myCommandId, lastReceived+1)
+	  //dlog.Printf("CommandId %v is Concurrent with CommandId %v", myCommandId, lastReceived+1)
 		c.propose.Predecessor = c.lastSentTag
 	}
 
+	//C := time.Now()
 	if opTypes[0] == state.GET {
 		c.Read(key)
 	} else if opTypes[0] == state.PUT {
@@ -97,15 +100,18 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldVa
 		c.CompareAndSwap(key, oldValues[0], newValues[0])
 	}
 
+	//D :=time.Now()
 	// We should only send this if we assigned a predecessor... and it should be whatever our predecessor tag is!
 	if (sendCoord && !c.SSA) {
 		// Send the coordination request
 		// (Keep this after sending the request for now, since
 		// logic in the send function assumes request was send)
-		dlog.Printf("AND is sending coord req to %v on shard %v", c.lastSentTag, l)
+		//dlog.Printf("AND is sending coord req to %v on shard %v", c.lastSentTag, l)
 		c.sendCoordinationRequest(c.lastSentTag, l)
 	}
+	//E := time.Now()
 	c.lastSentTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
+	//dlog.Printf("AB=%v, BC=%v, CD=%v, DE=%v", B.Sub(A), C.Sub(B), D.Sub(C), E.Sub(D))
 	return true, int64(c.propose.CommandId)
 }
 
@@ -215,9 +221,14 @@ func (c *AsynchClient) sendPropose() {
 	shard := c.GetShardFromKey(c.propose.Command.K)
 	//dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, SeqNo %v, PID %v, Predecessor %v at time %v}", shard, c.propose.CommandId, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, time.Now().UnixMilli()))
 
+	A := time.Now()
 	c.writers[shard].WriteByte(clientproto.MDL_PROPOSE)
+	B := time.Now()
 	c.propose.Marshal(c.writers[shard])
+	C := time.Now()
 	c.writers[shard].Flush()
+	D := time.Now()
+	dlog.Printf("WriteByte=%v, Marshal=%v, Flush=%v", B.Sub(A), C.Sub(B), D.Sub(C))
 }
 
 func (c *AsynchClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, myShard int) {

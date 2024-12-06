@@ -7,7 +7,8 @@ import (
 	"genericsmr"
 	"genericsmrproto"
 	"state"
-	//"time"
+	"time"
+	"dlog"
 )
 
 type ProposeClient struct {
@@ -122,9 +123,14 @@ func (c *ProposeClient) sendPropose() {
 			}
 		}
 		//dlog.Printf("@Sending request to %d\n", replica)
+		A := time.Now()
 		c.writers[replica].WriteByte(clientproto.GEN_PROPOSE)
+		B := time.Now()
 		c.propose.Marshal(c.writers[replica])
+		C := time.Now()
 		c.writers[replica].Flush()
+		D := time.Now()
+		dlog.Printf("WriteByte=%v, Marshal=%v, Flush=%v", B.Sub(A), C.Sub(B), D.Sub(C))
 	} else {
 		//dlog.Printf("Sending request to all replicas\n")
 		for i := 0; i < c.numLeaders; i++ {
