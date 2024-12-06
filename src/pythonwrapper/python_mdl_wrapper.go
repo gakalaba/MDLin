@@ -3,12 +3,12 @@ package main
 // #include <stdlib.h>
 import "C"
 import (
+	"C"
 	"clients"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"state"
-	"strconv"
 )
 
 type Response struct {
@@ -201,19 +201,8 @@ func init() {
 }
 
 //export AsyncAppRequest
-func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char) *C.char {
-    fmt.Printf("Go: Starting AsyncAppRequest with op_types=%s, keys=%s\n", C.GoString(opTypesJSON), C.GoString(keysJSON))
-    
-    if client == nil {
-        response := Response{
-            Success: false,
-            Result:  "Client not properly initialized",
-        }
-        jsonResponse, _ := json.Marshal(response)
-        return C.CString(string(jsonResponse))
-    }
-    
-    // Parse operation type
+func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldValue *C.char) *C.char {
+    // Decode operation type
     var opType string
     err := json.Unmarshal([]byte(C.GoString(opTypesJSON)), &opType)
     if err != nil {
@@ -225,21 +214,31 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char) *C.char {
         return C.CString(string(jsonResponse))
     }
 
-    // Convert key string to int64
-    keyStr := C.GoString(keysJSON)
-    key, err := strconv.ParseInt(keyStr, 10, 64)
+    // Decode key
+    var keyStr string
+    err = json.Unmarshal([]byte(C.GoString(keysJSON)), &keyStr)
     if err != nil {
         response := Response{
             Success: false,
-            Result:  fmt.Sprintf("Failed to parse key '%s' to int64: %v", keyStr, err),
+            Result:  fmt.Sprintf("Failed to parse key: %v", err),
         }
         jsonResponse, _ := json.Marshal(response)
         return C.CString(string(jsonResponse))
     }
 
-    fmt.Printf("Go: Parsed values - op_type=%s, key=%d\n", opType, key)
+    // Prepare value and oldValue
+    var valueStr string
+    var oldValueStr string
 
-    // Get operation type
+    if value != nil {
+        json.Unmarshal([]byte(C.GoString(value)), &valueStr)
+    }
+
+    if oldValue != nil {
+        json.Unmarshal([]byte(C.GoString(oldValue)), &oldValueStr)
+    }
+
+    // Convert operation type to state.Operation
     var op state.Operation
     switch opType {
     case "GET":
@@ -248,6 +247,36 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char) *C.char {
         op = state.PUT
     case "CAS":
         op = state.CAS
+    case "INCR":
+        op = state.INCR
+    case "LLEN":
+        op = state.LLEN
+    case "SCARD":
+        op = state.SCARD
+    case "SADD":
+        op = state.SADD
+    case "SISMEMBER":
+        op = state.SISMEMBER
+    case "LRANGE":
+        op = state.LRANGE
+    case "SREM":
+        op = state.SREM
+    case "EXISTS":
+        op = state.EXISTS
+    case "LPUSH":
+        op = state.LPUSH
+    case "SMEMBERS":
+        op = state.SMEMBERS
+    case "ZREVRANGE":
+        op = state.ZREVRANGE
+    case "HMGET":
+        op = state.HMGET
+    case "HMSET":
+        op = state.HMSET
+    case "SET":
+        op = state.SET
+    case "PUBSUB":
+        op = state.PUBSUB
     default:
         response := Response{
             Success: false,
@@ -257,25 +286,43 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char) *C.char {
         return C.CString(string(jsonResponse))
     }
 
-    // Make the request
-    success, result := client.AppRequest([]state.Operation{op}, []int64{key}, nil, nil)
+    // Prepare command values
+    var valueObj state.Value
+    var oldValueObj state.Value
+
+    if valueStr != "" {
+        valueObj = state.NewString(valueStr)
+    }
+
+    if oldValueStr != "" {
+        oldValueObj = state.NewString(oldValueStr)
+    }
+
+    // Create command
+    command := &state.Command{
+        Op:       op,
+        K:        state.Key(keyStr),
+        V:        valueObj,
+        OldValue: oldValueObj,
+    }
+
+    // Execute command
+    success, _ := client.AppRequest([]state.Operation{command.Op}, []int64{int64(command.K)}, []int64{0}, []int64{0})
     
+    var result state.Value
+    if success {
+        result = state.NewString("OK")
+    } else {
+        result = state.NewString("ERROR")
+    }
+
+    // Prepare response
     response := Response{
         Success: success,
         Result:  result,
     }
 
-    // Convert response to JSON
-    jsonResponse, err := json.Marshal(response)
-    if err != nil {
-        response := Response{
-            Success: false,
-            Result:  fmt.Sprintf("Failed to marshal response: %v", err),
-        }
-        jsonErrorResponse, _ := json.Marshal(response)
-        return C.CString(string(jsonErrorResponse))
-    }
-
+    jsonResponse, _ := json.Marshal(response)
     return C.CString(string(jsonResponse))
 }
 

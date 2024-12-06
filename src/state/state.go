@@ -2,6 +2,7 @@ package state
 
 import (
 	"log"
+	"strconv"
 	"sync"
 )
 
@@ -15,11 +16,53 @@ const (
 	RLOCK
 	WLOCK
 	CAS
+	SET
+	INCR
+	SADD
+	SCARD
+	HMSET
+	HMGET
+	ZREVRANGE
+	PUBSUB
 )
 
-type Value int64
+type ValueType int
 
-const NIL Value = 0
+const (
+	StringType ValueType = iota
+	ListType
+	SetType
+)
+
+type Value struct {
+	Type   ValueType
+	String string
+	List   []string
+	Set    map[string]bool
+}
+
+func NewString(s string) Value {
+	return Value{
+		Type:   StringType,
+		String: s,
+	}
+}
+
+func NewList(l []string) Value {
+	return Value{
+		Type: ListType,
+		List: l,
+	}
+}
+
+func NewSet(s map[string]bool) Value {
+	return Value{
+		Type: SetType,
+		Set:  s,
+	}
+}
+
+var NIL = Value{Type: StringType, String: ""}
 
 type Key int64
 
@@ -131,38 +174,82 @@ func IsRead(command *Command) bool {
 	return command.Op == GET
 }
 
+
 func (c *Command) Execute(st *State) Value {
-	//log.Printf("Executing (%d, %d)\n", c.K, c.V)
-
-	//var key, value [8]byte
-
-	//    st.mutex.Lock()
-	//    defer st.mutex.Unlock()
-
 	switch c.Op {
 	case PUT:
-		/*
-		 binary.LittleEndian.PutUint64(key[:], uint64(c.K))
-		 binary.LittleEndian.PutUint64(value[:], uint64(c.V))
-		 st.DB.Set(key[:], value[:], nil)
-		*/
-
 		st.Store[c.K] = c.V
 		return c.V
+
+	case SET:
+		st.Store[c.K] = c.V
+		return NewString("OK")
 
 	case GET:
 		if val, present := st.Store[c.K]; present {
 			return val
 		}
+
 	case CAS:
 		if val, present := st.Store[c.K]; present {
-			if val == c.OldValue {
+			if val.String == c.OldValue.String {
 				st.Store[c.K] = c.V
 				return val
 			}
 		}
-	}
 
+	case INCR:
+		if val, present := st.Store[c.K]; present {
+			if val.String != "" {
+				newVal := NewString(string(val.String + "1"))
+				st.Store[c.K] = newVal
+				return newVal
+			}
+		}
+		st.Store[c.K] = NewString("1")
+		return NewString("1")
+
+	case SADD:
+		if st.Store[c.K].Type != SetType {
+			st.Store[c.K] = NewSet(make(map[string]bool))
+		}
+		st.Store[c.K].Set[c.V.String] = true
+		return NewString(strconv.Itoa(len(st.Store[c.K].Set)))
+
+	case SCARD:
+		if st.Store[c.K].Type == SetType {
+			return NewString(strconv.Itoa(len(st.Store[c.K].Set)))
+		}
+		return NewString("0")
+
+	case HMSET:
+		if c.V.Type != ListType {
+			return NewString("")
+		}
+		st.Store[c.K] = c.V
+		return NewString("OK")
+
+	case HMGET:
+		if val, exists := st.Store[c.K]; exists && val.Type == ListType {
+			result := make([]string, 0)
+			for _, field := range c.V.List {
+				for _, v := range val.List {
+					if v == field {
+						result = append(result, v)
+						break
+					}
+				}
+			}
+			return NewList(result)
+		}
+		return NewList([]string{})
+
+	case PUBSUB:
+		// mock?
+		return NewString("OK")
+	default:
+		return NIL
+	}
 	return NIL
 }
 

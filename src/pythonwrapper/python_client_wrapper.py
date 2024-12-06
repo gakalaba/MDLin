@@ -16,48 +16,56 @@ except OSError as e:
     raise OSError(f"Failed to load library at {lib_path}. Error: {e}")
 
 # Set up function signatures
-app_request = library.AsyncAppRequest
-app_request.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
-app_request.restype = ctypes.c_char_p
+async_app_request = library.AsyncAppRequest
+async_app_request.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+async_app_request.restype = ctypes.c_char_p
 
-app_response = library.AsyncAppResponse
-app_response.argtypes = [ctypes.c_char_p]
-app_response.restype = ctypes.c_char_p
+async_app_response = library.AsyncAppResponse
+async_app_response.argtypes = [ctypes.c_char_p]
+async_app_response.restype = ctypes.c_char_p
 
-def AppRequest(op_type, key, oldValue=None, newValue=None):
+def AppRequest(op_type, key, value=None, old_value=None):
+    """
+    Perform an operation on a key with optional value and old_value.
+    
+    :param op_type: Operation type (e.g., 'PUT', 'GET', 'CAS')
+    :param key: Key for the operation (string or integer)
+    :param value: Value for the operation (optional)
+    :param old_value: Old value for CAS operations (optional)
+    :return: Request key or result
+    """
     try:
-        print(f"Python: Starting appRequest with op_type={op_type}, key={key}")
+        # Convert inputs to strings
+        key_str = str(key)
+        value_str = str(value) if value is not None else None
+        old_value_str = str(old_value) if old_value is not None else None
         
-        # Convert operation type to JSON
-        op_types_json = json.dumps(op_type).encode('utf-8')
+        # Prepare JSON-encoded parameters
+        op_type_json = json.dumps(op_type)
+        key_json = json.dumps(key_str)
+        value_json = json.dumps(value_str) if value_str is not None else None
+        old_value_json = json.dumps(old_value_str) if old_value_str is not None else None
         
-        # Convert key to string, strip any non-numeric characters, then encode
-        # This handles cases like "post:123" -> "123"
-        numeric_key = ''.join(c for c in str(key) if c.isdigit())
-        if not numeric_key:
-            raise ValueError(f"Key '{key}' contains no numeric value")
-        keys_json = numeric_key.encode('utf-8')
-        
-        print(f"Python: Encoded JSON - op_types={op_types_json}, keys={keys_json}")
-        
-        # Call Go function
-        result_ptr = app_request(op_types_json, keys_json)
-        print(f"Python: Received result pointer: {result_ptr}")
+        # Call the underlying C function
+        result_ptr = async_app_request(
+            op_type_json.encode('utf-8'), 
+            key_json.encode('utf-8'), 
+            value_json.encode('utf-8') if value_json is not None else None,
+            old_value_json.encode('utf-8') if old_value_json is not None else None
+        )
         
         if not result_ptr:
             return None
-            
+        
         # Convert result from bytes to string
         result_str = ctypes.string_at(result_ptr).decode('utf-8')
-        print(f"Python: Decoded result string: {result_str}")
         
         # Parse JSON result
         result = json.loads(result_str)
-        print(f"Python: Parsed result: {result}")
         
         return result
     except Exception as e:
-        print(f"Python: Error in appRequest: {str(e)}")
+        print(f"Error in AppRequest: {str(e)}")
         raise
 
 def AppResponse(key):
@@ -66,7 +74,7 @@ def AppResponse(key):
         key_json = json.dumps(key).encode('utf-8')
         
         # Call Go function
-        result_ptr = app_response(key_json)
+        result_ptr = async_app_response(key_json)
         if not result_ptr:
             return None
             
@@ -80,3 +88,24 @@ def AppResponse(key):
     except Exception as e:
         print(f"Error in appResponse: {str(e)}")
         raise
+
+def main():
+    try:
+        # Test PUT operation
+        print("\nTesting PUT operation...")
+        key = "test_key"
+        value = "Hello, MDLin!"
+        result = AppRequest("PUT", key, value)
+        print(f"PUT result: {result}")
+
+        # Test GET operation
+        print("\nTesting GET operation...")
+        result = AppRequest("GET", key)
+        print(f"GET result: {result}")
+
+    except Exception as e:
+        print(f"Error in main: {str(e)}")
+        return
+
+if __name__ == "__main__":
+    main()
