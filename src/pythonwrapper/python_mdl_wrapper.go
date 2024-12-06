@@ -299,15 +299,17 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
     }
 
     // Create command
+	keyInt64 := stringToInt64Hash(keyStr)
+
     command := &state.Command{
         Op:       op,
-        K:        state.Key(keyStr),
+        K:        keyInt64,
         V:        valueObj,
         OldValue: oldValueObj,
     }
 
     // Execute command
-    success, _ := client.AppRequest([]state.Operation{command.Op}, []int64{int64(command.K)}, []int64{0}, []int64{0})
+    success, _ := client.AppRequest([]state.Operation{command.Op}, []int64{keyInt64}, []int64{0}, []int64{0})
     
     var result state.Value
     if success {
