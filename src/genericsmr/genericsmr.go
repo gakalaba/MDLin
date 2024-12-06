@@ -482,6 +482,11 @@ func (r *Replica) WaitForClientConnections() {
 			continue
 		}
 		log.Printf("Accepted client connection %s\n", conn.RemoteAddr().String())
+		if err := conn.(*net.TCPConn).SetNoDelay(true); err != nil {
+			log.Printf("SetNoDelay didn't work %v", err)
+			panic("SetNoDelay didn't work")
+		}
+
 		go r.clientListener(conn)
 
 		if r.clientConnect {
@@ -568,8 +573,8 @@ func (r *Replica) shardListener(rid int, reader *bufio.Reader) {
 // Listen for client traffic
 func (r *Replica) clientListener(conn net.Conn) {
 	var err error
-	reader := bufio.NewReader(conn)
-	writer := bufio.NewWriter(conn)
+	reader := bufio.NewReaderSize(conn, 1)
+	writer := bufio.NewWriterSize(conn, 1)
 
 	var idBytes [4]byte
 	idBytesS := idBytes[:4]

@@ -196,9 +196,14 @@ func (c *AbstractClient) connectToLeader(i int) bool {
 		log.Printf("Error connecting to leader %d: %v\n", i, err)
 		return false
 	}
+	if err := c.leaders[i].(*net.TCPConn).SetNoDelay(true); err != nil {
+		log.Printf("SetNoDelay didn't work %v", err)
+		panic("SetNoDelay didn't work")
+	}
+
 	log.Printf("Connected to leader %d with connection %s\n", i, c.leaders[i].LocalAddr().String())
-	c.readers[i] = bufio.NewReader(c.leaders[i])
-	c.writers[i] = bufio.NewWriter(c.leaders[i])
+	c.readers[i] = bufio.NewReaderSize(c.leaders[i], 1)
+	c.writers[i] = bufio.NewWriterSize(c.leaders[i], 1)
 
 	var idBytes [4]byte
 	idBytesS := idBytes[:4]
