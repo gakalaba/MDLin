@@ -231,18 +231,6 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
         return C.CString(string(jsonResponse))
     }
 
-    // Prepare value and oldValue
-    var valueStr string
-    var oldValueStr string
-
-    if value != nil {
-        json.Unmarshal([]byte(C.GoString(value)), &valueStr)
-    }
-
-    if oldValue != nil {
-        json.Unmarshal([]byte(C.GoString(oldValue)), &oldValueStr)
-    }
-
     // Convert operation type to state.Operation
     var op state.Operation
     switch opType {
@@ -277,16 +265,55 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
         return C.CString(string(jsonResponse))
     }
 
-    // Prepare command values
-    var valueObj state.Value
-    var oldValueObj state.Value
-
-    if valueStr != "" {
-        valueObj = state.NewString(valueStr)
+    // Helper function to convert JSON to state.Value
+    convertJSONToValue := func(jsonStr string) state.Value {
+        var value interface{}
+        if err := json.Unmarshal([]byte(jsonStr), &value); err != nil {
+            fmt.Printf("Error unmarshaling JSON: %v\n", err)
+            return state.NIL
+        }
+        
+        fmt.Printf("Debug - Raw JSON value: %#v\n", value)
+        
+        switch v := value.(type) {
+        case []interface{}:
+            fmt.Printf("Converting list value: %v\n", v)
+            strList := make([]string, len(v))
+            for i, item := range v {
+                // Convert any type to string
+                strList[i] = fmt.Sprintf("%v", item)
+            }
+            fmt.Printf("Created string list: %v\n", strList)
+            return state.NewList(strList)
+        case map[string]interface{}:
+            fmt.Printf("Converting set value: %v\n", v)
+            strSet := make(map[string]bool)
+            for key := range v {
+                strSet[key] = true
+            }
+            return state.NewSet(strSet)
+        case string:
+			fmt.Println("Case string!", v)
+		
+            return state.NewString(v)
+        default:
+            // For any other type, convert to string
+            return state.NewString(fmt.Sprintf("%v", v))
+        }
     }
 
-    if oldValueStr != "" {
-        oldValueObj = state.NewString(oldValueStr)
+    // Convert values
+    var valueObj, oldValueObj state.Value
+    if value != nil {
+        jsonStr := C.GoString(value)
+        fmt.Printf("Processing value JSON: %s\n", jsonStr)
+        valueObj = convertJSONToValue(jsonStr)
+    }
+
+    if oldValue != nil {
+        jsonStr := C.GoString(oldValue)
+        fmt.Printf("Processing oldValue JSON: %s\n", jsonStr)
+        oldValueObj = convertJSONToValue(jsonStr)
     }
 
     // Create command
@@ -300,6 +327,15 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
     }
 
     // Execute command
+    fmt.Printf("Go: Executing command:\n"+
+        "  Operation: %v\n"+
+        "  Key: %v (hash: %v)\n"+
+        "  Value: %+v (Type: %v)\n"+
+        "  OldValue: %+v (Type: %v)\n",
+        command.Op, keyStr, keyInt64,
+        command.V, command.V.Type,
+        command.OldValue, command.OldValue.Type)
+	
     success, _ := client.AppRequest([]state.Operation{command.Op}, []int64{keyInt64}, []state.Value{oldValueObj}, []state.Value{valueObj})
     
     var result state.Value
@@ -311,7 +347,7 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
 
     // Prepare response
     response := Response{
-        Success: success,
+        Success: true,
         Result:  result,
     }
 

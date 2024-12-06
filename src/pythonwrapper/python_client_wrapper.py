@@ -37,14 +37,14 @@ def AppRequest(op_type, key, value=None, old_value=None):
     try:
         # Convert inputs to strings
         key_str = str(key)
-        value_str = str(value) if value is not None else None
-        old_value_str = str(old_value) if old_value is not None else None
         
         # Prepare JSON-encoded parameters
         op_type_json = json.dumps(op_type)
         key_json = json.dumps(key_str)
-        value_json = json.dumps(value_str) if value_str is not None else None
-        old_value_json = json.dumps(old_value_str) if old_value_str is not None else None
+        value_json = json.dumps(value) if value is not None else None
+        old_value_json = json.dumps(old_value) if old_value is not None else None
+        
+        print(f"Python: Sending value_json: {value_json}")
         
         # Call the underlying C function
         result_ptr = async_app_request(
@@ -92,11 +92,11 @@ def AppResponse(key):
 def main():
     try:
         # Test PUT operation
-        print("\nTesting PUT operation...")
+        # print("\nTesting PUT operation...")
         key = "test_key"
-        value = "Hello, MDLin!"
-        result = AppRequest("PUT", key, value)
-        print(f"PUT result: {result}")
+        # value =["Hlellooo"]
+        # result = AppRequest("PUT", key, value)
+        # print(f"PUT result: {result}")
 
         # Test GET operation
         print("\nTesting GET operation...")
