@@ -10,6 +10,11 @@ import (
 	"fmt"
 	"state"
 )
+import (
+	"crypto/md5"
+	"encoding/binary"
+	"strings"
+)
 
 type Response struct {
 	Success bool        `json:"success"`
@@ -249,24 +254,10 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
         op = state.CAS
     case "INCR":
         op = state.INCR
-    case "LLEN":
-        op = state.LLEN
     case "SCARD":
         op = state.SCARD
     case "SADD":
         op = state.SADD
-    case "SISMEMBER":
-        op = state.SISMEMBER
-    case "LRANGE":
-        op = state.LRANGE
-    case "SREM":
-        op = state.SREM
-    case "EXISTS":
-        op = state.EXISTS
-    case "LPUSH":
-        op = state.LPUSH
-    case "SMEMBERS":
-        op = state.SMEMBERS
     case "ZREVRANGE":
         op = state.ZREVRANGE
     case "HMGET":
@@ -299,17 +290,17 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
     }
 
     // Create command
-	keyInt64 := stringToInt64Hash(keyStr)
+    keyInt64 := stringToInt64Hash(keyStr)
 
     command := &state.Command{
         Op:       op,
-        K:        keyInt64,
+        K:        state.Key(keyInt64),
         V:        valueObj,
         OldValue: oldValueObj,
     }
 
     // Execute command
-    success, _ := client.AppRequest([]state.Operation{command.Op}, []int64{keyInt64}, []int64{0}, []int64{0})
+    success, _ := client.AppRequest([]state.Operation{command.Op}, []int64{keyInt64}, []state.Value{oldValueObj}, []state.Value{valueObj})
     
     var result state.Value
     if success {
@@ -369,6 +360,18 @@ func AsyncAppResponse(keysJSON *C.char) *C.char {
 	}
 
 	return C.CString(string(jsonResponse))
+}
+
+
+func stringToInt64Hash(input string) int64 {
+	// Normalize the input string
+	normalized := strings.ToLower(strings.TrimSpace(input))
+
+	// Generate MD5 hash
+	hash := md5.Sum([]byte(normalized))
+
+	// Convert first 8 bytes of MD5 hash to int64
+	return int64(binary.BigEndian.Uint64(hash[:8]))
 }
 
 func main() {}
