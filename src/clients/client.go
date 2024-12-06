@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"clientproto"
 	"coordinatorproto"
+	"dlog"
 	"encoding/binary"
 	"fastrpc"
 	"fmt"
@@ -15,7 +16,6 @@ import (
 	"state"
 	"stats"
 	"time"
-	"dlog"
 )
 
 const CHAN_BUFFER_SIZE = 200000
@@ -36,17 +36,16 @@ type RPCPair struct {
 
 type Client interface {
 	Read(key int64) (bool, int64)
-	Write(key int64, value int64) bool
-	CompareAndSwap(key int64, oldValue int64,
-		newValue int64) (bool, int64)
-	AppRequest(opTypes []state.Operation, keys []int64, oldValues []int64, newValues []int64) (bool, int64)
+	Write(key int64, value state.Value) bool
+	CompareAndSwap(key int64, oldValue state.Value, newValue state.Value) (bool, int64)
+	AppRequest(opTypes []state.Operation, keys []int64, oldValues []state.Value, newValues []state.Value) (bool, int64)
 	//OpenAppRequest(opTypes state.Operation, keys int64)
 	//StartAsynchReadReplies(doneChan chan bool, resultChan chan int)
 	//StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int)
 	AppResponse(commandId int32) (state.Value, uint8)
 	GrabHighestResponse() int32
   Finish()
-	ConnectToCoordinator()
+	// ConnectToCoordinator()
 	// ConnectToReplicas()
 	// DetermineLeader()
 	// DetermineReplicaPings()
@@ -110,8 +109,8 @@ func NewAbstractClient(id int32, coordinatorAddr string, coordinatorPort int, fo
 	}
 	c.RegisterRPC(new(clientproto.PingReply), clientproto.GEN_PING_REPLY, c.pingReplyChan)
 
-	c.ConnectToCoordinator()
-	c.ConnectToShards()
+	// c.ConnectToCoordinator()
+	// c.ConnectToShards()
 	// c.DetermineLeader()
 	// c.DetermineReplicaPings()
 
@@ -212,8 +211,9 @@ func (c *AbstractClient) connectToLeader(i int) bool {
 }
 
 func (c *AbstractClient) GetShardFromKey(k state.Key) int {
-	nShards := len(c.leaders)
-	return int(k) % nShards
+	//nShards := len(c.leaders)
+	return 0 
+	//int(k) % nShards
 }
 
 // func (c *AbstractClient) DetermineReplicaPings() {
