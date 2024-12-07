@@ -4,6 +4,7 @@ import (
 	"clientproto"
 	"dlog"
 	"fastrpc"
+	"strconv"
 
 	//"fmt"
 	"genericsmr"
@@ -107,7 +108,7 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldVa
   if sendCoord {
     c.sendCoordinationRequest(c.propose.Predecessor, l)
   }
-  return true, state.NewString("0")
+  return true, state.NewString(strconv.Itoa(int(myCommandId)))
 }
 
 func (c *AsynchClient) Write(key int64, value state.Value) bool {

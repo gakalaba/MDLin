@@ -202,33 +202,25 @@ func init() {
         fmt.Println("Failed to create client during initialization")
         return
     }
-    fmt.Println("Client initialized successfully")
+    // fmt.Println("Client initialized successfully")
 }
 
 //export AsyncAppRequest
-func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldValue *C.char) *C.char {
+func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldValue *C.char) (bool, *C.char) {
     // Decode operation type
     var opType string
     err := json.Unmarshal([]byte(C.GoString(opTypesJSON)), &opType)
     if err != nil {
-        response := Response{
-            Success: false,
-            Result:  fmt.Sprintf("Failed to parse op_type: %v", err),
-        }
-        jsonResponse, _ := json.Marshal(response)
-        return C.CString(string(jsonResponse))
+        fmt.Printf("Failed to parse op_type: %v\n", err)
+        return false, C.CString("")
     }
 
     // Decode key
     var keyStr string
     err = json.Unmarshal([]byte(C.GoString(keysJSON)), &keyStr)
     if err != nil {
-        response := Response{
-            Success: false,
-            Result:  fmt.Sprintf("Failed to parse key: %v", err),
-        }
-        jsonResponse, _ := json.Marshal(response)
-        return C.CString(string(jsonResponse))
+        fmt.Printf("Failed to parse key: %v\n", err)
+        return false, C.CString("")
     }
 
     // Convert operation type to state.Operation
@@ -257,12 +249,8 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
     case "PUBSUB":
         op = state.PUBSUB
     default:
-        response := Response{
-            Success: false,
-            Result:  fmt.Sprintf("Invalid operation type: %s", opType),
-        }
-        jsonResponse, _ := json.Marshal(response)
-        return C.CString(string(jsonResponse))
+        fmt.Printf("Invalid operation type: %s\n", opType)
+        return false, C.CString("")
     }
 
     // Helper function to convert JSON to state.Value
@@ -273,17 +261,13 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
             return state.NIL
         }
         
-        fmt.Printf("Debug - Raw JSON value: %#v\n", value)
-        
         switch v := value.(type) {
         case []interface{}:
             fmt.Printf("Converting list value: %v\n", v)
             strList := make([]string, len(v))
             for i, item := range v {
-                // Convert any type to string
                 strList[i] = fmt.Sprintf("%v", item)
             }
-            fmt.Printf("Created string list: %v\n", strList)
             return state.NewList(strList)
         case map[string]interface{}:
             fmt.Printf("Converting set value: %v\n", v)
@@ -293,11 +277,8 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
             }
             return state.NewSet(strSet)
         case string:
-			fmt.Println("Case string!", v)
-		
             return state.NewString(v)
         default:
-            // For any other type, convert to string
             return state.NewString(fmt.Sprintf("%v", v))
         }
     }
@@ -306,53 +287,24 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
     var valueObj, oldValueObj state.Value
     if value != nil {
         jsonStr := C.GoString(value)
-        fmt.Printf("Processing value JSON: %s\n", jsonStr)
         valueObj = convertJSONToValue(jsonStr)
     }
 
     if oldValue != nil {
         jsonStr := C.GoString(oldValue)
-        fmt.Printf("Processing oldValue JSON: %s\n", jsonStr)
         oldValueObj = convertJSONToValue(jsonStr)
     }
 
     // Create command
     keyInt64 := stringToInt64Hash(keyStr)
 
-    command := &state.Command{
-        Op:       op,
-        K:        state.Key(keyInt64),
-        V:        valueObj,
-        OldValue: oldValueObj,
+    // Execute command and return success and value as string
+    success, val := client.AppRequest([]state.Operation{op}, []int64{keyInt64}, []state.Value{oldValueObj}, []state.Value{valueObj})
+    if !success {
+        return false, C.CString("")
     }
-
-    // Execute command
-    fmt.Printf("Go: Executing command:\n"+
-        "  Operation: %v\n"+
-        "  Key: %v (hash: %v)\n"+
-        "  Value: %+v (Type: %v)\n"+
-        "  OldValue: %+v (Type: %v)\n",
-        command.Op, keyStr, keyInt64,
-        command.V, command.V.Type,
-        command.OldValue, command.OldValue.Type)
-	
-    success, _ := client.AppRequest([]state.Operation{command.Op}, []int64{keyInt64}, []state.Value{oldValueObj}, []state.Value{valueObj})
     
-    var result state.Value
-    if success {
-        result = state.NewString("OK")
-    } else {
-        result = state.NewString("ERROR")
-    }
-
-    // Prepare response
-    response := Response{
-        Success: true,
-        Result:  result,
-    }
-
-    jsonResponse, _ := json.Marshal(response)
-    return C.CString(string(jsonResponse))
+    return true, C.CString(val.String)
 }
 
 //export AsyncAppResponse

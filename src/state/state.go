@@ -32,6 +32,7 @@ const (
 	StringType ValueType = iota
 	ListType
 	SetType
+	HashType
 )
 
 type Value struct {
@@ -39,6 +40,7 @@ type Value struct {
 	String string
 	List   []string
 	Set    map[string]bool
+	Hash   map[string]string
 }
 
 func NewString(s string) Value {
@@ -59,6 +61,13 @@ func NewSet(s map[string]bool) Value {
 	return Value{
 		Type: SetType,
 		Set:  s,
+	}
+}
+
+func NewHash(h map[string]string) Value {
+	return Value{
+		Type: HashType,
+		Hash: h,
 	}
 }
 
@@ -177,19 +186,24 @@ func IsRead(command *Command) bool {
 
 func (c *Command) Execute(st *State) Value {
 	switch c.Op {
+
+	//Type: string, Return: string
 	case PUT:
 		st.Store[c.K] = c.V
 		return c.V
 
+	//Type: string, Return: string
 	case SET:
 		st.Store[c.K] = c.V
 		return NewString("OK")
 
+	//Type: string, Return: List
 	case GET:
 		if val, present := st.Store[c.K]; present {
 			return val
 		}
 
+	// Type: string, Return: string
 	case CAS:
 		if val, present := st.Store[c.K]; present {
 			if val.String == c.OldValue.String {
@@ -198,51 +212,78 @@ func (c *Command) Execute(st *State) Value {
 			}
 		}
 
+	// Type: string, Return: string
+	// Increment the value stored at key by 1
 	case INCR:
 		if val, present := st.Store[c.K]; present {
 			if val.String != "" {
-				newVal := NewString(string(val.String + "1"))
+				// Convert string to integer, increment, then back to string
+				num, err := strconv.Atoi(val.String)
+				if err != nil {
+					return NewString("0") // Return 0 if not a valid number
+				}
+				newVal := NewString(strconv.Itoa(num + 1))
 				st.Store[c.K] = newVal
 				return newVal
 			}
 		}
 		st.Store[c.K] = NewString("1")
 		return NewString("1")
-
+	
+	// Type: string, Return: string
+	// Add specified member(s)? to the set stored at key
 	case SADD:
 		if st.Store[c.K].Type != SetType {
 			st.Store[c.K] = NewSet(make(map[string]bool))
 		}
 		st.Store[c.K].Set[c.V.String] = true
 		return NewString(strconv.Itoa(len(st.Store[c.K].Set)))
-
+	
+	// Type: string, Return: string
+	// Return number of elements of the set stored at key 
 	case SCARD:
 		if st.Store[c.K].Type == SetType {
 			return NewString(strconv.Itoa(len(st.Store[c.K].Set)))
 		}
 		return NewString("0")
-
+	
+	// Type: list, Return: string
+	// Set specified field to their respective value
 	case HMSET:
-		if c.V.Type != ListType {
-			return NewString("")
+		if c.V.Type != ListType || len(c.V.List) % 2 != 0 {
+			return NewString("") // List must have even number of elements (field-value pairs)
 		}
-		st.Store[c.K] = c.V
+		
+		// Initialize hash if it doesn't exist or isn't a hash
+		if st.Store[c.K].Type != HashType {
+			st.Store[c.K] = NewHash(make(map[string]string))
+		}
+		
+		// Set field-value pairs
+		for i := 0; i < len(c.V.List); i += 2 {
+			field := c.V.List[i]
+			value := c.V.List[i+1]
+			st.Store[c.K].Hash[field] = value
+		}
 		return NewString("OK")
 
+	// Type: list, Return: list
 	case HMGET:
-		if val, exists := st.Store[c.K]; exists && val.Type == ListType {
-			result := make([]string, 0)
-			for _, field := range c.V.List {
-				for _, v := range val.List {
-					if v == field {
-						result = append(result, v)
-						break
-					}
+		if c.V.Type != ListType {
+			return NewList([]string{})
+		}
+		
+		result := make([]string, len(c.V.List))
+		if val, exists := st.Store[c.K]; exists && val.Type == HashType {
+			for i, field := range c.V.List {
+				if value, ok := val.Hash[field]; ok {
+					result[i] = value
+				} else {
+					result[i] = "" // Field doesn't exist
 				}
 			}
-			return NewList(result)
 		}
-		return NewList([]string{})
+		return NewList(result)
 
 	case PUBSUB:
 		// mock?

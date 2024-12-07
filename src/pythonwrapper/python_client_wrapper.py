@@ -84,28 +84,104 @@ def AppResponse(key):
         # Parse JSON result
         result = json.loads(result_str)
         
-        return result
+        # Return appropriate value based on type
+        value_type = result.get('Type')
+        if value_type == 0:  # StringType
+            return result.get('String', '')
+        elif value_type == 1:  # ListType
+            return result.get('List', [])
+        elif value_type == 2:  # SetType
+            # Convert map[string]bool to set
+            set_dict = result.get('Set', {})
+            return {k for k, v in set_dict.items() if v}
+        else:
+            return None
+            
     except Exception as e:
         print(f"Error in appResponse: {str(e)}")
         raise
 
+def test_operations():
+    
+    key = "test_key"
+    
+    # Test PUT with string
+    print("\n1. Testing PUT with string...")
+    result = AppRequest("PUT", key, "Hello MDLin!")
+    print(f"PUT request result: {result}")
+    # if isinstance(result, dict) and 'CommandId' in result:
+    response = AppResponse(result)
+    print(f"PUT response result: {response}")
+    print("\n")
+        
+        # # Test GET after string PUT
+        # print("\n2. Testing GET after string PUT...")
+        # result = AppRequest("GET", key)
+        # print(f"GET result: {result}")
+        # response = AppResponse(result['CommandId'])
+        # print(f"GET response result: {response}")
+        # print("\n")
+        
+        # Test PUT with list
+    #     print("\n3. Testing PUT with list...")
+    #     result = AppRequest("PUT", key, ["Hello", "MDLin", "List"])
+    #     print(f"PUT request result: {result}")
+    #     if isinstance(result, dict) and 'CommandId' in result:
+    #         response = AppResponse(result['CommandId'])
+    #         print(f"PUT response result: {response}")
+    #     print("\n")
+        
+    #     # Test GET after list PUT
+    #     print("\n4. Testing GET after list PUT...")
+    #     result = AppRequest("GET", key)
+    #     print(f"GET result: {result}")
+    #     if isinstance(result, dict) and 'CommandId' in result:
+    #         response = AppResponse(result['CommandId'])
+    #         print(f"GET response result: {response}")
+    #     print("\n")
+        
+    #     # Test PUT with set (dictionary in Python)
+    #     print("\n5. Testing PUT with set...")
+    #     result = AppRequest("PUT", key, {"item1": True, "item2": True})
+    #     print(f"PUT request result: {result}")
+    #     if isinstance(result, dict) and 'CommandId' in result:
+    #         response = AppResponse(result['CommandId'])
+    #         print(f"PUT response result: {response}")
+    #     print("\n")
+        
+    #     # Test GET after set PUT
+    #     print("\n6. Testing GET after set PUT...")
+    #     result = AppRequest("GET", key)
+    #     print(f"GET result: {result}")
+    #     if isinstance(result, dict) and 'CommandId' in result:
+    #         response = AppResponse(result['CommandId'])
+    #         print(f"GET response result: {response}")
+    #     print("\n")
+        
+    #     # Test CAS (Compare And Swap)
+    #     print("\n7. Testing CAS...")
+    #     old_value = "Hello MDLin!"
+    #     new_value = "Updated MDLin!"
+    #     result = AppRequest("CAS", key, new_value, old_value)
+    #     print(f"CAS request result: {result}")
+    #     if isinstance(result, dict) and 'CommandId' in result:
+    #         response = AppResponse(result['CommandId'])
+    #         print(f"CAS response result: {response}")
+    #     print("\n")
+        
+    #     # Test GET after CAS
+    #     print("\n8. Testing GET after CAS...")
+    #     result = AppRequest("GET", key)
+    #     print(f"GET result: {result}")
+    #     if isinstance(result, dict) and 'CommandId' in result:
+    #         response = AppResponse(result['CommandId'])
+    #         print(f"GET response result: {response}")
+    #     print("\n")
+        
+    #     print("\nAll tests completed!")
+
 def main():
-    try:
-        # Test PUT operation
-        # print("\nTesting PUT operation...")
-        key = "test_key"
-        # value =["Hlellooo"]
-        # result = AppRequest("PUT", key, value)
-        # print(f"PUT result: {result}")
-
-        # Test GET operation
-        print("\nTesting GET operation...")
-        result = AppRequest("GET", key)
-        print(f"GET result: {result}")
-
-    except Exception as e:
-        print(f"Error in main: {str(e)}")
-        return
-
+    test_operations()
+    
 if __name__ == "__main__":
     main()
