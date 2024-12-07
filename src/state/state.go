@@ -1,8 +1,12 @@
 package state
 
 import (
+	"crypto/md5"
+	"encoding/binary"
+	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -23,7 +27,9 @@ const (
 	HMSET
 	HMGET
 	ZREVRANGE
-	PUBSUB
+	SUBSCRIBE
+	LISTEN
+	PUBLISH
 )
 
 type ValueType int
@@ -285,9 +291,58 @@ func (c *Command) Execute(st *State) Value {
 		}
 		return NewList(result)
 
-	case PUBSUB:
-		// mock?
+	// Type: string, Return: string
+	// Initialize client's index for a queue
+	case SUBSCRIBE:
+		indexKey := Key(stringToInt64Hash(fmt.Sprintf("client_%v_index", c.K)))
+		// Initialize index to 0 if it doesn't exist
+		if _, exists := st.Store[indexKey]; !exists {
+			st.Store[indexKey] = NewString("0")
+		}
+		// Initialize queue if it doesn't exist
+		if _, exists := st.Store[c.K]; !exists {
+			st.Store[c.K] = NewList([]string{})
+		}
 		return NewString("OK")
+
+	// Type: string, Return: list
+	// Get messages from index to current position
+	case LISTEN:
+		// Get index key
+		indexKey := Key(stringToInt64Hash(fmt.Sprintf("client_%v_index", c.K)))
+		if _, exists := st.Store[indexKey]; !exists {
+			// if key doesn't exist, return empty list
+			return NewList([]string{}) 
+		}
+
+		// Get current index
+		currentIndex, _ := strconv.Atoi(st.Store[indexKey].String)
+		
+		// Get queue
+		if queue, exists := st.Store[c.K]; exists && queue.Type == ListType {
+			// Get new messages
+			messages := queue.List[currentIndex:]
+			// Update index
+			st.Store[indexKey] = NewString(strconv.Itoa(len(queue.List)))
+			return NewList(messages)
+		}
+		return NewList([]string{})
+
+	// Type: string, Return: string
+	// Append message to queue
+	case PUBLISH:
+		// Initialize queue if it doesn't exist
+		if _, exists := st.Store[c.K]; !exists {
+			st.Store[c.K] = NewList([]string{})
+		} 
+		
+		// grab list and append new element
+		currentList := st.Store[c.K].List
+		newList := append(currentList, c.V.String)
+		// store new list as struct
+		st.Store[c.K] = NewList(newList)
+		return NewString("OK")
+
 	default:
 		return NIL
 	}
@@ -310,4 +365,15 @@ func AllWrites(cmds []Command) bool {
 		}
 	}
 	return true
+}
+
+func stringToInt64Hash(input string) int64 {
+	// Normalize the input string
+	normalized := strings.ToLower(strings.TrimSpace(input))
+
+	// Generate MD5 hash
+	hash := md5.Sum([]byte(normalized))
+
+	// Convert first 8 bytes of MD5 hash to int64
+	return int64(binary.BigEndian.Uint64(hash[:8]))
 }

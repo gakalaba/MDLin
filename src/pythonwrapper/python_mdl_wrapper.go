@@ -246,9 +246,13 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
         op = state.HMSET
     case "SET":
         op = state.SET
-    case "PUBSUB":
-        op = state.PUBSUB
-    default:
+	case "PUBLISH":
+		op = state.PUBLISH
+	case "LISTEN":
+		op = state.LISTEN
+	case "SUBSCRIBE":
+		op = state.SUBSCRIBE
+	default:
         fmt.Printf("Invalid operation type: %s\n", opType)
         return false, C.CString("")
     }
