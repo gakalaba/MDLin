@@ -35,10 +35,10 @@ type RPCPair struct {
 }
 
 type Client interface {
-	Read(key int64) (bool, int64)
+	Read(key int64) (bool, state.Value)
 	Write(key int64, value state.Value) bool
-	CompareAndSwap(key int64, oldValue state.Value, newValue state.Value) (bool, int64)
-	AppRequest(opTypes []state.Operation, keys []int64, oldValues []state.Value, newValues []state.Value) (bool, int64)
+	CompareAndSwap(key int64, oldValue state.Value, newValue state.Value) (bool, state.Value)
+	AppRequest(opTypes []state.Operation, keys []int64, oldValues []state.Value, newValues []state.Value) (bool, state.Value)
 	//OpenAppRequest(opTypes state.Operation, keys int64)
 	//StartAsynchReadReplies(doneChan chan bool, resultChan chan int)
 	//StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int)

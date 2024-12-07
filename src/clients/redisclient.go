@@ -54,7 +54,7 @@ func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader in
 	return pc
 }
 
-func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldValues []state.Value, newValues []state.Value) (bool, int64) {
+func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldValues []state.Value, newValues []state.Value) (bool, state.Value) {
   if len(opTypes) > 1 || len(keys) > 1 || len(oldValues) > 1 || len(newValues) > 1 {
     panic("Can only send one request at a time with AppRequest")
   }
@@ -107,7 +107,7 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldVa
   if sendCoord {
     c.sendCoordinationRequest(c.propose.Predecessor, l)
   }
-  return true, 0
+  return true, state.NewString("0")
 }
 
 func (c *AsynchClient) Write(key int64, value state.Value) bool {
@@ -116,11 +116,11 @@ func (c *AsynchClient) Write(key int64, value state.Value) bool {
   return true
 }
 
-func (c *AsynchClient) CompareAndSwap(key int64, oldValue state.Value, newValue state.Value) (bool, int64) {
+func (c *AsynchClient) CompareAndSwap(key int64, oldValue state.Value, newValue state.Value) (bool, state.Value) {
   c.preparePropose(state.CAS, key, newValue)
   c.propose.Command.OldValue = oldValue
   c.sendPropose()
-  return true, 0
+  return true, state.NewString("0")
 }
 
 func (c *AsynchClient) preparePropose(opType state.Operation, key int64, value state.Value) {
@@ -182,10 +182,10 @@ func (c *AsynchClient) asynchReadReplies() {
 	}
 }
 
-func (c *AsynchClient) Read(key int64) (bool, int64) {
+func (c *AsynchClient) Read(key int64) (bool, state.Value) {
 	c.preparePropose(state.GET, key, state.NewString("0"))
 	c.sendPropose()
-	return true, 0
+	return true, state.NewString("0")
 }
 
 func (c *AsynchClient) sendPropose() {
