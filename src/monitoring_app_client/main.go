@@ -186,7 +186,7 @@ const (
 
 
 func createClient() clients.Client {
-	switch *replProtocol {
+	/*switch *replProtocol {
 	case "abd":
 		return clients.NewAbdClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, *regular)
@@ -206,7 +206,9 @@ func createClient() clients.Client {
 	default:
 		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, false)
-	}
+	}*/
+	return clients.NewAsynchClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+	                        *statsFile, false, true, *singleShardAware)
 }
 
 func Max(a int64, b int64) int64 {
@@ -264,7 +266,7 @@ func main() {
 	for int(currRuntime.Seconds()) < *expLength {
 
 		//delay_start := time.Now()
-		client.AppRequest([]state.Operation{state.HMGET}, []int64{int64(key)}, nil, []int64{4})
+		client.AppRequest([]state.Operation{state.HMGET}, []int64{int64(key)}, nil, []state.Value{state.NewString("value")})
 
 
 		sentcount++
