@@ -178,7 +178,7 @@ var zipfV = flag.Float64(
 
 func createClient() clients.Client {
 	switch *replProtocol {
-	case "abd":
+	/*case "abd":
 		return clients.NewAbdClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, *regular)
 	case "gryff":
@@ -187,13 +187,13 @@ func createClient() clients.Client {
 			*epaxosMode)
 	case "epaxos":
 		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, true)
+			*statsFile, false, true)*/
 	case "mdl":
-		return clients.NewMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewAsynchClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true, *singleShardAware)
-	case "ss-mdl":
+	/*case "ss-mdl":
 		return clients.NewSSMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, false)
+			*statsFile, false, false)*/
 	default:
 		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, false)

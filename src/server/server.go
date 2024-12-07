@@ -1,16 +1,16 @@
 package main
 
 import (
-	"abd"
+	//"abd"
 	"dlog"
-	"epaxos"
+	//"epaxos"
 	"flag"
 	"fmt"
-	"gpaxos"
-	"gryff"
+	//"gpaxos"
+	//"gryff"
 	"log"
 	"mdlin"
-	"mencius"
+	//"mencius"
 	"net/rpc"
 	"os"
 	"os/signal"
@@ -106,7 +106,7 @@ func main() {
 			log.Println("Starting MD Linearizability replica...")
 			rep = mdlin.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply, *durable, *doBatch, *epBatch, *statsFile, *numShards, *epochLength, *fanout)
 		}
-	} else if *doGryff {
+	/*} else if *doGryff {
 		log.Println("Starting Gryff replica...")
 		var rmwHandlerType gryff.RMWHandlerType
 		switch *rmwHandler {
@@ -139,7 +139,7 @@ func main() {
 	} else if *doGpaxos {
 		log.Println("Starting Generalized Paxos replica...")
 		rep = gpaxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
-			*statsFile)
+			*statsFile)*/
 	} else {
 		log.Println("Starting classic Paxos replica...")
 		rep = paxos.NewReplica(replicaId, nodeList, *masterAddr, *masterPort, *thrifty, *exec, *dreply,
