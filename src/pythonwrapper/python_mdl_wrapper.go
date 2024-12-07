@@ -206,13 +206,13 @@ func init() {
 }
 
 //export AsyncAppRequest
-func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldValue *C.char) (bool, *C.char) {
+func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldValue *C.char) *C.char {
     // Decode operation type
     var opType string
     err := json.Unmarshal([]byte(C.GoString(opTypesJSON)), &opType)
     if err != nil {
         fmt.Printf("Failed to parse op_type: %v\n", err)
-        return false, C.CString("")
+        return C.CString("")
     }
 
     // Decode key
@@ -220,7 +220,7 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
     err = json.Unmarshal([]byte(C.GoString(keysJSON)), &keyStr)
     if err != nil {
         fmt.Printf("Failed to parse key: %v\n", err)
-        return false, C.CString("")
+        return C.CString("")
     }
 
     // Convert operation type to state.Operation
@@ -254,7 +254,7 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
 		op = state.SUBSCRIBE
 	default:
         fmt.Printf("Invalid operation type: %s\n", opType)
-        return false, C.CString("")
+        return C.CString("")
     }
 
     // Helper function to convert JSON to state.Value
@@ -305,10 +305,14 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
     // Execute command and return success and value as string
     success, val := client.AppRequest([]state.Operation{op}, []int64{keyInt64}, []state.Value{oldValueObj}, []state.Value{valueObj})
     if !success {
-        return false, C.CString("")
+        return C.CString("")
     }
-    
-    return true, C.CString(val.String)
+    fmt.Println("Go: AppRequest success", success, val)
+
+    // Get the string value directly from the String field
+    resultStr := val.String
+    fmt.Println("Go: Returning string:", resultStr)
+    return C.CString(resultStr)
 }
 
 //export AsyncAppResponse
@@ -334,6 +338,7 @@ func AsyncAppResponse(keysJSON *C.char) *C.char {
 
 	// Call AsynchClient's AppResponse
 	result, success := client.AppResponse(key)
+	
 	response := Response{
 		Success: success != 0, // Convert uint8 to bool
 		Result:  result,
