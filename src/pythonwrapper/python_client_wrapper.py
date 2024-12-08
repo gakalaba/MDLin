@@ -219,7 +219,7 @@ def test_operations():
 
 
 def main():
-    test_operations()
+    test_pubsub_operations()
     
 if __name__ == "__main__":
     main()
