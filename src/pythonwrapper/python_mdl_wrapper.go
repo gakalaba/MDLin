@@ -202,7 +202,6 @@ func init() {
         fmt.Println("Failed to create client during initialization")
         return
     }
-    // fmt.Println("Client initialized successfully")
 }
 
 //export AsyncAppRequest
@@ -303,22 +302,19 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
     keyInt64 := stringToInt64Hash(keyStr)
 
     // Execute command and return success and value as string
-    success, val := client.AppRequest([]state.Operation{op}, []int64{keyInt64}, []state.Value{oldValueObj}, []state.Value{valueObj})
+    success, val := client.AppRequest([]state.Operation{op}, []int64{keyInt64}, []state.Value{valueObj}, []state.Value{oldValueObj})
     if !success {
         return C.CString("")
     }
-    fmt.Println("Go: AppRequest success", success, val)
 
     // Get the string value directly from the String field
     resultStr := val.String
-    fmt.Println("Go: Returning string:", resultStr)
     return C.CString(resultStr)
 }
 
 //export AsyncAppResponse
 func AsyncAppResponse(keysJSON *C.char) *C.char {
 	fmt.Println("Go: Starting AppResponse")
-	defer fmt.Println("Go: Finishing AppResponse")
 
 	var key int32
 	// Convert C string to Go string
@@ -338,7 +334,7 @@ func AsyncAppResponse(keysJSON *C.char) *C.char {
 
 	// Call AsynchClient's AppResponse
 	result, success := client.AppResponse(key)
-	
+
 	response := Response{
 		Success: success != 0, // Convert uint8 to bool
 		Result:  result,

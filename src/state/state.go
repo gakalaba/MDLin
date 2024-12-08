@@ -256,9 +256,6 @@ func (c *Command) Execute(st *State) Value {
 	// Type: list, Return: string
 	// Set specified field to their respective value
 	case HMSET:
-		if c.V.Type != ListType || len(c.V.List) % 2 != 0 {
-			return NewString("") // List must have even number of elements (field-value pairs)
-		}
 		
 		// Initialize hash if it doesn't exist or isn't a hash
 		if st.Store[c.K].Type != HashType {
@@ -266,30 +263,15 @@ func (c *Command) Execute(st *State) Value {
 		}
 		
 		// Set field-value pairs
-		for i := 0; i < len(c.V.List); i += 2 {
-			field := c.V.List[i]
-			value := c.V.List[i+1]
-			st.Store[c.K].Hash[field] = value
-		}
+		st.Store[c.K].Hash[c.V.String] = c.OldValue.String
 		return NewString("OK")
 
 	// Type: list, Return: list
 	case HMGET:
-		if c.V.Type != ListType {
-			return NewList([]string{})
+		if st.Store[c.K].Type != HashType {
+			st.Store[c.K] = NewHash(make(map[string]string))
 		}
-		
-		result := make([]string, len(c.V.List))
-		if val, exists := st.Store[c.K]; exists && val.Type == HashType {
-			for i, field := range c.V.List {
-				if value, ok := val.Hash[field]; ok {
-					result[i] = value
-				} else {
-					result[i] = "" // Field doesn't exist
-				}
-			}
-		}
-		return NewList(result)
+		return NewString(st.Store[c.K].Hash[c.V.String])
 
 	// Type: string, Return: string
 	// Initialize client's index for a queue
@@ -320,9 +302,9 @@ func (c *Command) Execute(st *State) Value {
 		
 		// Get queue
 		if queue, exists := st.Store[c.K]; exists && queue.Type == ListType {
-			// Get new messages
+			// get all messages from index to end
 			messages := queue.List[currentIndex:]
-			// Update index
+			//  new index set to length of queue
 			st.Store[indexKey] = NewString(strconv.Itoa(len(queue.List)))
 			return NewList(messages)
 		}
@@ -336,10 +318,10 @@ func (c *Command) Execute(st *State) Value {
 			st.Store[c.K] = NewList([]string{})
 		} 
 		
-		// grab list and append new element
+		// grab list and append new element	
 		currentList := st.Store[c.K].List
 		newList := append(currentList, c.V.String)
-		// store new list as struct
+		// store as new struct
 		st.Store[c.K] = NewList(newList)
 		return NewString("OK")
 

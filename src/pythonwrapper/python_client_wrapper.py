@@ -27,6 +27,9 @@ async_app_response.restype = ctypes.c_char_p
 def AppRequest(op_type, key, value=None, old_value=None):
     """
     Perform an operation on a key with optional value and old_value.
+
+    Note: value oldvalue are also used for things like hmset, hmget, 
+    might be better to change naming
     
     :param op_type: Operation type (e.g., 'PUT', 'GET', 'CAS')
     :param key: Key for the operation (string or integer)
@@ -44,8 +47,7 @@ def AppRequest(op_type, key, value=None, old_value=None):
         value_json = json.dumps(value) if value is not None else None
         old_value_json = json.dumps(old_value) if old_value is not None else None
         
-        print(f"Python: Sending value_json: {value_json}")
-        
+        # print(f"Python: Sending value_json: {value_json}")
         # Call the underlying C function
         result_ptr = async_app_request(
             op_type_json.encode('utf-8'), 
@@ -53,6 +55,7 @@ def AppRequest(op_type, key, value=None, old_value=None):
             value_json.encode('utf-8') if value_json is not None else None,
             old_value_json.encode('utf-8') if old_value_json is not None else None
         )
+        print("Received result ptr", result_ptr)
         
         if not result_ptr:
             return None
@@ -80,19 +83,23 @@ def AppResponse(key):
             
         # Convert result from bytes to string
         result_str = ctypes.string_at(result_ptr).decode('utf-8')
-        
-        # Parse JSON result
+
+
         result = json.loads(result_str)
+
+        # Parse JSON result
+        if result['success'] == False:
+            raise Exception("Result returned false")
         
-        # Return appropriate value based on type
-        value_type = result.get('Type')
+        value_result = result.get('result')
+        value_type = value_result.get('Type')
         if value_type == 0:  # StringType
-            return result.get('String', '')
+            return value_result.get('String', '')
         elif value_type == 1:  # ListType
-            return result.get('List', [])
+            return value_result.get('List', [])
         elif value_type == 2:  # SetType
             # Convert map[string]bool to set
-            set_dict = result.get('Set', {})
+            set_dict = value_result.get('Set', {})
             return {k for k, v in set_dict.items() if v}
         else:
             return None
@@ -101,57 +108,116 @@ def AppResponse(key):
         print(f"Error in appResponse: {str(e)}")
         raise
 
+def test_pubsub_operations():
+    channel = "test_channel"
+
+    result = AppRequest("SUBSCRIBE", channel)
+    response = AppResponse(result)
+    assert(response == "OK")
+
+    print("\n")
+
+    result = AppRequest("PUBLISH", channel, "Hello, World!")
+    response = AppResponse(result)
+    assert(response == "OK")
+
+    result = AppRequest("PUBLISH", channel, "Second message")
+    response = AppResponse(result)
+    assert(response == "OK")
+
+    result = AppRequest("LISTEN", channel)
+    response = AppResponse(result)
+
+    assert(len(response) == 2)
+    assert("Hello, World!" in response)
+    assert("Second message" in response)
+
+    result = AppRequest("LISTEN", channel)
+    response = AppResponse(result)
+    assert(len(response) == 0)
+
+    result = AppRequest("PUBLISH", channel, "Third message")
+    response = AppResponse(result)
+
+    assert(response == "OK")
+
+    result = AppRequest("LISTEN", channel)
+    response = AppResponse(result)
+
+    assert(len(response) == 1)
+    assert("Third message" in response)
+
 def test_operations():
     
     key = "test_key"
     
     # Test PUT with string
-    print("\n1. Testing PUT with string...")
-    result = AppRequest("PUT", key, "Hello MDLin!")
-    print(f"PUT request result: {result}")
-    # if isinstance(result, dict) and 'CommandId' in result:
-    response = AppResponse(result)
-    print(f"PUT response result: {response}")
-    print("\n")
+    # print("\n1. Testing PUT with set...")
+    # result = AppRequest("PUT", key, {"item1": True, "item2": True})
+    # response = AppResponse(result)
+
+    # print(f"PUT request result: {result}")
+    # response = AppResponse(result)
+    # print(f"PUT response result: {response}")
+    # assert(response == "10")
+    # print("\n")
+
+    # result = AppRequest("PUT", key, "10")
+    # result = AppRequest("INCR", key)
+    # response = AppResponse(result)
+    # assert(response == "11")
+
+    # print("\n2. ")
+    # result = AppRequest("SADD", key, "room1")
+    # response = AppResponse(result)
+   
+
+    # result = AppRequest("SADD", key, "room2")
+    # response = AppResponse(result)
+
+    # result = AppRequest("HMSET", key, "hello", "world")
+    # response = AppResponse(result)
+    # print(response)
+    # # After the previous SADD commands
+    # result = AppRequest("HMGET", key, "hello")
+    # response = AppResponse(result)
+    # print(response)
         
-        # # Test GET after string PUT
-        # print("\n2. Testing GET after string PUT...")
-        # result = AppRequest("GET", key)
-        # print(f"GET result: {result}")
-        # response = AppResponse(result['CommandId'])
-        # print(f"GET response result: {response}")
-        # print("\n")
+    # Test GET after string PUT
+    # print("\n2. Testing GET after string PUT...")
+    # result = AppRequest("GET", key)
+    # print(f"GET result: {result}")
+    # response = AppResponse(result)
+    # assert(response == "Hello MDLin!")
+    # print("\n")
         
-        # Test PUT with list
-    #     print("\n3. Testing PUT with list...")
-    #     result = AppRequest("PUT", key, ["Hello", "MDLin", "List"])
-    #     print(f"PUT request result: {result}")
-    #     if isinstance(result, dict) and 'CommandId' in result:
-    #         response = AppResponse(result['CommandId'])
-    #         print(f"PUT response result: {response}")
-    #     print("\n")
+    # # Test PUT with list
+    # print("\n3. Testing PUT with list...")
+    # result = AppRequest("PUT", key, ["Hello", "MDLin", "List"])
+    # print(f"PUT request result: {result}")
+    # response = AppResponse(result)
+    # assert(response == ["Hello", "MDLin", "List"])
+    # print(f"PUT response result: {response}")
+    # print("\n")
         
-    #     # Test GET after list PUT
-    #     print("\n4. Testing GET after list PUT...")
-    #     result = AppRequest("GET", key)
-    #     print(f"GET result: {result}")
-    #     if isinstance(result, dict) and 'CommandId' in result:
-    #         response = AppResponse(result['CommandId'])
-    #         print(f"GET response result: {response}")
-    #     print("\n")
+    # #     # Test GET after list PUT
+    # print("\n4. Testing GET after list PUT...")
+    # result = AppRequest("GET", key)
+    # print(f"GET result: {result}")
+    # response = AppResponse(result)
+    # print(f"GET response result: {response}")
+    # print("\n")
         
     #     # Test PUT with set (dictionary in Python)
     #     print("\n5. Testing PUT with set...")
-    #     result = AppRequest("PUT", key, {"item1": True, "item2": True})
-    #     print(f"PUT request result: {result}")
-    #     if isinstance(result, dict) and 'CommandId' in result:
-    #         response = AppResponse(result['CommandId'])
-    #         print(f"PUT response result: {response}")
-    #     print("\n")
-        
+    result = AppRequest("PUT", key, {"item1": True})
+    response = AppResponse(result)
+    
     #     # Test GET after set PUT
     #     print("\n6. Testing GET after set PUT...")
-    #     result = AppRequest("GET", key)
+    result = AppRequest("SCARD", key)
+    response = AppResponse(result)
+    print(response)
     #     print(f"GET result: {result}")
     #     if isinstance(result, dict) and 'CommandId' in result:
     #         response = AppResponse(result['CommandId'])
@@ -181,7 +247,7 @@ def test_operations():
     #     print("\nAll tests completed!")
 
 def main():
-    test_operations()
+    test_pubsub_operations()
     
 if __name__ == "__main__":
     main()
