@@ -55,7 +55,7 @@ func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader in
 	return pc
 }
 
-func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldValues []state.Value, newValues []state.Value) (bool, state.Value) {
+func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, newValues []state.Value, oldValues []state.Value) (bool, state.Value) {
   if len(opTypes) > 1 || len(keys) > 1 || len(oldValues) > 1 || len(newValues) > 1 {
     panic("Can only send one request at a time with AppRequest")
   }
