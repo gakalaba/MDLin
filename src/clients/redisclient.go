@@ -4,13 +4,13 @@ import (
 	"clientproto"
 	"dlog"
 	"fastrpc"
-	"fmt"
+	"strconv"
+
+	//"fmt"
 	"genericsmr"
 	"mdlinproto"
 	"state"
-	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -25,12 +25,10 @@ type AsynchClient struct {
 	seqnos           map[int]int64
 	SSA		 bool
 	latestReceived   int32
-	lastSentTag      mdlinproto.Tag
-	mu               *sync.Mutex
-	mapMu            *sync.Mutex
-	repliesMap       map[int32]state.Value
-	// MOCKING THE STATE 
-	mockState        *state.State
+  lastSentTag      mdlinproto.Tag
+  mu               *sync.Mutex
+  mapMu            *sync.Mutex
+  repliesMap       map[int32]*mdlinproto.ProposeReply
 }
 
 func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
@@ -49,8 +47,7 @@ func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader in
 		mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1},
 		new(sync.Mutex),
 		new(sync.Mutex),
-		make(map[int32]state.Value),
-		state.NewState(),
+		make(map[int32]*mdlinproto.ProposeReply),
 	}
 // 	pc.propose.PID = int64(id) // only need to set this once per client
 // 	pc.RegisterRPC(new(mdlinproto.ProposeReply), clientproto.MDL_PROPOSE_REPLY, pc.proposeReplyChan)
@@ -63,6 +60,7 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldVa
     panic("Can only send one request at a time with AppRequest")
   }
   key := keys[0]
+  // Convert string values to state.Value objects
   var oldValueObj, newValueObj state.Value
   if len(oldValues) > 0 {
     oldValueObj = oldValues[0]
@@ -71,63 +69,46 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldVa
     newValueObj = newValues[0]
   }
 
-  command := &state.Command{
-	Op:       opTypes[0],
-	K:        state.Key(key),
-	V:        newValueObj,
-	OldValue: oldValueObj,
-	}
+  l := c.GetShardFromKey(state.Key(key))
+  // Figure out the sequence number
+  if _, ok := c.seqnos[l]; !ok {
+    c.seqnos[l] = 0
+  } else {
+    c.seqnos[l]++
+  }
+  // Assign the sequence number and batch dependencies for this request
+  c.setSeqno(c.seqnos[l])
+  c.setTimestamp()
 
-  fmt.Println("Executing command locally: ", command)
-  result := command.Execute(c.mockState)
-  fmt.Println("Completed execution: ", result)
-  commandId := atomic.AddInt32(&c.opCount, 1)
-  fmt.Println("Calcualted commandiD : ", commandId)
-  c.repliesMap[commandId] = result
-  fmt.Println("Added reply to map: ", c.repliesMap[commandId])
-//   fmt.Println("Command result: %+v\n", result)
-	
-//   l := c.GetShardFromKey(state.Key(key))
-//   // Figure out the sequence number
-//   if _, ok := c.seqnos[l]; !ok {
-//     c.seqnos[l] = 0
-//   } else {
-//     c.seqnos[l]++
-//   }
-//   // Assign the sequence number and batch dependencies for this request
-//   c.setSeqno(c.seqnos[l])
-//   c.setTimestamp()
+  myCommandId := c.setCommandId()
 
-//   myCommandId := c.setCommandId()
-
-//   c.mu.Lock()
-//   lastReceived := c.latestReceived
-//   c.mu.Unlock()
+  c.mu.Lock()
+  lastReceived := c.latestReceived
+  c.mu.Unlock()
 
   // We should set the predecessor tag based on whether we are concurrent with the previous sent request
-//   sendCoord := false
-//   if lastReceived == (myCommandId-1) {
-//     dlog.Printf("CommandId %v is NOT concurrent", myCommandId)
-//     c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
-//   } else {
-//     sendCoord = true
-//     dlog.Printf("CommandId %v is Concurrent with CommandId %v", myCommandId, lastReceived+1)
-//     c.propose.Predecessor = c.lastSentTag
-//   }
+  sendCoord := false
+  if lastReceived == (myCommandId-1) {
+    dlog.Printf("CommandId %v is NOT concurrent", myCommandId)
+    c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
+  } else {
+    sendCoord = true
+    dlog.Printf("CommandId %v is Concurrent with CommandId %v", myCommandId, lastReceived+1)
+    c.propose.Predecessor = c.lastSentTag
+  }
 
-//   if opTypes[0] == state.GET {
-//     c.Read(key)
-//   } else if opTypes[0] == state.PUT {
-//     c.Write(key, newValueObj)
-//   } else {
-//     c.CompareAndSwap(key, oldValueObj, newValueObj)
-//   }
+  if opTypes[0] == state.GET {
+    c.Read(key)
+  } else if opTypes[0] == state.PUT {
+    c.Write(key, newValueObj)
+  } else {
+    c.CompareAndSwap(key, oldValueObj, newValueObj)
+  }
 
-//   if sendCoord {
-//     c.sendCoordinationRequest(c.propose.Predecessor, l)
-//   }
-  fmt.Println("Returning id ", int(commandId))
-  return true, state.NewString(strconv.Itoa(int(commandId)))
+  if sendCoord {
+    c.sendCoordinationRequest(c.propose.Predecessor, l)
+  }
+  return true, state.NewString(strconv.Itoa(int(myCommandId)))
 }
 
 func (c *AsynchClient) Write(key int64, value state.Value) bool {
@@ -140,7 +121,7 @@ func (c *AsynchClient) CompareAndSwap(key int64, oldValue state.Value, newValue 
   c.preparePropose(state.CAS, key, newValue)
   c.propose.Command.OldValue = oldValue
   c.sendPropose()
-  return true, state.NIL
+  return true, state.NewString("0")
 }
 
 func (c *AsynchClient) preparePropose(opType state.Operation, key int64, value state.Value) {
@@ -158,20 +139,19 @@ func (c *AsynchClient) GrabHighestResponse() int32 {
 
 func (c *AsynchClient) AppResponse(commandId int32) (state.Value, uint8) {
   for true {
-    c.mapMu.Lock()
-    reply, OK := c.repliesMap[commandId]
-    if OK {
-      // For the purposes of double await, we will NOT delete the value
-      //delete(c.repliesMap, commandId)
-      c.mapMu.Unlock()
-	  fmt.Println("THis is reply", reply)
-      return reply, 1
-    }
-    c.mapMu.Unlock()
-    time.Sleep(100000)
+	  c.mapMu.Lock()
+	  reply, OK := c.repliesMap[commandId]
+	  if OK {
+		  // For the purposes of double await, we will NOT delete the value
+		  //delete(c.repliesMap, commandId)
+		  c.mapMu.Unlock()
+		  return reply.Value, reply.OK
+	  }
+	  c.mapMu.Unlock()
+	  time.Sleep(100000)
   }
-  
-  return state.NIL, 0
+  //go cleanMap(request.CommandId)
+  return state.NewString("0"), 0
 }
 
 func (c *AsynchClient) cleanMap(bound int32) {
@@ -190,32 +170,32 @@ func (c *AsynchClient) cleanMap(bound int32) {
 }
 
 func (c *AsynchClient) asynchReadReplies() {
-	// for true {
-	// 	reply := (<-c.proposeReplyChan).(*mdlinproto.ProposeReply)
-	// 	c.mu.Lock()
-	// 	if reply.CommandId > c.latestReceived {
-	// 		c.latestReceived = reply.CommandId
-	// 	}
-	// 	c.mu.Unlock()
-	// 	c.mapMu.Lock()
-	// 	c.repliesMap[reply.CommandId] = reply
-	// 	c.mapMu.Unlock()
-	// }
+	for true {
+		reply := (<-c.proposeReplyChan).(*mdlinproto.ProposeReply)
+		c.mu.Lock()
+		if reply.CommandId > c.latestReceived {
+			c.latestReceived = reply.CommandId
+		}
+		c.mu.Unlock()
+		c.mapMu.Lock()
+		c.repliesMap[reply.CommandId] = reply
+		c.mapMu.Unlock()
+	}
 }
 
 func (c *AsynchClient) Read(key int64) (bool, state.Value) {
 	c.preparePropose(state.GET, key, state.NewString("0"))
 	c.sendPropose()
-  return true, state.NIL
+	return true, state.NewString("0")
 }
 
 func (c *AsynchClient) sendPropose() {
-	// shard := c.GetShardFromKey(c.propose.Command.K)
+	shard := c.GetShardFromKey(c.propose.Command.K)
 	//dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, SeqNo %v, PID %v, Predecessor %v at time %v}", shard, c.propose.CommandId, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, time.Now().UnixMilli()))
 
-	// c.writers[shard].WriteByte(clientproto.MDL_PROPOSE)
-	// c.propose.Marshal(c.writers[shard])
-	// c.writers[shard].Flush()
+	c.writers[shard].WriteByte(clientproto.MDL_PROPOSE)
+	c.propose.Marshal(c.writers[shard])
+	c.writers[shard].Flush()
 }
 
 func (c *AsynchClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, myShard int) {
