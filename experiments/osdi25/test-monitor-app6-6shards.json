@@ -27,23 +27,51 @@
   "server_names": [
       "us-east-1-0",
       "us-east-1-1",
-      "us-east-1-2"
+      "us-east-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
   ],
-  "num_shards": 1,
+  "num_shards": 6,
   "shards": [
 [
       "us-east-1-0",
       "us-east-1-1",
       "us-east-1-2"
+    ],
+    [
+	    "us-east-1-2",
+	    "us-east-1-0",
+	    "us-east-1-1"],
+    [
+	    "us-east-1-1",
+	    "us-east-1-2",
+	    "us-east-1-0"
+    ],
+    [
+	    "eu-west-1-0",
+	    "eu-west-1-1",
+	    "eu-west-1-2"
+    ],
+    [
+	    "eu-west-1-2",
+	    "eu-west-1-0",
+	    "eu-west-1-1"
+    ],
+    [
+	    "eu-west-1-1",
+	    "eu-west-1-2",
+	    "eu-west-1-0"
     ]
+
 ],
   "clients": [
 	  "client-0-0"
   ],
   "server_regions": {
-    "region1": ["us-east-1-0"],
-    "region2": ["us-east-1-1"],
-    "region3": ["us-east-1-2"],
+    "region1": ["us-east-1-0", "eu-west-1-0"],
+    "region2": ["us-east-1-1", "eu-west-1-1"],
+    "region3": ["us-east-1-2", "eu-west-1-2"],
     "region4": ["client-0-0"]
   },
   "region_rtt_latencies": {
@@ -144,7 +172,7 @@
   "bin_directory_name": "bin",
   "client_bin_name": "monitoring_app_client",
   "client_debug_output": false,
-  "client_experiment_length": 60,
+  "client_experiment_length": 70,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 2,
@@ -155,7 +183,7 @@
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "please",
+  "experiment_name": "mdl",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,
