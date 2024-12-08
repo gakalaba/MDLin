@@ -148,106 +148,78 @@ def test_pubsub_operations():
     assert("Third message" in response)
 
 def test_operations():
-    
     key = "test_key"
-    
-    # Test PUT with string
-    # print("\n1. Testing PUT with set...")
-    # result = AppRequest("PUT", key, {"item1": True, "item2": True})
-    # response = AppResponse(result)
+    print("\n--- Starting Test Operations ---")
 
-    # print(f"PUT request result: {result}")
-    # response = AppResponse(result)
-    # print(f"PUT response result: {response}")
-    # assert(response == "10")
-    # print("\n")
-
-    # result = AppRequest("PUT", key, "10")
-    # result = AppRequest("INCR", key)
-    # response = AppResponse(result)
-    # assert(response == "11")
-
-    # print("\n2. ")
-    # result = AppRequest("SADD", key, "room1")
-    # response = AppResponse(result)
-   
-
-    # result = AppRequest("SADD", key, "room2")
-    # response = AppResponse(result)
-
-    # result = AppRequest("HMSET", key, "hello", "world")
-    # response = AppResponse(result)
-    # print(response)
-    # # After the previous SADD commands
-    # result = AppRequest("HMGET", key, "hello")
-    # response = AppResponse(result)
-    # print(response)
-        
-    # Test GET after string PUT
-    # print("\n2. Testing GET after string PUT...")
-    # result = AppRequest("GET", key)
-    # print(f"GET result: {result}")
-    # response = AppResponse(result)
-    # assert(response == "Hello MDLin!")
-    # print("\n")
-        
-    # # Test PUT with list
-    # print("\n3. Testing PUT with list...")
-    # result = AppRequest("PUT", key, ["Hello", "MDLin", "List"])
-    # print(f"PUT request result: {result}")
-    # response = AppResponse(result)
-    # assert(response == ["Hello", "MDLin", "List"])
-    # print(f"PUT response result: {response}")
-    # print("\n")
-        
-    # #     # Test GET after list PUT
-    # print("\n4. Testing GET after list PUT...")
-    # result = AppRequest("GET", key)
-    # print(f"GET result: {result}")
-    # response = AppResponse(result)
-    # print(f"GET response result: {response}")
-    # print("\n")
-        
-    #     # Test PUT with set (dictionary in Python)
-    #     print("\n5. Testing PUT with set...")
-    result = AppRequest("PUT", key, {"item1": True})
+    # 1. Test PUT and GET with string
+    print("\n1. Testing PUT and GET with string...")
+    result = AppRequest("PUT", key, "Hello MDLin!")
     response = AppResponse(result)
+    print(f"PUT request result: {result}")
     
-    #     # Test GET after set PUT
-    #     print("\n6. Testing GET after set PUT...")
+    result = AppRequest("GET", key)
+    response = AppResponse(result)
+    print(f"GET response: {response}")
+    assert response == "Hello MDLin!", "String PUT and GET failed"
+
+    # 2. Test PUT with dictionary/set
+    print("\n2. Testing PUT with dictionary...")
+    result = AppRequest("PUT", key, {"item1": True, "item2": True})
+    response = AppResponse(result)
+    print(f"PUT dictionary result: {result}")
+    
+    # 3. Test SADD and SCARD for set operations
+    print("\n3. Testing SADD and SCARD...")
+    result = AppRequest("SADD", key, "room1")
+    response = AppResponse(result)
+    print(f"SADD room1 result: {response}")
+    
+    result = AppRequest("SADD", key, "room2")
+    response = AppResponse(result)
+    print(f"SADD room2 result: {response}")
+    
     result = AppRequest("SCARD", key)
     response = AppResponse(result)
-    print(response)
-    #     print(f"GET result: {result}")
-    #     if isinstance(result, dict) and 'CommandId' in result:
-    #         response = AppResponse(result['CommandId'])
-    #         print(f"GET response result: {response}")
-    #     print("\n")
-        
-    #     # Test CAS (Compare And Swap)
-    #     print("\n7. Testing CAS...")
-    #     old_value = "Hello MDLin!"
-    #     new_value = "Updated MDLin!"
-    #     result = AppRequest("CAS", key, new_value, old_value)
-    #     print(f"CAS request result: {result}")
-    #     if isinstance(result, dict) and 'CommandId' in result:
-    #         response = AppResponse(result['CommandId'])
-    #         print(f"CAS response result: {response}")
-    #     print("\n")
-        
-    #     # Test GET after CAS
-    #     print("\n8. Testing GET after CAS...")
-    #     result = AppRequest("GET", key)
-    #     print(f"GET result: {result}")
-    #     if isinstance(result, dict) and 'CommandId' in result:
-    #         response = AppResponse(result['CommandId'])
-    #         print(f"GET response result: {response}")
-    #     print("\n")
-        
-    #     print("\nAll tests completed!")
+    print(f"SCARD result: {response}")
+    assert response == 2, "Set cardinality is incorrect"
+
+    # 4. Test HMSET and HMGET for hash operations
+    print("\n4. Testing HMSET and HMGET...")
+    result = AppRequest("HMSET", key, "hello", "world")
+    response = AppResponse(result)
+    print(f"HMSET result: {response}")
+    
+    result = AppRequest("HMGET", key, "hello")
+    response = AppResponse(result)
+    print(f"HMGET result: {response}")
+    assert response == "world", "Hash GET failed"
+
+    # 5. Test INCR operation
+    print("\n5. Testing INCR...")
+    result = AppRequest("PUT", key, "10")
+    result = AppRequest("INCR", key)
+    response = AppResponse(result)
+    print(f"INCR result: {response}")
+    assert response == "11", "INCR operation failed"
+
+    # 6. Test CAS (Compare And Swap)
+    print("\n6. Testing CAS...")
+    old_value = "Hello MDLin!"
+    new_value = "Updated MDLin!"
+    result = AppRequest("CAS", key, new_value, old_value)
+    response = AppResponse(result)
+    print(f"CAS result: {response}")
+    
+    result = AppRequest("GET", key)
+    response = AppResponse(result)
+    print(f"GET after CAS: {response}")
+    assert response == new_value, "CAS operation failed"
+
+    print("\n--- All Tests Completed Successfully! ---")
+
 
 def main():
-    test_pubsub_operations()
+    test_operations()
     
 if __name__ == "__main__":
     main()
