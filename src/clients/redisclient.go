@@ -49,9 +49,9 @@ func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader in
 		new(sync.Mutex),
 		make(map[int32]*mdlinproto.ProposeReply),
 	}
-// 	pc.propose.PID = int64(id) // only need to set this once per client
-// 	pc.RegisterRPC(new(mdlinproto.ProposeReply), clientproto.MDL_PROPOSE_REPLY, pc.proposeReplyChan)
-//   go pc.asynchReadReplies()
+	pc.propose.PID = int64(id) // only need to set this once per client
+	pc.RegisterRPC(new(mdlinproto.ProposeReply), clientproto.MDL_PROPOSE_REPLY, pc.proposeReplyChan)
+	go pc.asynchReadReplies()
 	return pc
 }
 
