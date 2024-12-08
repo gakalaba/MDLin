@@ -181,7 +181,7 @@ def test_operations():
     result = AppRequest("SCARD", key)
     response = AppResponse(result)
     print(f"SCARD result: {response}")
-    assert response == 2, "Set cardinality is incorrect"
+    assert response == '2', "Set cardinality is incorrect"
 
     # 4. Test HMSET and HMGET for hash operations
     print("\n4. Testing HMSET and HMGET...")
