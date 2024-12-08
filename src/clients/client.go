@@ -109,8 +109,8 @@ func NewAbstractClient(id int32, coordinatorAddr string, coordinatorPort int, fo
 	}
 	c.RegisterRPC(new(clientproto.PingReply), clientproto.GEN_PING_REPLY, c.pingReplyChan)
 
-	// c.ConnectToCoordinator()
-	// c.ConnectToShards()
+	c.ConnectToCoordinator()
+	c.ConnectToShards()
 	// c.DetermineLeader()
 	// c.DetermineReplicaPings()
 
