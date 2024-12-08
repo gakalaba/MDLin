@@ -3,12 +3,13 @@ package clients
 import (
 	"clientproto"
 	"fastrpc"
+
 	//"fmt"
+	"dlog"
 	"genericsmr"
 	"genericsmrproto"
 	"state"
 	"time"
-	"dlog"
 )
 
 type ProposeClient struct {
@@ -45,14 +46,14 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64, oldV
 		var returnValue state.Value
 		if opType == state.GET {
 			//opTypeStr = "read"
-			success, returnValue = c.Read(k)
+			success, returnValue = c.Read(opType, k)
 		} else if opType == state.PUT {
 			//opTypeStr = "write"
-			success = c.Write(k, newValues[i])
+			success = c.Write(opType, k, newValues[i])
 			returnValue = state.NewString("0")
 		} else {
 			//opTypeStr = "rmw"
-			success, returnValue = c.CompareAndSwap(k, oldValues[i], newValues[i])
+			success, returnValue = c.CompareAndSwap(opType, k, oldValues[i], newValues[i])
 		}
 		//after := time.Now()
 
@@ -76,30 +77,30 @@ func (c *ProposeClient) GrabHighestResponse() int32 {
 	return 0
 }
 
-func (c *ProposeClient) Read(key int64) (bool, state.Value) {
+func (c *ProposeClient) Read(opType state.Operation, key int64) (bool, state.Value) {
 	commandId := c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, state.NewString("0"))
-	c.propose.Command.Op = state.GET
+	c.propose.Command.Op = opType
 	return c.sendProposeAndReadReply()
 }
 
-func (c *ProposeClient) Write(key int64, value state.Value) bool {
+func (c *ProposeClient) Write(opType state.Operation, key int64, value state.Value) bool {
 	commandId := c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, value)
-	c.propose.Command.Op = state.PUT
+	c.propose.Command.Op = opType
 	success, _ := c.sendProposeAndReadReply()
 	return success
 }
 
-func (c *ProposeClient) CompareAndSwap(key int64, oldValue state.Value,
+func (c *ProposeClient) CompareAndSwap(opType state.Operation, key int64, oldValue state.Value,
 	newValue state.Value) (bool, state.Value) {
 	commandId := c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, newValue)
 	c.propose.Command.OldValue = oldValue
-	c.propose.Command.Op = state.CAS
+	c.propose.Command.Op = opType
 	return c.sendProposeAndReadReply()
 }
 

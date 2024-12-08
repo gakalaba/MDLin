@@ -97,12 +97,12 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, newVa
     c.propose.Predecessor = c.lastSentTag
   }
 
-  if opTypes[0] == state.GET {
-    c.Read(key)
-  } else if opTypes[0] == state.PUT {
-    c.Write(key, newValueObj)
+  if opTypes[0] == state.GET || opTypes[0] == state.SCARD || opTypes[0] == state.SUBSCRIBE || opTypes[0] == state.LISTEN {
+    c.Read(opTypes[0], key)
+  } else if opTypes[0] == state.PUT || opTypes[0] == state.SET || opTypes[0] == state.INCR || opTypes[0] == state.SADD || opTypes[0] == state.HMGET || opTypes[0] == state.PUBLISH {
+    c.Write(opTypes[0], key, newValueObj)
   } else {
-    c.CompareAndSwap(key, oldValueObj, newValueObj)
+    c.CompareAndSwap(opTypes[0], key, oldValueObj, newValueObj)
   }
 
   if sendCoord {
@@ -111,14 +111,14 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, newVa
   return true, state.NewString(strconv.Itoa(int(myCommandId)))
 }
 
-func (c *AsynchClient) Write(key int64, value state.Value) bool {
-  c.preparePropose(state.PUT, key, value)
+func (c *AsynchClient) Write(opType state.Operation, key int64, value state.Value) bool {
+  c.preparePropose(opType, key, value)
   c.sendPropose()
   return true
 }
 
-func (c *AsynchClient) CompareAndSwap(key int64, oldValue state.Value, newValue state.Value) (bool, state.Value) {
-  c.preparePropose(state.CAS, key, newValue)
+func (c *AsynchClient) CompareAndSwap(opType state.Operation, key int64, oldValue state.Value, newValue state.Value) (bool, state.Value) {
+  c.preparePropose(opType, key, newValue)
   c.propose.Command.OldValue = oldValue
   c.sendPropose()
   return true, state.NewString("0")
@@ -183,8 +183,8 @@ func (c *AsynchClient) asynchReadReplies() {
 	}
 }
 
-func (c *AsynchClient) Read(key int64) (bool, state.Value) {
-	c.preparePropose(state.GET, key, state.NewString("0"))
+func (c *AsynchClient) Read(opType state.Operation, key int64) (bool, state.Value) {
+	c.preparePropose(opType, key, state.NewString("0"))
 	c.sendPropose()
 	return true, state.NewString("0")
 }
