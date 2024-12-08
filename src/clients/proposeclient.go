@@ -146,6 +146,10 @@ func (c *ProposeClient) sendPropose() {
 	}
 }
 
+func (c *ProposeClient) GetNumShards() int {
+	return c.numLeaders
+}
+
 func (c *ProposeClient) readProposeReply(commandId int32) (bool, int64) {
 	for !c.shutdown {
 		reply := (<-c.proposeReplyChan).(*genericsmrproto.ProposeReplyTS)

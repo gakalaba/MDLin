@@ -197,6 +197,10 @@ func (c *AbdClient) handleReadReply(readReply *abdproto.ReadReply) {
 	}
 }
 
+func (c *AbdClient) GetNumShards() int {
+	return c.numLeaders
+}
+
 func (c *AbdClient) doWriteRound() {
 	c.write.RequestId = c.currOp.id
 	c.write.K = state.Key(c.currOp.key)

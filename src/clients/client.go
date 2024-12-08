@@ -47,6 +47,7 @@ type Client interface {
 	GrabHighestResponse() int32
   Finish()
 	ConnectToCoordinator()
+	GetNumShards() int
 	// ConnectToReplicas()
 	// DetermineLeader()
 	// DetermineReplicaPings()
@@ -216,6 +217,10 @@ func (c *AbstractClient) connectToLeader(i int) bool {
 	return true
 }
 
+func (c *AbstractClient) GetNumShards() int {
+	return c.numLeaders
+}
+
 func (c *AbstractClient) GetShardFromKey(k state.Key) int {
 	nShards := len(c.leaders)
 	return int(k) % nShards
@@ -309,6 +314,7 @@ func (c *AbstractClient) ShouldDelayNextRPC(replica int, opCode uint8) bool {
 }
 
 func (c *AbstractClient) leaderListener(leader int) {
+	log.Printf("Leader Listener for leader %v", leader)
 	var msgType byte
 	var err error
 	var errS string

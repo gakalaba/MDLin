@@ -115,6 +115,10 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldVa
 	return true, int64(c.propose.CommandId)
 }
 
+func (c *AsynchClient) GetNumShards() int {
+	return c.numLeaders
+}
+
 /***********************************************************************/
 /*************For Grafana Testing Only!! Not for Austin's API **********/
 /***********************************************************************/
@@ -158,6 +162,7 @@ func (c *AsynchClient) cleanMap(bound int32) {
 }
 
 func (c *AsynchClient) asynchReadReplies() {
+	dlog.Printf("READING REPLIES")
 	for true {
 		reply := (<-c.proposeReplyChan).(*mdlinproto.ProposeReply)
 		c.mu.Lock()
@@ -221,14 +226,14 @@ func (c *AsynchClient) sendPropose() {
 	shard := c.GetShardFromKey(c.propose.Command.K)
 	//dlog.Println(fmt.Sprintf("Sending request to shard %d, Propose{CommandId %v, SeqNo %v, PID %v, Predecessor %v at time %v}", shard, c.propose.CommandId, c.propose.SeqNo, c.propose.PID, c.propose.Predecessor, time.Now().UnixMilli()))
 
-	A := time.Now()
+	//A := time.Now()
 	c.writers[shard].WriteByte(clientproto.MDL_PROPOSE)
-	B := time.Now()
+	//B := time.Now()
 	c.propose.Marshal(c.writers[shard])
-	C := time.Now()
+	//C := time.Now()
 	c.writers[shard].Flush()
-	D := time.Now()
-	dlog.Printf("WriteByte=%v, Marshal=%v, Flush=%v", B.Sub(A), C.Sub(B), D.Sub(C))
+	//D := time.Now()
+	//dlog.Printf("WriteByte=%v, Marshal=%v, Flush=%v, shard=%v", B.Sub(A), C.Sub(B), D.Sub(C), shard)
 }
 
 func (c *AsynchClient) sendCoordinationRequest(predecessorTag mdlinproto.Tag, myShard int) {
@@ -254,12 +259,12 @@ func (c *AsynchClient) StartAsynchReadReplies(doneChan chan bool, resultChan cha
   done := false
   numReplies := 0
   highestReplyCommandId := -1
-  dlog.Printf("yoyoyoyoy")
+  //dlog.Printf("yoyoyoyoy")
   for !done {
     select {
     case <-doneChan:
       done = true
-      dlog.Printf("Ah, we got to the done chan")
+      //dlog.Printf("Ah, we got to the done chan")
       break
     case reply := <-c.proposeReplyChan:
       //reply = (reply).(*mdlinproto.ProposeReply)
@@ -273,15 +278,15 @@ func (c *AsynchClient) StartAsynchReadReplies(doneChan chan bool, resultChan cha
       break
     }
   }
-  dlog.Printf("hellow?")
+  //dlog.Printf("hellow?")
   resultChan <- numReplies
   resultChan <- highestReplyCommandId
 }
 
 func (c *AsynchClient) StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int) {
-  dlog.Printf("Calling stop on client!")
+  //dlog.Printf("Calling stop on client!")
   doneChan <- true
-  dlog.Printf("pushed on done chan")
+  //dlog.Printf("pushed on done chan")
   numReplies := <-resultChan
   highestReplyCommand := <-resultChan
   return numReplies, highestReplyCommand
@@ -297,7 +302,8 @@ func (c *AsynchClient) readReplies(startId int32, fanout int, opTypes []state.Op
 	for !done {
 		reply := (<-c.proposeReplyChan).(*mdlinproto.ProposeReply)
 		if reply.OK == 0 {
-			dlog.Println("Client received FAIL response for request")
+			//dlog.Println("Client received FAIL response for request")
+			panic("Client received FAIL response for request")
 			return false, int64(reply.CommandId)
 		} else {
 			//dlog.Printf("Received ProposeReply for %d\n", reply.CommandId)

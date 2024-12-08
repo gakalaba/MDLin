@@ -190,6 +190,10 @@ func (c *GryffClient) SendRead2(rop *gryffcommon.ReadOp, replicas []int32) {
 	}
 }
 
+func (c *GryffClient) GetNumShards() int {
+	return c.numLeaders
+}
+
 func (c *GryffClient) SendWrite1(wop *gryffcommon.WriteOp, replicas []int32) {
 	c.write1.RequestId = wop.RequestId
 	c.write1.ClientId = c.id

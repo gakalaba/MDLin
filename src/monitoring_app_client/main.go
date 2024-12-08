@@ -4,12 +4,14 @@ import (
 	"clients"
 	"dlog"
 	"flag"
-	//"fmt"
+	"syscall"
+	"fmt"
 	"log"
 	//"math/rand"
 	"os"
 	"os/signal"
 	"runtime"
+	"runtime/debug"
 	"runtime/pprof"
 	"state"
 	"time"
@@ -37,7 +39,7 @@ var cpuProfile *string = flag.String(
 	"",
 	"Name of file for CPU profile. If empty, no profile is created.")
 
-var debug *bool = flag.Bool(
+var debugvar *bool = flag.Bool(
 	"debug",
 	true,
 	"Enable debug output.")
@@ -221,12 +223,14 @@ func main() {
 	flag.Parse()
 
 
-	dlog.DLOG = *debug
+	dlog.DLOG = *debugvar
 
 	runtime.GOMAXPROCS(2)
 
-	if *cpuProfile != "" {
-		f, err := os.Create(*cpuProfile)
+	client := createClient()
+	if true {
+	//if *cpuProfile != "" {
+		f, err := os.Create(fmt.Sprintf("/users/akalaba/myprogram-client-%vshards.prof", client.GetNumShards()))
 		if err != nil {
 			log.Fatalf("Error creating CPU profile file %s: %v\n", *cpuProfile, err)
 		}
@@ -234,11 +238,9 @@ func main() {
 		interrupt := make(chan os.Signal, 1)
 		signal.Notify(interrupt)
 		go catchKill(interrupt)
-		defer pprof.StopCPUProfile()
+		//defer pprof.StopCPUProfile()
 	}
-
-	client := createClient()
-
+	debug.SetGCPercent(-1)
 	/*r := rand.New(rand.NewSource(time.Now().UnixNano()))
   zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
   if err != nil {
@@ -255,7 +257,7 @@ func main() {
 	}(client)
 
 	log.Printf("starting grafana test!")
-	//ns := int64(1200000)
+	ns := int64(50)
 	key := 0
 	start := time.Now()
 	now := start
@@ -263,7 +265,7 @@ func main() {
 	time.Sleep(time.Duration(*rampUp) * time.Second)
 	for int(currRuntime.Seconds()) < *expLength {
 
-		//delay_start := time.Now()
+		delay_start := time.Now()
 		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(key)}, nil, []int64{4})
 
 
@@ -272,7 +274,7 @@ func main() {
 
 		now = time.Now()
 		currRuntime = now.Sub(start)
-		//for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
+		for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
 	}
 	//numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
 	count := client.GrabHighestResponse() + 1
@@ -285,6 +287,7 @@ func main() {
 	log.Printf("Total Log Tput: %d\n", (int(count)/(int(currRuntime.Seconds())-*rampUp)))
 	log.Printf("Total Log Tput (MP): %d\n", (int(sentcount)/(int(currRuntime.Seconds())-*rampUp)))
 	client.Finish()
+	pprof.StopCPUProfile()
 }
 
 func delayBetweenRequests(ns int64) {
@@ -297,10 +300,17 @@ func delayBetweenRequests(ns int64) {
 }
 
 func catchKill(interrupt chan os.Signal) {
-	<-interrupt
-	if *cpuProfile != "" {
+	for true {
+		s := <-interrupt
+		log.Printf("the signal caught %v", s)
+		if (s != syscall.SIGKILL) {
+			continue
+		}
+		//if *cpuProfile != "" {
+		log.Printf("CALLED STOP")
 		pprof.StopCPUProfile()
+		//}
+		log.Printf("Caught signal and stopped CPU profile before exit.\n")
+		os.Exit(0)
 	}
-	log.Printf("Caught signal and stopped CPU profile before exit.\n")
-	os.Exit(0)
 }

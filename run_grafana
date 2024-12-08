@@ -1,4 +1,6 @@
 #!/bin/bash
+
+<<'###'
 mkdir ~/MDLin/experiments/osdi25/results/monitoring_app/size1
 python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app.json
 python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards.json
@@ -68,6 +70,7 @@ python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-
 
 # still just wanna see on 4096 open looped asynch client on mp backend... do the blips occur?
 # what's the number of requests between successive long flushes? how big is the buffer at that point?
+###
 
 
 
@@ -79,62 +82,61 @@ python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-
 
 
 
-: '
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(1200000)/ns := int64(800000)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(800000)/ns := int64(400000)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(400000)/ns := int64(200000)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(200000)/ns := int64(100000)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(100000)/ns := int64(50000)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(50000)/ns := int64(25000)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(25000)/ns := int64(12500)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(12500)/ns := int64(6250)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(6250)/ns := int64(3000)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(3000)/ns := int64(1000)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(1000)/ns := int64(500)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(500)/ns := int64(250)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(250)/ns := int64(100)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
 
 sed -i 's/ns := int64(100)/ns := int64(50)/g' src/monitoring_app_client/main.go
 make
-python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
-'
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards-justiocl.json
+

@@ -406,7 +406,7 @@ func (r *Replica) waitForPeerConnections(done chan bool) {
 	var err error
 	lAddr := r.PeerAddrList[r.Id][strings.Index(r.PeerAddrList[r.Id], ":"):]
 	log.Printf("Listening for peers on %s\n", lAddr)
-	r.Listener, err = net.Listen("tcp", lAddr)
+	r.Listener, err = net.ListenUDP("tcp", lAddr)
 	if err != nil {
 		log.Printf("Error listening to peer %d: %v\n", r.Id, err)
 		os.Exit(1)
