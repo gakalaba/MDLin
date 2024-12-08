@@ -194,9 +194,12 @@ var client clients.Client
 func init() {
     flag.Parse()
     *replProtocol = "async-mdl"  // async mdl
-    *coordinatorAddr = "localhost"
-    *coordinatorPort = 7087
-    
+    //*coordinatorAddr = us-east-1-0.iocl.praxis.emulab.net | *coordinatorPort = 7067
+    //*coordinatorAddr = "localhost"
+    *coordinatorAddr = "us-east-1-0.iocl.praxis.emulab.net"
+    //*coordinatorPort = 7087
+    *coordinatorPort = 7067
+
     client = createClient()
     if client == nil {
         fmt.Println("Failed to create client during initialization")
