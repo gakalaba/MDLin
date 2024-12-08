@@ -299,10 +299,12 @@ func (r *Replica) setupShards(masterAddr string, masterPort int) {
         done = true
         break
       } else {
-        log.Printf("%v", err)
+        log.Printf("setupshard failed with err %v", err)
+	panic("hi")
       }
     } else {
-      log.Printf("%v", err)
+      log.Printf("setupshard failed with err %v", err)
+      panic("hi")
     }
   }
 }

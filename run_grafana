@@ -1,4 +1,85 @@
 #!/bin/bash
+mkdir ~/MDLin/experiments/osdi25/results/monitoring_app/size1
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards.json
+
+sed -i 's/bufio.NewReaderSize(c.leaders\[i\], 1)/bufio.NewReaderSize(c.leaders\[i\], 2)/g' src/clients/client.go
+sed -i 's/bufio.NewWriterSize(c.leaders\[i\], 1)/bufio.NewWriterSize(c.leaders\[i\], 2)/g' src/clients/client.go
+sed -i 's/bufio.NewReaderSize(conn, 1)/bufio.NewReaderSize(conn, 2)/g' src/genericsmr/genericsmr.go
+sed -i 's/bufio.NewWriterSize(conn, 1)/bufio.NewWriterSize(conn, 2)/g' src/genericsmr/genericsmr.go
+make
+mkdir ~/MDLin/experiments/osdi25/results/monitoring_app/size2
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards.json
+
+sed -i 's/bufio.NewReaderSize(c.leaders\[i\], 2)/bufio.NewReaderSize(c.leaders\[i\], 4)/g' src/clients/client.go
+sed -i 's/bufio.NewWriterSize(c.leaders\[i\], 2)/bufio.NewWriterSize(c.leaders\[i\], 4)/g' src/clients/client.go
+sed -i 's/bufio.NewReaderSize(conn, 2)/bufio.NewReaderSize(conn, 4)/g' src/genericsmr/genericsmr.go
+sed -i 's/bufio.NewWriterSize(conn, 2)/bufio.NewWriterSize(conn, 4)/g' src/genericsmr/genericsmr.go
+make
+mkdir ~/MDLin/experiments/osdi25/results/monitoring_app/size4
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards.json
+
+sed -i 's/bufio.NewReaderSize(c.leaders\[i\], 4)/bufio.NewReaderSize(c.leaders\[i\], 8)/g' src/clients/client.go
+sed -i 's/bufio.NewWriterSize(c.leaders\[i\], 4)/bufio.NewWriterSize(c.leaders\[i\], 8)/g' src/clients/client.go
+sed -i 's/bufio.NewReaderSize(conn, 4)/bufio.NewReaderSize(conn, 8)/g' src/genericsmr/genericsmr.go
+sed -i 's/bufio.NewWriterSize(conn, 4)/bufio.NewWriterSize(conn, 8)/g' src/genericsmr/genericsmr.go
+make
+mkdir ~/MDLin/experiments/osdi25/results/monitoring_app/size8
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards.json
+
+sed -i 's/bufio.NewReaderSize(c.leaders\[i\], 8)/bufio.NewReaderSize(c.leaders\[i\], 16)/g' src/clients/client.go
+sed -i 's/bufio.NewWriterSize(c.leaders\[i\], 8)/bufio.NewWriterSize(c.leaders\[i\], 16)/g' src/clients/client.go
+sed -i 's/bufio.NewReaderSize(conn, 8)/bufio.NewReaderSize(conn, 16)/g' src/genericsmr/genericsmr.go
+sed -i 's/bufio.NewWriterSize(conn, 8)/bufio.NewWriterSize(conn, 16)/g' src/genericsmr/genericsmr.go
+make
+mkdir ~/MDLin/experiments/osdi25/results/monitoring_app/size16
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards.json
+
+sed -i 's/bufio.NewReaderSize(c.leaders\[i\], 16)/bufio.NewReaderSize(c.leaders\[i\], 32)/g' src/clients/client.go
+sed -i 's/bufio.NewWriterSize(c.leaders\[i\], 16)/bufio.NewWriterSize(c.leaders\[i\], 32)/g' src/clients/client.go
+sed -i 's/bufio.NewReaderSize(conn, 16)/bufio.NewReaderSize(conn, 32)/g' src/genericsmr/genericsmr.go
+sed -i 's/bufio.NewWriterSize(conn, 16)/bufio.NewWriterSize(conn, 32)/g' src/genericsmr/genericsmr.go
+make
+mkdir ~/MDLin/experiments/osdi25/results/monitoring_app/size32
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards.json
+
+sed -i 's/bufio.NewReaderSize(c.leaders\[i\], 32)/bufio.NewReaderSize(c.leaders\[i\], 64)/g' src/clients/client.go
+sed -i 's/bufio.NewWriterSize(c.leaders\[i\], 32)/bufio.NewWriterSize(c.leaders\[i\], 64)/g' src/clients/client.go
+sed -i 's/bufio.NewReaderSize(conn, 32)/bufio.NewReaderSize(conn, 64)/g' src/genericsmr/genericsmr.go
+sed -i 's/bufio.NewWriterSize(conn, 32)/bufio.NewWriterSize(conn, 64)/g' src/genericsmr/genericsmr.go
+make
+mkdir ~/MDLin/experiments/osdi25/results/monitoring_app/size64
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards.json
+
+sed -i 's/bufio.NewReaderSize(c.leaders\[i\], 64)/bufio.NewReaderSize(c.leaders\[i\], 4096)/g' src/clients/client.go
+sed -i 's/bufio.NewWriterSize(c.leaders\[i\], 64)/bufio.NewWriterSize(c.leaders\[i\], 4096)/g' src/clients/client.go
+sed -i 's/bufio.NewReaderSize(conn, 64)/bufio.NewReaderSize(conn, 4096)/g' src/genericsmr/genericsmr.go
+sed -i 's/bufio.NewWriterSize(conn, 64)/bufio.NewWriterSize(conn, 4096)/g' src/genericsmr/genericsmr.go
+make
+mkdir ~/MDLin/experiments/osdi25/results/monitoring_app/size4096
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3-3shards.json
+
+# still just wanna see on 4096 open looped asynch client on mp backend... do the blips occur?
+# what's the number of requests between successive long flushes? how big is the buffer at that point?
+
+
+
+
+
+
+
+
+
+
+
+: '
 python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
 
 sed -i 's/ns := int64(1200000)/ns := int64(800000)/g' src/monitoring_app_client/main.go
@@ -56,4 +137,4 @@ python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-
 sed -i 's/ns := int64(100)/ns := int64(50)/g' src/monitoring_app_client/main.go
 make
 python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app3.json
-
+'

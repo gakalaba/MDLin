@@ -7,8 +7,8 @@ import (
 	"genericsmr"
 	"genericsmrproto"
 	"state"
-	"time"
-	"dlog"
+	//"time"
+	//"dlog"
 )
 
 type ProposeClient struct {
@@ -107,8 +107,13 @@ func (c *ProposeClient) preparePropose(commandId int32, key int64, value int64) 
 }
 
 func (c *ProposeClient) sendProposeAndReadReply() (bool, int64) {
+	//A := time.Now()
 	c.sendPropose()
-	return c.readProposeReply(c.propose.CommandId)
+	//B := time.Now()
+	val1, val2 := c.readProposeReply(c.propose.CommandId)
+	//C := time.Now()
+	//dlog.Printf("sendpropose = %v, readReply = %v", B.Sub(A), C.Sub(B))
+	return val1, val2
 }
 
 func (c *ProposeClient) sendPropose() {
@@ -123,14 +128,14 @@ func (c *ProposeClient) sendPropose() {
 			}
 		}
 		//dlog.Printf("@Sending request to %d\n", replica)
-		A := time.Now()
+		//A := time.Now()
 		c.writers[replica].WriteByte(clientproto.GEN_PROPOSE)
-		B := time.Now()
+		//B := time.Now()
 		c.propose.Marshal(c.writers[replica])
-		C := time.Now()
+		//C := time.Now()
 		c.writers[replica].Flush()
-		D := time.Now()
-		dlog.Printf("WriteByte=%v, Marshal=%v, Flush=%v", B.Sub(A), C.Sub(B), D.Sub(C))
+		//D := time.Now()
+		//dlog.Printf("WriteByte=%v, Marshal=%v, Flush=%v", B.Sub(A), C.Sub(B), D.Sub(C))
 	} else {
 		//dlog.Printf("Sending request to all replicas\n")
 		for i := 0; i < c.numLeaders; i++ {
