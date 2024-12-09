@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -292,41 +291,40 @@ func (c *Command) Execute(st *State) Value {
 	// Get messages from index to current position
 	case LISTEN:
 		// Debug log
-		f, _ := os.OpenFile("/users/akalaba/MDLin/experiments/temp.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		defer f.Close()
+		log.Printf("LISTEN - Key: %v", c.K)
 		
 		// Get index key
 		indexKey := Key(stringToInt64Hash(fmt.Sprintf("client_%v_index", c.K)))
 		if _, exists := st.Store[indexKey]; !exists {
-			fmt.Fprintf(f, "LISTEN - Index key %v doesn't exist\n", indexKey)
+			log.Printf("LISTEN - Index key %v doesn't exist", indexKey)
 			// if key doesn't exist, return empty list
 			return NewList([]string{}) 
 		}
 
 		// Get current index
 		currentIndex, _ := strconv.Atoi(st.Store[indexKey].String)
-		fmt.Fprintf(f, "LISTEN - Current index: %d\n", currentIndex)
+		log.Printf("LISTEN - Current index: %d", currentIndex)
 		
 		// Get queue
 		if queue, exists := st.Store[c.K]; exists && queue.Type == ListType {
-			fmt.Fprintf(f, "LISTEN - Full queue: %v\n", queue.List)
+			log.Printf("LISTEN - Full queue: %v", queue.List)
 			// get all messages from index to end
 			messages := queue.List[currentIndex:]
-			fmt.Fprintf(f, "LISTEN - Messages from index %d: %v\n", currentIndex, messages)
+			log.Printf("LISTEN - Messages from index %d: %v", currentIndex, messages)
 			result := NewList(messages)
 			// Update index to be current index plus number of messages we just read
 			st.Store[indexKey] = NewString(strconv.Itoa(currentIndex + len(messages)))
 			return result
 		}
-		fmt.Fprintf(f, "LISTEN - Queue doesn't exist or wrong type for key %v\n", c.K)
+		log.Printf("LISTEN - Queue doesn't exist or wrong type for key %v", c.K)
 		return NewList([]string{})
 
 	// Type: string, Return: string
 	// Append message to queue
 	case PUBLISH:
-		// Debug log
-		f, _ := os.OpenFile("/users/akalaba/MDLin/experiments/temp.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		defer f.Close()
+		// Debug logging
+		log.Printf("PUBLISH Command Full: %+v", c)
+		log.Printf("PUBLISH Command - Key: %v, Value Type: %v, Value: %+v", c.K, c.V.Type, c.V)
 		
 		// Initialize queue if it doesn't exist
 		if _, exists := st.Store[c.K]; !exists {
@@ -335,11 +333,9 @@ func (c *Command) Execute(st *State) Value {
 		
 		// grab list and append new element	
 		currentList := st.Store[c.K].List
-		fmt.Fprintf(f, "PUBLISH Command %v", c)
-		fmt.Fprintf(f, "PUBLISH Command - Key: %v, Value: %+v\n", c.K, c.V)
-		fmt.Fprintf(f, "Current list before append: %v\n", currentList)
+		log.Printf("Current list before append: %v", currentList)
 		newList := append(currentList, c.V.String)
-		fmt.Fprintf(f, "New list after append: %v\n", newList)
+		log.Printf("New list after append: %v", newList)
 		// store as new struct
 		st.Store[c.K] = NewList(newList)
 		return NewString("OK")
