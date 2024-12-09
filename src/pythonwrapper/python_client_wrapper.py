@@ -129,6 +129,7 @@ def test_pubsub_operations():
     response = AppResponse(result)
 
     assert(len(response) == 2)
+    print(response)
     assert("Hello, World!" in response)
     assert("Second message" in response)
 

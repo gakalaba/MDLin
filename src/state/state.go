@@ -315,7 +315,7 @@ func (c *Command) Execute(st *State) Value {
 	case PUBLISH:
 		// Initialize queue if it doesn't exist
 		if _, exists := st.Store[c.K]; !exists {
-			st.Store[c.K] = NewList([]string{})
+			st.Store[c.K] = NewList([]string{c.V.String})
 		} 
 		
 		// grab list and append new element	
