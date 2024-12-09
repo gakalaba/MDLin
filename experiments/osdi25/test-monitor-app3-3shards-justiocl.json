@@ -146,7 +146,7 @@
   "client_max_processors": 2,
   "client_num_keys": 1000000,
   "client_ramp_down": 30,
-  "client_ramp_up": 30,
+  "client_ramp_up": 5,
   "client_random_coordinator": false,
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
