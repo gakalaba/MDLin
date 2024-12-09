@@ -26,10 +26,12 @@ const (
 	SCARD
 	HMSET
 	HMGET
-	ZREVRANGE
 	SUBSCRIBE
 	LISTEN
 	PUBLISH
+	EXISTS
+	ZADD
+	SREM
 )
 
 type ValueType int
@@ -140,7 +142,7 @@ func NewState() *State {
 }
 
 func AllOpTypes() []Operation {
-	return []Operation{PUT, GET, CAS}
+	return []Operation{PUT, GET, EXISTS, CAS}
 }
 
 func GetConflictingOpTypes(op Operation) []Operation {
@@ -291,40 +293,40 @@ func (c *Command) Execute(st *State) Value {
 	// Get messages from index to current position
 	case LISTEN:
 		// Debug log
-		log.Printf("LISTEN - Key: %v", c.K)
+		fmt.Println("LISTEN - Key:", c.K)
 		
 		// Get index key
 		indexKey := Key(stringToInt64Hash(fmt.Sprintf("client_%v_index", c.K)))
 		if _, exists := st.Store[indexKey]; !exists {
-			log.Printf("LISTEN - Index key %v doesn't exist", indexKey)
+			fmt.Println("LISTEN - Index key", indexKey, "doesn't exist")
 			// if key doesn't exist, return empty list
 			return NewList([]string{}) 
 		}
 
 		// Get current index
 		currentIndex, _ := strconv.Atoi(st.Store[indexKey].String)
-		log.Printf("LISTEN - Current index: %d", currentIndex)
+		fmt.Println("LISTEN - Current index:", currentIndex)
 		
 		// Get queue
 		if queue, exists := st.Store[c.K]; exists && queue.Type == ListType {
-			log.Printf("LISTEN - Full queue: %v", queue.List)
+			fmt.Println("LISTEN - Full queue:", queue.List)
 			// get all messages from index to end
 			messages := queue.List[currentIndex:]
-			log.Printf("LISTEN - Messages from index %d: %v", currentIndex, messages)
+			fmt.Println("LISTEN - Messages from index", currentIndex, ":", messages)
 			result := NewList(messages)
 			// Update index to be current index plus number of messages we just read
 			st.Store[indexKey] = NewString(strconv.Itoa(currentIndex + len(messages)))
 			return result
 		}
-		log.Printf("LISTEN - Queue doesn't exist or wrong type for key %v", c.K)
+		fmt.Println("LISTEN - Queue doesn't exist or wrong type for key", c.K)
 		return NewList([]string{})
 
 	// Type: string, Return: string
 	// Append message to queue
 	case PUBLISH:
 		// Debug logging
-		log.Printf("PUBLISH Command Full: %+v", c)
-		log.Printf("PUBLISH Command - Key: %v, Value Type: %v, Value: %+v", c.K, c.V.Type, c.V)
+		fmt.Println("PUBLISH Command Full:", c)
+		fmt.Println("PUBLISH Command - Key:", c.K, "Value Type:", c.V.Type, "Value:", c.V)
 		
 		// Initialize queue if it doesn't exist
 		if _, exists := st.Store[c.K]; !exists {
@@ -333,12 +335,34 @@ func (c *Command) Execute(st *State) Value {
 		
 		// grab list and append new element	
 		currentList := st.Store[c.K].List
-		log.Printf("Current list before append: %v", currentList)
+		fmt.Println("Current list before append:", currentList)
 		newList := append(currentList, c.V.String)
-		log.Printf("New list after append: %v", newList)
+		fmt.Println("New list after append:", newList)
 		// store as new struct
 		st.Store[c.K] = NewList(newList)
 		return NewString("OK")
+	
+	case EXISTS:
+		// Check existence of one or more keys
+		if _, exists := st.Store[c.K]; exists {
+			return NewString("1")
+		}
+		// Return the number of keys that exist
+		return NewString("0")
+	
+	case SREM:
+		val, exists := st.Store[c.K]
+		if !exists || val.Type != SetType {
+			return NewString("0")
+		}
+
+		if _, ok := val.Set[c.V.String]; ok {
+			delete(val.Set, c.V.String)
+			st.Store[c.K] = NewSet(val.Set)
+			return NewString("1")
+		}
+
+		return NewString("0")
 
 	default:
 		return NIL

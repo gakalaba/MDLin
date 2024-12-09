@@ -240,8 +240,8 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
         op = state.SCARD
     case "SADD":
         op = state.SADD
-    case "ZREVRANGE":
-        op = state.ZREVRANGE
+    case "SREM":
+        op = state.SREM
     case "HMGET":
         op = state.HMGET
     case "HMSET":
