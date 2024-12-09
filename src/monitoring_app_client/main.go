@@ -257,7 +257,7 @@ func main() {
 	}(client)
 
 	log.Printf("starting grafana test!")
-	ns := int64(50)
+	//ns := int64(50)
 	key := 0
 	start := time.Now()
 	now := start
@@ -265,7 +265,7 @@ func main() {
 	time.Sleep(time.Duration(*rampUp) * time.Second)
 	for int(currRuntime.Seconds()) < *expLength {
 
-		delay_start := time.Now()
+		//delay_start := time.Now()
 		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(key)}, nil, []int64{4})
 
 
@@ -274,7 +274,7 @@ func main() {
 
 		now = time.Now()
 		currRuntime = now.Sub(start)
-		for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
+		//for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
 	}
 	//numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
 	count := client.GrabHighestResponse() + 1
