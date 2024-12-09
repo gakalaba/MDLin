@@ -304,9 +304,10 @@ func (c *Command) Execute(st *State) Value {
 		if queue, exists := st.Store[c.K]; exists && queue.Type == ListType {
 			// get all messages from index to end
 			messages := queue.List[currentIndex:]
-			//  new index set to length of queue
+			result := NewList(messages)
+			//  new index set to length of queue after returning messages
 			st.Store[indexKey] = NewString(strconv.Itoa(len(queue.List)))
-			return NewList(messages)
+			return result
 		}
 		return NewList([]string{})
 
