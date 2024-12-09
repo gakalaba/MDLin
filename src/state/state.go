@@ -305,8 +305,8 @@ func (c *Command) Execute(st *State) Value {
 			// get all messages from index to end
 			messages := queue.List[currentIndex:]
 			result := NewList(messages)
-			//  new index set to length of queue after returning messages
-			st.Store[indexKey] = NewString(strconv.Itoa(len(queue.List)))
+			// Update index to be current index plus number of messages we just read
+			st.Store[indexKey] = NewString(strconv.Itoa(currentIndex + len(messages)))
 			return result
 		}
 		return NewList([]string{})
