@@ -27,6 +27,7 @@ type AsynchClient struct {
   mu               *sync.Mutex
   mapMu            *sync.Mutex
   repliesMap       map[int32]*mdlinproto.ProposeReply
+  lastSentTag3      []mdlinproto.Tag
 }
 
 func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
@@ -46,6 +47,7 @@ func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader in
 		new(sync.Mutex),
 		new(sync.Mutex),
 		make(map[int32]*mdlinproto.ProposeReply),
+		make([]mdlinproto.Tag, 3),
 	}
 	pc.propose.PID = int64(id) // only need to set this once per client
 	pc.RegisterRPC(new(mdlinproto.ProposeReply), clientproto.MDL_PROPOSE_REPLY, pc.proposeReplyChan)
@@ -81,6 +83,7 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldVa
 
 	// We should set the predecessor tag based on whether we are concurrent with the previous sent request
   sendCoord := false
+  //if lastReceived >= (myCommandId-3) {
   if lastReceived == (myCommandId-1) {
 	  //dlog.Printf("CommandId %v is NOT concurrent", myCommandId)
 		c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
@@ -88,6 +91,7 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldVa
     sendCoord = true
 	  //dlog.Printf("CommandId %v is Concurrent with CommandId %v", myCommandId, lastReceived+1)
 		c.propose.Predecessor = c.lastSentTag
+		//c.propose.Predecessor = c.lastSentTag3[2]
 	}
 
 	//C := time.Now()
@@ -108,9 +112,13 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, oldVa
 		// logic in the send function assumes request was send)
 		//dlog.Printf("AND is sending coord req to %v on shard %v", c.lastSentTag, l)
 		c.sendCoordinationRequest(c.lastSentTag, l)
+		//c.sendCoordinationRequest(c.lastSentTag3[2], l)
 	}
 	//E := time.Now()
 	c.lastSentTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
+	//c.lastSentTag3[2] = c.lastSentTag3[1]
+	//c.lastSentTag3[1] = c.lastSentTag3[0]
+	//c.lastSentTag3[0] = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
 	//dlog.Printf("AB=%v, BC=%v, CD=%v, DE=%v", B.Sub(A), C.Sub(B), D.Sub(C), E.Sub(D))
 	return true, int64(c.propose.CommandId)
 }
