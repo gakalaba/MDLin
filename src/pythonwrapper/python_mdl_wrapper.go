@@ -342,6 +342,7 @@ func AsyncAppResponse(keysJSON *C.char) *C.char {
 		Success: success != 0, // Convert uint8 to bool
 		Result:  result,
 	}
+	fmt.Printf("Op: %v\n", response)
 
 	// Marshal response to JSON
 	jsonResponse, err := json.Marshal(response)
