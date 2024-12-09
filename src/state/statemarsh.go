@@ -143,8 +143,8 @@ func (t *Command) Unmarshal(wire io.Reader) error {
 	// Determine V type based on content
 	if vStr == "" {
 		t.V = Value{Type: StringType, String: ""}
-	} else if strings.Contains(vStr, ",") {
-		// If contains comma, it's a list
+	} else if isValidList(vStr) {
+		// If contains comma and looks like a valid list, treat as list
 		t.V = Value{
 			Type: ListType,
 			List: strings.Split(vStr, ","),
@@ -167,8 +167,8 @@ func (t *Command) Unmarshal(wire io.Reader) error {
 	// Determine OldValue type based on content
 	if oldValueStr == "" {
 		t.OldValue = Value{Type: StringType, String: ""}
-	} else if strings.Contains(oldValueStr, ",") {
-		// If contains comma, it's a list
+	} else if isValidList(oldValueStr) {
+		// If contains comma and looks like a valid list, treat as list
 		t.OldValue = Value{
 			Type: ListType,
 			List: strings.Split(oldValueStr, ","),
@@ -181,6 +181,28 @@ func (t *Command) Unmarshal(wire io.Reader) error {
 	}
 
 	return nil
+}
+
+func isValidList(s string) bool {
+	// Check if the string contains a comma
+	if !strings.Contains(s, ",") {
+		return false
+	}
+	
+	// Split the string
+	parts := strings.Split(s, ",")
+	
+	// Require at least two non-empty parts
+	nonEmptyCount := 0
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			nonEmptyCount++
+		}
+	}
+	
+	// Only treat as a list if there are at least two non-empty parts
+	return nonEmptyCount >= 2
 }
 
 func (t *Key) Marshal(w io.Writer) {
@@ -254,8 +276,8 @@ func (t *Value) Unmarshal(r io.Reader) error {
 	
 	if valueStr == "" {
 		*t = Value{Type: StringType, String: ""}
-	} else if strings.Contains(valueStr, ",") {
-		// If contains comma, it's a list or set
+	} else if isValidList(valueStr) {
+		// If contains comma and looks like a valid list, treat as list
 		*t = Value{
 			Type: ListType,
 			List: strings.Split(valueStr, ","),

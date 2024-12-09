@@ -327,6 +327,14 @@ func (c *Command) Execute(st *State) Value {
 		// Debug logging
 		fmt.Println("PUBLISH Command Full:", c)
 		fmt.Println("PUBLISH Command - Key:", c.K, "Value Type:", c.V.Type, "Value:", c.V)
+
+		// Determine the value to publish
+		publishValue := c.V.String
+		if publishValue == "" && c.V.Type == ListType && len(c.V.List) > 0 {
+			publishValue = c.V.List[0]
+		}
+		
+		fmt.Println("Publish value:", publishValue)
 		
 		// Initialize queue if it doesn't exist
 		if _, exists := st.Store[c.K]; !exists {
@@ -336,7 +344,7 @@ func (c *Command) Execute(st *State) Value {
 		// grab list and append new element	
 		currentList := st.Store[c.K].List
 		fmt.Println("Current list before append:", currentList)
-		newList := append(currentList, c.V.String)
+		newList := append(currentList, publishValue)
 		fmt.Println("New list after append:", newList)
 		// store as new struct
 		st.Store[c.K] = NewList(newList)
