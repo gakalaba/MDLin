@@ -32,6 +32,7 @@ const (
 	EXISTS
 	ZADD
 	SREM
+	SISMEMBER
 )
 
 type ValueType int
@@ -370,6 +371,19 @@ func (c *Command) Execute(st *State) Value {
 			return NewString("1")
 		}
 
+		return NewString("0")
+	
+	case SISMEMBER:
+		val, exists := st.Store[c.K]
+		if !exists {
+			return NewString("0")
+		}
+		if val.Type != SetType {
+			return NewString("0")
+		}
+		if _, ok := val.Set[c.V.String]; ok {
+			return NewString("1")
+		}
 		return NewString("0")
 
 	default:
