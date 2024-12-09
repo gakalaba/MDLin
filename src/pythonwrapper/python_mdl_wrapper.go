@@ -261,11 +261,24 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
 
     // Helper function to convert JSON to state.Value
     convertJSONToValue := func(jsonStr string) state.Value {
-        var value interface{}
-        if err := json.Unmarshal([]byte(jsonStr), &value); err != nil {
-            fmt.Printf("Error unmarshaling JSON: %v\n", err)
-            return state.NIL
+        fmt.Printf("Converting JSON string: %s\n", jsonStr)
+        
+        // First, try to parse as a string
+        if jsonStr == "" {
+            return state.NewString("")
         }
+        
+        // Try to parse as JSON
+        var value interface{}
+        err := json.Unmarshal([]byte(jsonStr), &value)
+        
+        // If JSON parsing fails, treat as a simple string
+        if err != nil {
+            fmt.Printf("Treating as simple string due to JSON error: %v\n", err)
+            return state.NewString(jsonStr)
+        }
+        
+        fmt.Printf("Unmarshaled value type: %T, value: %v\n", value, value)
         
         switch v := value.(type) {
         case []interface{}:
