@@ -49,8 +49,10 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64, newV
 		var returnValue state.Value
 
 		if opType == state.GET || opType == state.SCARD || opType == state.SUBSCRIBE || opType == state.LISTEN || opType == state.EXISTS {
-			success, returnValue = c.Read(opType, key)
-		} else if opType == state.PUT || opType == state.SET || opType == state.INCR || opType == state.SADD || opType == state.HMGET || opType == state.PUBLISH || opType == state.SREM || opType==state.SISMEMBER || opType==state.ZADD {
+			success, returnValue = c.Read(opType, key, state.NewString("0"))
+		} else if opType == state.HMGET {
+			success, returnValue = c.Read(opType, key, newValue)
+		} else if opType == state.PUT || opType == state.SET || opType == state.INCR || opType == state.SADD || opType == state.PUBLISH || opType == state.SREM || opType==state.SISMEMBER || opType==state.ZADD {
 			success = c.Write(opType, key, newValue)
 			returnValue = state.NewString("0")
 		} else {
@@ -77,10 +79,10 @@ func (c *ProposeClient) GrabHighestResponse() int32 {
 	return 0
 }
 
-func (c *ProposeClient) Read(opType state.Operation, key int64) (bool, state.Value) {
+func (c *ProposeClient) Read(opType state.Operation, key int64, value state.Value) (bool, state.Value) {
 	commandId := c.opCount
 	c.opCount++
-	c.preparePropose(commandId, key, state.NewString("0"))
+	c.preparePropose(commandId, key, value)
 	c.propose.Command.Op = opType
 	return c.sendProposeAndReadReply()
 }

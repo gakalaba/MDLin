@@ -276,7 +276,7 @@ func (c *Command) Execute(st *State) Value {
 		if st.Store[c.K].Type != HashType {
 			st.Store[c.K] = NewHash(make(map[string]string))
 		}
-		return NewString(st.Store[c.K].Hash[c.V.String])
+		return NewList([]string{st.Store[c.K].Hash[c.V.String]})
 
 	// Type: string, Return: string
 	// Initialize client's index for a queue

@@ -98,7 +98,7 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, newVa
   }
 
   if opTypes[0] == state.GET || opTypes[0] == state.SCARD || opTypes[0] == state.SUBSCRIBE || opTypes[0] == state.LISTEN || opTypes[0] == state.EXISTS {
-    c.Read(opTypes[0], key)
+    c.Read(opTypes[0], key, state.NewString("0"))
   } else if opTypes[0] == state.PUT || opTypes[0] == state.SET || opTypes[0] == state.INCR || opTypes[0] == state.SADD || opTypes[0] == state.HMGET || opTypes[0] == state.PUBLISH || opTypes[0] == state.SREM || opTypes[0]==state.SISMEMBER || opTypes[0]==state.ZADD {
     c.Write(opTypes[0], key, newValueObj)
   } else {
@@ -183,8 +183,8 @@ func (c *AsynchClient) asynchReadReplies() {
 	}
 }
 
-func (c *AsynchClient) Read(opType state.Operation, key int64) (bool, state.Value) {
-	c.preparePropose(opType, key, state.NewString("0"))
+func (c *AsynchClient) Read(opType state.Operation, key int64, value state.Value) (bool, state.Value) {
+	c.preparePropose(opType, key, value)
 	c.sendPropose()
 	return true, state.NewString("0")
 }
