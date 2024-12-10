@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,6 +34,7 @@ const (
 	ZADD
 	SREM
 	SISMEMBER
+	ZREVRANGE
 )
 
 type ValueType int
@@ -385,6 +387,72 @@ func (c *Command) Execute(st *State) Value {
 			return NewString("1")
 		}
 		return NewString("0")
+	
+	case ZADD:
+		// Initialize dictionary if it doesn't exist
+		if _, exists := st.Store[c.K]; !exists {
+			st.Store[c.K] = NewHash(make(map[string]string))
+		}
+		// Add element to hash
+		st.Store[c.K].Hash[c.V.String] = c.OldValue.String
+		// Return number of elements in hash
+		return NewString(strconv.Itoa(len(st.Store[c.K].Hash)))
+	
+	case ZREVRANGE:
+		// Check if the key exists and is a hash
+		val, exists := st.Store[c.K]
+		if !exists || val.Type != HashType {
+			return NIL
+		}
+
+		// Extract keys from the hash
+		keys := make([]string, 0, len(val.Hash))
+		for k := range val.Hash {
+			keys = append(keys, k)
+		}
+
+		// Sort keys in reverse order
+		sort.Sort(sort.Reverse(sort.StringSlice(keys)))
+
+		// Convert start and stop to integers
+		start, err1 := strconv.Atoi(c.V.String)
+		stop, err2 := strconv.Atoi(c.OldValue.String)
+
+		if err1 != nil || err2 != nil {
+			return NIL
+		}
+
+		// Adjust indices to handle negative indexing
+		if start < 0 {
+			start = len(keys) + start
+		}
+		if stop < 0 {
+			stop = len(keys) + stop
+		}
+
+		// Ensure indices are within bounds
+		if start < 0 {
+			start = 0
+		}
+		if stop >= len(keys) {
+			stop = len(keys) - 1
+		}
+
+		// If start is beyond stop, return empty list
+		if start > stop {
+			return NewList([]string{})
+		}
+
+		// Extract the range of keys
+		rangeKeys := keys[start : stop+1]
+
+		// Create result list with values from the hash
+		result := make([]string, len(rangeKeys))
+		for i, k := range rangeKeys {
+			result[i] = val.Hash[k]
+		}
+
+		return NewList(result)
 
 	default:
 		return NIL

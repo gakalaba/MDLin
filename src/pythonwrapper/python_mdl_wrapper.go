@@ -256,6 +256,10 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
 		op = state.LISTEN
 	case "SUBSCRIBE":
 		op = state.SUBSCRIBE
+	case "ZADD":
+		op = state.ZADD
+	case "ZREVRANGE":
+		op = state.ZREVRANGE
 	default:
         fmt.Printf("Invalid operation type: %s\n", opType)
         return C.CString("")
