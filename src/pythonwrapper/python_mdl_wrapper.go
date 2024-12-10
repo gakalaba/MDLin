@@ -330,6 +330,7 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
     if !success {
         return C.CString("")
     }
+	fmt.Println("Client apprequest succeeeded", val)
 
     // Get the string value directly from the String field
     resultStr := val.String
@@ -363,6 +364,150 @@ func AsyncAppResponse(keysJSON *C.char) *C.char {
 		Success: success != 0, // Convert uint8 to bool
 		Result:  result,
 	}
+	fmt.Printf("Op: %v\n", response)
+
+	// Marshal response to JSON
+	jsonResponse, err := json.Marshal(response)
+	if err != nil {
+		fmt.Printf("Go: Error marshaling response: %v\n", err)
+		errResponse := Response{
+			Success: false,
+			Result:  err.Error(),
+		}
+		jsonErrorResponse, _ := json.Marshal(errResponse)
+		return C.CString(string(jsonErrorResponse))
+	}
+
+	return C.CString(string(jsonResponse))
+}
+
+
+//export SyncAppRequest
+func SyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldValue *C.char) *C.char {
+    // Decode operation type
+    var opType string
+    err := json.Unmarshal([]byte(C.GoString(opTypesJSON)), &opType)
+    if err != nil {
+        fmt.Printf("Failed to parse op_type: %v\n", err)
+        return C.CString("")
+    }
+
+    // Decode key
+    var keyStr string
+    err = json.Unmarshal([]byte(C.GoString(keysJSON)), &keyStr)
+    if err != nil {
+        fmt.Printf("Failed to parse key: %v\n", err)
+        return C.CString("")
+    }
+
+    // Convert operation type to state.Operation
+    var op state.Operation
+    switch opType {
+    case "GET":
+        op = state.GET
+    case "PUT":
+        op = state.PUT
+    case "CAS":
+        op = state.CAS
+    case "INCR":
+        op = state.INCR
+    case "SCARD":
+        op = state.SCARD
+    case "SADD":
+        op = state.SADD
+    case "SREM":
+        op = state.SREM
+    case "HMGET":
+        op = state.HMGET
+    case "HMSET":
+        op = state.HMSET
+    case "EXISTS":
+		op = state.EXISTS
+    case "SET":
+        op = state.SET
+	case "PUBLISH":
+		op = state.PUBLISH
+	case "LISTEN":
+		op = state.LISTEN
+	case "SUBSCRIBE":
+		op = state.SUBSCRIBE
+	case "ZADD":
+		op = state.ZADD
+	case "ZREVRANGE":
+		op = state.ZREVRANGE
+	default:
+        fmt.Printf("Invalid operation type: %s\n", opType)
+        return C.CString("")
+    }
+
+    // Helper function to convert JSON to state.Value
+    convertJSONToValue := func(jsonStr string) state.Value {
+        fmt.Printf("Converting JSON string: %s\n", jsonStr)
+        
+        // First, try to parse as a string
+        if jsonStr == "" {
+            return state.NewString("")
+        }
+        
+        // Try to parse as JSON
+        var value interface{}
+        err := json.Unmarshal([]byte(jsonStr), &value)
+        
+        // If JSON parsing fails, treat as a simple string
+        if err != nil {
+            fmt.Printf("Treating as simple string due to JSON error: %v\n", err)
+            return state.NewString(jsonStr)
+        }
+        
+        fmt.Printf("Unmarshaled value type: %T, value: %v\n", value, value)
+        
+        switch v := value.(type) {
+        case []interface{}:
+            fmt.Printf("Converting list value: %v\n", v)
+            strList := make([]string, len(v))
+            for i, item := range v {
+                strList[i] = fmt.Sprintf("%v", item)
+            }
+            return state.NewList(strList)
+        case map[string]interface{}:
+            fmt.Printf("Converting set value: %v\n", v)
+            strSet := make(map[string]bool)
+            for key := range v {
+                strSet[key] = true
+            }
+            return state.NewSet(strSet)
+        case string:
+            return state.NewString(v)
+        default:
+            return state.NewString(fmt.Sprintf("%v", v))
+        }
+    }
+
+    // Convert values
+    var valueObj, oldValueObj state.Value
+    if value != nil {
+        jsonStr := C.GoString(value)
+        valueObj = convertJSONToValue(jsonStr)
+    }
+
+    if oldValue != nil {
+        jsonStr := C.GoString(oldValue)
+        oldValueObj = convertJSONToValue(jsonStr)
+    }
+
+    // Create command
+    keyInt64 := stringToInt64Hash(keyStr)
+
+    // Execute command and return success and value as string
+	// BOOL, STATE.VALUE IN CLIENT APPREQUEST
+	fmt.Println("Input value", valueObj, oldValueObj)
+    success, result := client.AppRequest([]state.Operation{op}, []int64{keyInt64}, []state.Value{valueObj}, []state.Value{oldValueObj})
+
+	response := Response{
+		Success: success != false, // Convert uint8 to bool
+		Result:  result,
+	}
+
 	fmt.Printf("Op: %v\n", response)
 
 	// Marshal response to JSON

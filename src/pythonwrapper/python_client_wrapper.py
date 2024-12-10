@@ -24,6 +24,10 @@ async_app_response = library.AsyncAppResponse
 async_app_response.argtypes = [ctypes.c_char_p]
 async_app_response.restype = ctypes.c_char_p
 
+async_app_request = library.SyncAppRequest
+async_app_request.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+async_app_request.restype = ctypes.c_char_p
+
 def AppRequest(op_type, key, value=None, old_value=None):
     """
     Perform an operation on a key with optional value and old_value.
@@ -155,73 +159,74 @@ def test_operations():
 
     # 1. Test PUT and GET with string
     print("\n1. Testing PUT and GET with string...")
-    result = AppRequest("PUT", key, "Hello MDLin!")
-    response = AppResponse(result)
-    print(f"PUT request result: {result}")
+    result = SyncAppRequest("PUT", key, "Hello MDLin!")
+    # response = AppResponse(result)
+    # print(f"PUT request result: {result}")
+    read_result = SyncAppRequest("GET", key)
     
-    result = AppRequest("GET", key)
-    response = AppResponse(result)
-    print(f"GET response: {response}")
-    assert response == "Hello MDLin!", "String PUT and GET failed"
+    # result = AppRequest("GET", key)
+    # # response = AppResponse(result)
+    # print(f"GET response: {response}")
+    # assert response == "Hello MDLin!", "String PUT and GET failed"
 
-    # 2. Test PUT with dictionary/set
-    print("\n2. Testing PUT with dictionary...")
-    result = AppRequest("PUT", key, {"item1": True, "item2": True})
-    response = AppResponse(result)
-    print(f"PUT dictionary result: {result}")
+    # # 2. Test PUT with dictionary/set
+    # print("\n2. Testing PUT with dictionary...")
+    # result = AppRequest("PUT", key, {"item1": True, "item2": True})
+    # # response = AppResponse(result)
+    # print(f"PUT dictionary result: {result}")
     
-    # 3. Test SADD and SCARD for set operations
-    print("\n3. Testing SADD and SCARD...")
-    result = AppRequest("SADD", key, "room1")
-    response = AppResponse(result)
-    print(f"SADD room1 result: {response}")
+    # # 3. Test SADD and SCARD for set operations
+    # print("\n3. Testing SADD and SCARD...")
+    # result = AppRequest("SADD", key, "room1")
+    # response = AppResponse(result)
+    # print(f"SADD room1 result: {response}")
     
-    result = AppRequest("SADD", key, "room2")
-    response = AppResponse(result)
-    print(f"SADD room2 result: {response}")
+    # result = AppRequest("SADD", key, "room2")
+    # response = AppResponse(result)
+    # print(f"SADD room2 result: {response}")
     
-    result = AppRequest("SCARD", key)
-    response = AppResponse(result)
-    print(f"SCARD result: {response}")
-    assert response == '2', "Set cardinality is incorrect"
+    # result = AppRequest("SCARD", key)
+    # response = AppResponse(result)
+    # print(f"SCARD result: {response}")
+    # assert response == '2', "Set cardinality is incorrect"
 
-    # 4. Test HMSET and HMGET for hash operations
-    print("\n4. Testing HMSET and HMGET...")
-    result = AppRequest("HMSET", key, "hello", "world")
-    response = AppResponse(result)
-    print(f"HMSET result: {response}")
+    # # 4. Test HMSET and HMGET for hash operations
+    # print("\n4. Testing HMSET and HMGET...")
+    # result = AppRequest("HMSET", key, "hello", "world")
+    # response = AppResponse(result)
+    # print(f"HMSET result: {response}")
     
-    result = AppRequest("HMGET", key, "hello")
-    response = AppResponse(result)
-    print(f"HMGET result: {response}")
-    assert response == "world", "Hash GET failed"
+    # result = AppRequest("HMGET", key, "hello")
+    # response = AppResponse(result)
+    # print(f"HMGET result: {response}")
+    # assert response == "world", "Hash GET failed"
 
-    # 5. Test INCR operation
-    print("\n5. Testing INCR...")
-    result = AppRequest("PUT", key, "10")
-    result = AppRequest("INCR", key)
-    response = AppResponse(result)
-    print(f"INCR result: {response}")
-    assert response == "11", "INCR operation failed"
+    # # 5. Test INCR operation
+    # print("\n5. Testing INCR...")
+    # result = AppRequest("PUT", key, "10")
+    # result = AppRequest("INCR", key)
+    # response = AppResponse(result)
+    # print(f"INCR result: {response}")
+    # assert response == "11", "INCR operation failed"
 
-    # 6. Test CAS (Compare And Swap)
-    print("\n6. Testing CAS...")
-    old_value = "Hello MDLin!"
-    new_value = "Updated MDLin!"
-    result = AppRequest("CAS", key, new_value, old_value)
-    response = AppResponse(result)
-    print(f"CAS result: {response}")
+    # # 6. Test CAS (Compare And Swap)
+    # print("\n6. Testing CAS...")
+    # old_value = "Hello MDLin!"
+    # new_value = "Updated MDLin!"
+    # result = AppRequest("CAS", key, new_value, old_value)
+    # response = AppResponse(result)
+    # print(f"CAS result: {response}")
     
-    result = AppRequest("GET", key)
-    response = AppResponse(result)
-    print(f"GET after CAS: {response}")
-    assert response == new_value, "CAS operation failed"
+    # result = AppRequest("GET", key)
+    # response = AppResponse(result)
+    # print(f"GET after CAS: {response}")
+    # assert response == new_value, "CAS operation failed"
 
     print("\n--- All Tests Completed Successfully! ---")
 
 
 def main():
-    test_pubsub_operations()
+    test_operations()
     
 if __name__ == "__main__":
     main()

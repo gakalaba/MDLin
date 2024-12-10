@@ -4,7 +4,7 @@ import (
 	"clientproto"
 	"fastrpc"
 
-	//"fmt"
+	"fmt"
 	"dlog"
 	"genericsmr"
 	"genericsmrproto"
@@ -36,26 +36,26 @@ func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader i
 	return pc
 }
 
-func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64, oldValues []state.Value, newValues []state.Value) (bool, state.Value) {
+func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64, newValues []state.Value, oldValues []state.Value) (bool, state.Value) {
+	fmt.Printf("AppRequest, running operation, opTypes: %v, keys: %v, oldValues: %v, newValues: %v\n", opTypes, keys, oldValues, newValues)
 	for i, opType := range opTypes {
-		k := keys[i]
+		key := keys[i]
+		oldValue := oldValues[i]
+		newValue := newValues[i]
 
 		//before := time.Now()
 		//var opTypeStr string
 		var success bool
 		var returnValue state.Value
-		if opType == state.GET {
-			//opTypeStr = "read"
-			success, returnValue = c.Read(opType, k)
-		} else if opType == state.PUT {
-			//opTypeStr = "write"
-			success = c.Write(opType, k, newValues[i])
+
+		if opType == state.GET || opType == state.SCARD || opType == state.SUBSCRIBE || opType == state.LISTEN || opType == state.EXISTS {
+			success, returnValue = c.Read(opType, key)
+		} else if opType == state.PUT || opType == state.SET || opType == state.INCR || opType == state.SADD || opType == state.HMGET || opType == state.PUBLISH || opType == state.SREM || opType==state.SISMEMBER || opType==state.ZADD {
+			success = c.Write(opType, key, newValue)
 			returnValue = state.NewString("0")
 		} else {
-			//opTypeStr = "rmw"
-			success, returnValue = c.CompareAndSwap(opType, k, oldValues[i], newValues[i])
+			success, returnValue = c.CompareAndSwap(opType, key, oldValue, newValue)
 		}
-		//after := time.Now()
 
 		if success {
 			//lat := after.Sub(before).Nanoseconds()
