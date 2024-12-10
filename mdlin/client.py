@@ -12,7 +12,6 @@ def _load_library():
     # Try each potential path
     for lib_path in potential_paths:
         try:
-            print(f"Attempting to load library from: {lib_path}")
             if os.path.exists(lib_path):
                 library = ctypes.cdll.LoadLibrary(lib_path)
                 
@@ -69,6 +68,7 @@ def AppRequest(op_type, key, value=None, old_value=None):
         key_bytes = key_json.encode('utf-8')
         value_bytes = value_json.encode('utf-8') if value_json is not None else None
         old_value_bytes = old_value_json.encode('utf-8') if old_value_json is not None else None
+
         
         # Call the C function
         result = _library.AsyncAppRequest(
@@ -91,6 +91,7 @@ def AppResponse(key):
     try:
         # Convert key to JSON string
         key_json = json.dumps(key).encode('utf-8')
+
         
         # Call Go function
         result_ptr = _library.AsyncAppResponse(key_json)

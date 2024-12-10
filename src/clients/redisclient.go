@@ -6,7 +6,7 @@ import (
 	"fastrpc"
 	"strconv"
 
-	//"fmt"
+	"fmt"
 	"genericsmr"
 	"mdlinproto"
 	"state"
@@ -97,6 +97,7 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, newVa
     c.propose.Predecessor = c.lastSentTag
   }
 
+
   if opTypes[0] == state.GET || opTypes[0] == state.SCARD || opTypes[0] == state.SUBSCRIBE || opTypes[0] == state.LISTEN || opTypes[0] == state.EXISTS {
     c.Read(opTypes[0], key, state.NewString("0"))
   } else if opTypes[0] == state.PUT || opTypes[0] == state.SET || opTypes[0] == state.INCR || opTypes[0] == state.SADD || opTypes[0] == state.HMGET || opTypes[0] == state.PUBLISH || opTypes[0] == state.SREM || opTypes[0]==state.SISMEMBER || opTypes[0]==state.ZADD {
@@ -108,6 +109,7 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, newVa
   if sendCoord {
     c.sendCoordinationRequest(c.propose.Predecessor, l)
   }
+  
   return true, state.NewString(strconv.Itoa(int(myCommandId)))
 }
 
