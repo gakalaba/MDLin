@@ -251,9 +251,9 @@ func main() {
 	NewsCron := int64(zipf.Uint64())
 	TheNewsTop = int64(zipf.Uint64())
 
-	//ops := []state.Operation{state.PUT, state.PUT, state.PUT, state.PUT, state.PUT, state.PUT, state.PUT}
-	//appState := []int64{ users_by_time}
-	//client.AppRequest(ops, appState)
+	ops := []state.Operation{state.PUT, state.PUT, state.PUT, state.PUT, state.PUT}
+	appState := []int64{username, user_id, NewsCount, NewsCron, TheNewsTop}
+	client.AppRequest(ops, appState)
 
 
 
