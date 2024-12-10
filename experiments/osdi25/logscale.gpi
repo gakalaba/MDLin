@@ -17,5 +17,5 @@ set style line 3 linetype 1 linecolor "blue" linewidth 2
 set style line 4 linetype 4 linewidth 2
 set style line 5 linetype 5 linewidth 2
 set style line 6 linetype 8 linewidth 2
-plot '/users/akalaba/MDLin/experiments/osdi25/iocldataus.csv' title "IOCL" ls 1 with lines, \
+plot '/users/akalaba/MDLin/experiments/osdi25/iocldataus.csv' title "Ellis" ls 1 with lines, \
 '/users/akalaba/MDLin/experiments/osdi25/mpdataus.csv' title "Multi-Paxos" ls 2 with lines
