@@ -185,8 +185,10 @@ const (
 
 
 func createClient() clients.Client {
-	return clients.NewAsynchClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-		*statsFile, false, true, *singleShardAware)
+	//return clients.NewAsynchClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+	//	*statsFile, false, true, *singleShardAware)
+	return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		*statsFile, false, false)
 }
 
 var client clients.Client
