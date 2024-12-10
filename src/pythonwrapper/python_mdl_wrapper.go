@@ -246,6 +246,8 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
         op = state.HMGET
     case "HMSET":
         op = state.HMSET
+    case "EXISTS":
+		op = state.EXISTS
     case "SET":
         op = state.SET
 	case "PUBLISH":

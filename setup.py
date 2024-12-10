@@ -2,7 +2,7 @@ import os
 from setuptools import setup, find_packages
 
 # Get the absolute path to the library
-lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'src', 'python_wrapper', 'libmdlclient.so'))
+lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'src', 'pythonwrapper', 'libmdlclient.so'))
 
 setup(
     name="mdlin",

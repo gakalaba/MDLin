@@ -6,7 +6,7 @@ import sys
 def _load_library():
     # Potential library paths
     potential_paths = [
-        '/Users/austinli/College/MDLin_git/src/pythonwrapper/libmdlclient.so'
+        '/users/akalaba/MDLin/src/pythonwrapper/libmdlclient.so'
     ]
     
     # Try each potential path
@@ -83,3 +83,39 @@ def AppRequest(op_type, key, value=None, old_value=None):
         
     except Exception as e:
         raise Exception(f"Error in AppRequest: {str(e)}")
+def AppResponse(key):
+    try:
+        # Convert key to JSON string
+        key_json = json.dumps(key).encode('utf-8')
+        
+        # Call Go function
+        result_ptr = _library.AsyncAppResponse(key_json)
+        if not result_ptr:
+            return None
+            
+        # Convert result from bytes to string
+        result_str = ctypes.string_at(result_ptr).decode('utf-8')
+
+
+        result = json.loads(result_str)
+
+        # Parse JSON result
+        if result['success'] == False:
+            raise Exception("Result returned false")
+        
+        value_result = result.get('result')
+        value_type = value_result.get('Type')
+        if value_type == 0:  # StringType
+            return value_result.get('String', '')
+        elif value_type == 1:  # ListType
+            return value_result.get('List', [])
+        elif value_type == 2:  # SetType
+            # Convert map[string]bool to set
+            set_dict = value_result.get('Set', {})
+            return {k for k, v in set_dict.items() if v}
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"Error in appResponse: {str(e)}")
+        raise
