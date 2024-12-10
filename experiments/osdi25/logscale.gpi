@@ -1,0 +1,21 @@
+set datafile separator ','
+set title "Application Monitoring Tool (Logscale) \n"
+set key bottom right
+# set ytics (0,0.9,0.99,0.999,0.9999,1.0)
+set xlabel 'Delay Between Requests (µs) (log)'
+set xrange [1200:0.01]
+set xtics (1200, 100, 10, 1, 0.25, 0.05)
+set key left
+set logscale x 5
+#set format x "%.0sx10^{%T}"
+set ylabel 'Throughput (reqs/s)'
+set terminal pngcairo size 900,600 enhanced dashed font 'DejaVu Sans,17'
+set output '/users/akalaba/MDLin/experiments/osdi25/logscale.png'
+set style line 1 linetype 1 linewidth 2
+set style line 2 linetype 1 linecolor "green" linewidth 2
+set style line 3 linetype 1 linecolor "blue" linewidth 2
+set style line 4 linetype 4 linewidth 2
+set style line 5 linetype 5 linewidth 2
+set style line 6 linetype 8 linewidth 2
+plot '/users/akalaba/MDLin/experiments/osdi25/iocldataus.csv' title "IOCL" ls 1 with lines, \
+'/users/akalaba/MDLin/experiments/osdi25/mpdataus.csv' title "Multi-Paxos" ls 2 with lines
