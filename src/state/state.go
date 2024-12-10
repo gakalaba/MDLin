@@ -136,7 +136,7 @@ func NewState() *State {
 				 log.Printf("Leveldb open failed: %v\n", err)
 		 }
 
-		 return &State{d}
+		 return &State{d} 
 	*/
 
 	versions = make(map[Key]Version)
@@ -296,48 +296,39 @@ func (c *Command) Execute(st *State) Value {
 	// Get messages from index to current position
 	case LISTEN:
 		// Debug log
-		fmt.Println("LISTEN - Key:", c.K)
 		
 		// Get index key
 		indexKey := Key(stringToInt64Hash(fmt.Sprintf("client_%v_index", c.K)))
 		if _, exists := st.Store[indexKey]; !exists {
-			fmt.Println("LISTEN - Index key", indexKey, "doesn't exist")
 			// if key doesn't exist, return empty list
 			return NewList([]string{}) 
 		}
 
 		// Get current index
 		currentIndex, _ := strconv.Atoi(st.Store[indexKey].String)
-		fmt.Println("LISTEN - Current index:", currentIndex)
 		
 		// Get queue
 		if queue, exists := st.Store[c.K]; exists && queue.Type == ListType {
-			fmt.Println("LISTEN - Full queue:", queue.List)
 			// get all messages from index to end
 			messages := queue.List[currentIndex:]
-			fmt.Println("LISTEN - Messages from index", currentIndex, ":", messages)
+			// Update index to be current index plus number of messages we just read
 			result := NewList(messages)
 			// Update index to be current index plus number of messages we just read
 			st.Store[indexKey] = NewString(strconv.Itoa(currentIndex + len(messages)))
 			return result
 		}
-		fmt.Println("LISTEN - Queue doesn't exist or wrong type for key", c.K)
-		return NewList([]string{})
+		return NewList([]string{})	
 
 	// Type: string, Return: string
 	// Append message to queue
 	case PUBLISH:
 		// Debug logging
-		fmt.Println("PUBLISH Command Full:", c)
-		fmt.Println("PUBLISH Command - Key:", c.K, "Value Type:", c.V.Type, "Value:", c.V)
 
 		// Determine the value to publish
 		publishValue := c.V.String
 		if publishValue == "" && c.V.Type == ListType && len(c.V.List) > 0 {
 			publishValue = c.V.List[0]
 		}
-		
-		fmt.Println("Publish value:", publishValue)
 		
 		// Initialize queue if it doesn't exist
 		if _, exists := st.Store[c.K]; !exists {
@@ -346,9 +337,7 @@ func (c *Command) Execute(st *State) Value {
 		
 		// grab list and append new element	
 		currentList := st.Store[c.K].List
-		fmt.Println("Current list before append:", currentList)
 		newList := append(currentList, publishValue)
-		fmt.Println("New list after append:", newList)
 		// store as new struct
 		st.Store[c.K] = NewList(newList)
 		return NewString("OK")
