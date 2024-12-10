@@ -120,6 +120,8 @@ func NewAbstractClient(id int32, coordinatorAddr string, coordinatorPort int, fo
 func (c *AbstractClient) Finish() {
 	if !c.shutdown {
 		c.shutdown = true
+		log.Printf("statsFile = %v", c.statsFile)
+		log.Printf("c.statsMap = %v", c.stats)
 		if len(c.statsFile) > 0 {
 			c.stats.Export(c.statsFile)
 		}
