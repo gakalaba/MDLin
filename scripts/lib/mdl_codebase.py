@@ -149,6 +149,8 @@ class MDLCodebase(ExperimentCodebase):
                                                      stderr_file)
 
         client_command = '(cd %s; %s) & ' % (exp_directory, client_command)
+        client_command = 'cd /users/akalaba/redis-chat-transformed; source anjaredischat/bin/activate; python app.py 1> %s 2> %s' % (stdout_file, stderr_file)
+        print(client_command)
         return client_command
 
 
