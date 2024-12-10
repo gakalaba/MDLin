@@ -149,7 +149,7 @@ class MDLCodebase(ExperimentCodebase):
                                                      stderr_file)
 
         client_command = '(cd %s; %s) & ' % (exp_directory, client_command)
-        client_command = 'cd /users/akalaba/redis-chat-transformed; cp /users/akalaba/test.json %s; source anjaredischat/bin/activate; python app.py 1> %s 2> %s' % (stats_file, stdout_file, stderr_file)
+        client_command = 'cd /users/akalaba/redis-chat-transformed; cp /users/akalaba/test.json %s; source anjaredischat/bin/activate; python app_app_sync.py 1> %s 2> %s' % (stats_file, stdout_file, stderr_file)
         print(client_command)
         return client_command
 

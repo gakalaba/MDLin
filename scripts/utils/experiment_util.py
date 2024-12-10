@@ -607,11 +607,12 @@ def run_experiment(config_file, client_config_idx, executor):
                                            remote_exp_directory, i)
             wait_for_clients_to_terminate(config, client_threads)
             
-            # time.sleep(config['client_experiment_length'] + 10)
+            #time.sleep(config['client_experiment_length'] + 10)
             # TODO
             # python3 src/pythonwrapper/python_client_wrapper.py
             print("Waiting {} seconds for clients to finish".format(5))
             time.sleep(5)
+            
             kill_clients(config, executor)
             time.sleep(1)
             for server_thread in server_threads:

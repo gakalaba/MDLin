@@ -4,7 +4,7 @@
 	  ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol":[
-	  "mdl"
+	  "multi_paxos"
   ],
   "replication_protocol_settings": [
 	 {
@@ -134,7 +134,7 @@
   "bin_directory_name": "bin",
   "client_bin_name": "monitoring_app_client",
   "client_debug_output": false,
-  "client_experiment_length": 60,
+  "client_experiment_length": 10,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 2,
