@@ -262,7 +262,7 @@ func main() {
 	users_by_time := int64(zipf.Uint64())
 	ops := []state.Operation{state.PUT, state.PUT, state.PUT, state.PUT, state.PUT, state.PUT, state.PUT}
 	appState := []int64{global_timeline, next_post_id, next_user_id, auths, auth, users, users_by_time}
-	client.AppRequest(ops, appState, nil, nil)
+	client.AppRequest(ops, appState)
 	post_id := int64(0)
 	retwisTypes := [7]string{"login", "logout", "register", "post", "follow", "timeline", "profile"}
 	selector := 0
@@ -373,13 +373,13 @@ func PostSequential(post_id int64, timeline int64, next_post_id int64, client cl
 	var keys []int64
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// $postid = $r->incr("next_post_id");
-	client.AppRequest([]state.Operation{state.CAS}, []int64{next_post_id}, nil, nil)
+	client.AppRequest([]state.Operation{state.CAS}, []int64{next_post_id})
 
 	// $r->hmset("post:$postid","user_id",$User['id'],"time",time(),"body",$status);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{post_id}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT}, []int64{post_id})
 
 	// $followers = $r->zrange("followers:".$User['id'],0,-1);
-	client.AppRequest([]state.Operation{state.GET}, []int64{int64(zipf.Uint64())}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{int64(zipf.Uint64())})
 	followers := 1 + (int64(zipf.Uint64()) % 100)
 
 	/* 
@@ -392,12 +392,12 @@ func PostSequential(post_id int64, timeline int64, next_post_id int64, client cl
 		keys = append(keys, int64(r.Uint64()))
 		opTypes = append(opTypes, state.PUT)
 	}
-	client.AppRequest(opTypes, keys, nil, nil)
+	client.AppRequest(opTypes, keys)
 
 	// $r->lpush("timeline",$postid);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{timeline}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT}, []int64{timeline})
 	//$r->ltrim("timeline",0,1000);
-	client.AppRequest([]state.Operation{state.CAS}, []int64{timeline}, nil, nil)
+	client.AppRequest([]state.Operation{state.CAS}, []int64{timeline})
 }
 
 func PostTransformed(post_id int64, timeline int64, next_post_id int64,
@@ -408,7 +408,7 @@ func PostTransformed(post_id int64, timeline int64, next_post_id int64,
 
 	// $postid = $r->incr("next_post_id");
 	// $followers = $r->zrange("followers:".$User['id'],0,-1);
-	client.AppRequest([]state.Operation{state.CAS, state.GET}, []int64{next_post_id, int64(zipf.Uint64())}, nil, nil)
+	client.AppRequest([]state.Operation{state.CAS, state.GET}, []int64{next_post_id, int64(zipf.Uint64())})
 	followers := 1 + int64(zipf.Uint64()) % 100
 	//followers := 10
 
@@ -434,7 +434,7 @@ func PostTransformed(post_id int64, timeline int64, next_post_id int64,
 	opTypes = append(opTypes, state.PUT)
 	keys = append(keys, timeline)
 	opTypes = append(opTypes, state.CAS)
-	client.AppRequest(opTypes, keys, nil, nil)
+	client.AppRequest(opTypes, keys)
 }
 
 //***********************************************************//
@@ -447,41 +447,41 @@ func PostTransformed(post_id int64, timeline int64, next_post_id int64,
 func FollowSequential(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	// Follow makes call to isLoggedIn()
 	// if ($userid = $r->hget("auths",$authcookie)) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
 	// if ($r->hget("user:$userid","auth") != $authcookie)
 	user_id := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 	// isLoggedIn makes call to loadUserInfo()
 	// $User['username'] = $r->hget("user:$userid","username");
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 
 
 	// Always assume the user is logged in
 	// $r->zadd("followers:".$uid,time(),$User['id']);
 	followers := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT}, []int64{followers}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT}, []int64{followers})
 	// $r->zadd("following:".$User['id'],time(),$uid);
 	following := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT}, []int64{following}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT}, []int64{following})
 }
 
 func FollowTransformed(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	// Follow makes call to isLoggedIn() - must be sequential because of ICF
 	// if ($userid = $r->hget("auths",$authcookie)) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
 	// if ($r->hget("user:$userid","auth") != $authcookie)
 	user_id := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 	// isLoggedIn makes call to loadUserInfo()
 	// $User['username'] = $r->hget("user:$userid","username");
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 
 	// Always assume the user is logged in
 	// $r->zadd("followers:".$uid,time(),$User['id']);
 	// $r->zadd("following:".$User['id'],time(),$uid);
 	followers := int64(zipf.Uint64())
 	following := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT, state.PUT}, []int64{followers, following}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT, state.PUT}, []int64{followers, following})
 }
 //***********************************************************//
 //********************** Retwis Login ***********************//
@@ -490,28 +490,28 @@ func FollowTransformed(auths int64, client clients.Client, zipf *zipfgenerator.Z
 func LoginSequential(users int64, auth int64, client clients.Client,
 				zipf *zipfgenerator.ZipfGenerator) {
 	// $userid = $r->hget("users",$username);
-	client.AppRequest([]state.Operation{state.GET}, []int64{users}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
 	// $realpassword = $r->hget("user:$userid","password");
 	userid := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{userid}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
 
 	// $authsecret = $r->hget("user:$userid","auth");
-	client.AppRequest([]state.Operation{state.GET}, []int64{userid}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
 
 	// setcookie("auth",$authsecret,time()+3600*24*365);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{auth}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT}, []int64{auth})
 }
 
 func LoginTransformed(users int64, auth int64, client clients.Client,
 				zipf *zipfgenerator.ZipfGenerator) {
 	// $userid = $r->hget("users",$username);
-	client.AppRequest([]state.Operation{state.GET}, []int64{users}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
 
 	// $realpassword = $r->hget("user:$userid","password");
 	// $authsecret = $r->hget("user:$userid","auth");
 	// setcookie("auth",$authsecret,time()+3600*24*365);
 	userid := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET, state.GET, state.GET}, []int64{userid, userid, auth}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET, state.GET, state.GET}, []int64{userid, userid, auth})
 }
 //***********************************************************//
 //********************* Retwis Logout ***********************//
@@ -520,27 +520,27 @@ func LoginTransformed(users int64, auth int64, client clients.Client,
 func LogoutSequential(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	userid := int64(zipf.Uint64())
 	// $oldauthsecret = $r->hget("user:$userid","auth");
-	client.AppRequest([]state.Operation{state.GET}, []int64{userid}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
 
 	// $r->hset("user:$userid","auth",$newauthsecret);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{userid}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT}, []int64{userid})
 
 	//$r->hset("auths",$newauthsecret,$userid);
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
 
 	//$r->hdel("auths",$oldauthsecret);
-	client.AppRequest([]state.Operation{state.CAS}, []int64{auths}, nil, nil)
+	client.AppRequest([]state.Operation{state.CAS}, []int64{auths})
 }
 
 func LogoutTransformed(auths int64, client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	userid := int64(zipf.Uint64())
 	// $oldauthsecret = $r->hget("user:$userid","auth");
-	client.AppRequest([]state.Operation{state.GET}, []int64{userid}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{userid})
 
 	// $r->hset("user:$userid","auth",$newauthsecret);
 	// $r->hset("auths",$newauthsecret,$userid);
 	// $r->hdel("auths",$oldauthsecret);
-	client.AppRequest([]state.Operation{state.PUT, state.GET, state.CAS}, []int64{userid, auths, auths}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT, state.GET, state.CAS}, []int64{userid, auths, auths})
 }
 //***********************************************************//
 //******************** Retwis Register **********************//
@@ -550,26 +550,26 @@ func RegisterSequential(users int64, users_by_time int64, next_user_id int64,
 		auths int64, auth int64, client clients.Client,
 		zipf *zipfgenerator.ZipfGenerator) {
 	// if ($r->hget("users",$username))
-	client.AppRequest([]state.Operation{state.GET}, []int64{users}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
 
 	// $userid = $r->incr("next_user_id");
-	client.AppRequest([]state.Operation{state.CAS}, []int64{next_user_id}, nil, nil)
+	client.AppRequest([]state.Operation{state.CAS}, []int64{next_user_id})
 
 	// $r->hset("users",$username,$userid);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{users}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT}, []int64{users})
 
 	// $r->hmset("user:$userid", "username",$username, "password",$password, "auth",$authsecret);
 	userid := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.PUT}, []int64{userid}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT}, []int64{userid})
 
 	// $r->hset("auths",$authsecret,$userid);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{auths}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT}, []int64{auths})
 
 	// $r->zadd("users_by_time",time(),$username);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{users_by_time}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT}, []int64{users_by_time})
 
 	// setcookie("auth",$authsecret,time()+3600*24*365);
-	client.AppRequest([]state.Operation{state.PUT}, []int64{auth}, nil, nil)
+	client.AppRequest([]state.Operation{state.PUT}, []int64{auth})
 }
 
 func RegisterTransformed(users int64, users_by_time int64, next_user_id int64,
@@ -577,7 +577,7 @@ func RegisterTransformed(users int64, users_by_time int64, next_user_id int64,
 		zipf *zipfgenerator.ZipfGenerator) {
 	// if ($r->hget("users",$username))
 	// $userid = $r->incr("next_user_id");
-	client.AppRequest([]state.Operation{state.GET, state.CAS}, []int64{users, next_user_id}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET, state.CAS}, []int64{users, next_user_id})
 
 	// $r->hset("users",$username,$userid);
 	// $r->hmset("user:$userid", "username",$username, "password",$password, "auth",$authsecret);
@@ -586,7 +586,7 @@ func RegisterTransformed(users int64, users_by_time int64, next_user_id int64,
 	// setcookie("auth",$authsecret,time()+3600*24*365);
 	userid := int64(zipf.Uint64())
 	client.AppRequest([]state.Operation{state.PUT, state.PUT, state.PUT, state.PUT, state.PUT},
-						[]int64{users, userid, auths, users_by_time, auth}, nil, nil)
+						[]int64{users, userid, auths, users_by_time, auth})
 }
 //***********************************************************//
 //****************** Retwis ShowTimeline ********************//
@@ -599,20 +599,20 @@ func ShowTimelineSequential(users_by_time int64, timeline int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	// showTimeline makes call to showLastUsers()
 	// $users = $r->zrevrange("users_by_time",0,9);
-	client.AppRequest([]state.Operation{state.GET}, []int64{users_by_time}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{users_by_time})
 
 	// showTimeline makes call to showUserPosts()
 	// $posts = $r->lrange("timeline",0,50);
-	client.AppRequest([]state.Operation{state.GET}, []int64{timeline}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
 	posts := 50
 	for i := 0; i < posts; i++ {
 		// showUserPosts() makes call to showPost()
 		// $post = $r->hgetall("post:$id");
 		postid := int64(zipf.Uint64())
-		client.AppRequest([]state.Operation{state.GET}, []int64{postid}, nil, nil)
+		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
 		// $username = $r->hget("user:$userid","username");
 		userid := int64(zipf.Uint64())
-		client.AppRequest([]state.Operation{state.GET}, []int64{userid}, nil, nil)
+		client.AppRequest([]state.Operation{state.GET}, []int64{userid})
 	}
 }
 
@@ -620,11 +620,11 @@ func ShowTimelineTransformed(users_by_time int64, timeline int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	// showTimeline makes call to showLastUsers()
 	// $users = $r->zrevrange("users_by_time",0,9);
-	client.AppRequest([]state.Operation{state.GET}, []int64{users_by_time}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{users_by_time})
 
 	// showTimeline makes call to showUserPosts()
 	// $posts = $r->lrange("timeline",0,50);
-	client.AppRequest([]state.Operation{state.GET}, []int64{timeline}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
 	posts := 50
 	var opTypes []state.Operation
         var keys []int64
@@ -639,7 +639,7 @@ func ShowTimelineTransformed(users_by_time int64, timeline int64,
 		opTypes = append(opTypes, state.GET)
 		opTypes = append(opTypes, state.GET)
 	}
-	client.AppRequest(opTypes, keys, nil, nil)
+	client.AppRequest(opTypes, keys)
 }
 ///***********************************************************//
 //********************* Retwis Profile ***********************//
@@ -651,60 +651,60 @@ func ShowTimelineTransformed(users_by_time int64, timeline int64,
 func ProfileSequential(users int64, auths int64, timeline int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	// $userid = $r->hget("users",gt("u"))
-	client.AppRequest([]state.Operation{state.GET}, []int64{users}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
 
 	// Profile makes call to isLoggedIn()
 	// if ($userid = $r->hget("auths",$authcookie)) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
 	// if ($r->hget("user:$userid","auth") != $authcookie)
 	user_id := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 	// isLoggedIn makes call to loadUserInfo()
 	// $User['username'] = $r->hget("user:$userid","username");
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 
 	following := int64(zipf.Uint64())
 	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
-	client.AppRequest([]state.Operation{state.GET}, []int64{following}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
 
 	// Profile makes call to showUserPostsWithPagination()
 	// showUserPostsWithPagination() makes call to showUserPosts()
 	// $posts = $r->lrange("timeline",0,50);
-	client.AppRequest([]state.Operation{state.GET}, []int64{timeline}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
 	posts := 10
 	for i := 0; i < posts; i++ {
 		// showUserPosts() makes call to showPost()
 		// $post = $r->hgetall("post:$id");
 		postid := int64(zipf.Uint64())
-		client.AppRequest([]state.Operation{state.GET}, []int64{postid}, nil, nil)
+		client.AppRequest([]state.Operation{state.GET}, []int64{postid})
 		// $username = $r->hget("user:$userid","username");
-		client.AppRequest([]state.Operation{state.GET}, []int64{user_id}, nil, nil)
+		client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 	}
 }
 
 func ProfileTransformed(users int64, auths int64, timeline int64,
 		client clients.Client, zipf *zipfgenerator.ZipfGenerator) {
 	// $userid = $r->hget("users",gt("u"))
-	client.AppRequest([]state.Operation{state.GET}, []int64{users}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{users})
 
 	// Profile makes call to isLoggedIn() -- fully sequential due to IFC
 	// if ($userid = $r->hget("auths",$authcookie)) {
-	client.AppRequest([]state.Operation{state.GET}, []int64{auths}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{auths})
 	// if ($r->hget("user:$userid","auth") != $authcookie)
 	user_id := int64(zipf.Uint64())
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 	// isLoggedIn makes call to loadUserInfo()
 	// $User['username'] = $r->hget("user:$userid","username");
-	client.AppRequest([]state.Operation{state.GET}, []int64{user_id}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{user_id})
 
 	following := int64(zipf.Uint64())
 	// $isfollowing = $r->zscore("following:".$User['id'],$userid);
-	client.AppRequest([]state.Operation{state.GET}, []int64{following}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{following})
 
 	// Profile makes call to showUserPostsWithPagination()
 	// showUserPostsWithPagination() makes call to showUserPosts()
 	// $posts = $r->lrange("timeline",0,50);
-	client.AppRequest([]state.Operation{state.GET}, []int64{timeline}, nil, nil)
+	client.AppRequest([]state.Operation{state.GET}, []int64{timeline})
 	posts := 10
 	var opTypes []state.Operation
         var keys []int64
@@ -718,7 +718,7 @@ func ProfileTransformed(users int64, auths int64, timeline int64,
 		opTypes = append(opTypes, state.GET)
 		opTypes = append(opTypes, state.GET)
 	}
-	client.AppRequest(opTypes, keys, nil, nil)
+	client.AppRequest(opTypes, keys)
 
 }
 /*
