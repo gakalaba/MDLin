@@ -3,8 +3,6 @@ package clients
 import (
 	"clientproto"
 	"fastrpc"
-
-	"fmt"
 	"dlog"
 	"genericsmr"
 	"genericsmrproto"
@@ -37,7 +35,7 @@ func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader i
 }
 
 func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64, newValues []state.Value, oldValues []state.Value) (bool, state.Value) {
-	fmt.Printf("AppRequest, running operation, opTypes: %v, keys: %v, oldValues: %v, newValues: %v\n", opTypes, keys, oldValues, newValues)
+	// fmt.Printf("AppRequest, running operation, opTypes: %v, keys: %v, oldValues: %v, newValues: %v\n", opTypes, keys, oldValues, newValues)
 	for i, opType := range opTypes {
 		key := keys[i]
 		oldValue := oldValues[i]
@@ -61,9 +59,10 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64, newV
 
 		if success {
 			//lat := after.Sub(before).Nanoseconds()
-			//fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
+			// fmt.Printf("Got a result from this %s \n", opType)
 			return true, returnValue
 		} else {
+			// fmt.Printf("Error: %s \n", opType)
 			return false, state.NewString("-1")
 		}
 	}

@@ -185,8 +185,8 @@ const (
 
 
 func createClient() clients.Client {
-	//return clients.NewAsynchClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-	//	*statsFile, false, true, *singleShardAware)
+	// return clients.NewAsynchClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+	// 	*statsFile, false, true, *singleShardAware)
 	return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 		*statsFile, false, false)
 }
@@ -198,8 +198,8 @@ func init() {
     *replProtocol = "async-mdl"  // async mdl
     //*coordinatorAddr = us-east-1-0.iocl.praxis.emulab.net | *coordinatorPort = 7067
     //*coordinatorAddr = "localhost"
-    //*coordinatorAddr = "us-east-1-0.iocl.praxis.emulab.net"
-    *coordinatorAddr = "us-east-1-0.lam.praxis-PG0.utah.cloudlab.us"
+    *coordinatorAddr = "us-east-1-0.lam.praxis.emulab.net"
+    //*coordinatorAddr = "us-east-1-0.lam.praxis-PG0.utah.cloudlab.us"
     //*coordinatorPort = 7087
     *coordinatorPort = 7067
 
