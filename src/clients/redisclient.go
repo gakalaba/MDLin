@@ -6,6 +6,7 @@ import (
 	"fastrpc"
 	"strconv"
 
+	"log"
 	//"fmt"
 	"genericsmr"
 	"mdlinproto"
@@ -29,6 +30,7 @@ type AsynchClient struct {
   mu               *sync.Mutex
   mapMu            *sync.Mutex
   repliesMap       map[int32]*mdlinproto.ProposeReply
+  shardFreq	map[int]int
 }
 
 func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
@@ -48,10 +50,16 @@ func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader in
 		new(sync.Mutex),
 		new(sync.Mutex),
 		make(map[int32]*mdlinproto.ProposeReply),
+		make(map[int]int),
 	}
 	pc.propose.PID = int64(id) // only need to set this once per client
 	pc.RegisterRPC(new(mdlinproto.ProposeReply), clientproto.MDL_PROPOSE_REPLY, pc.proposeReplyChan)
 	go pc.asynchReadReplies()
+	i := 0
+	for i < 9 {
+		pc.shardFreq[i] = 0
+		i++
+	}
 	return pc
 }
 
@@ -60,6 +68,7 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, newVa
     panic("Can only send one request at a time with AppRequest")
   }
   key := keys[0]
+  log.Printf("key = %v", key)
   // Convert string values to state.Value objects
   var oldValueObj, newValueObj state.Value
   if len(oldValues) > 0 {
@@ -70,6 +79,9 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, newVa
   }
 
   l := c.GetShardFromKey(state.Key(key))
+  c.shardFreq[l]++
+  log.Printf("shard = %v", l)
+  log.Printf("shardFreq = %v", c.shardFreq)
   // Figure out the sequence number
   if _, ok := c.seqnos[l]; !ok {
     c.seqnos[l] = 0

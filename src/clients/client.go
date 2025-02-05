@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"clientproto"
 	"coordinatorproto"
-	"dlog"
+	//"dlog"
 	"encoding/binary"
 	"fastrpc"
 	"fmt"
@@ -12,6 +12,7 @@ import (
 	"log"
 	"masterproto"
 	"net"
+	"math"
 	"net/rpc"
 	"state"
 	"stats"
@@ -213,9 +214,8 @@ func (c *AbstractClient) connectToLeader(i int) bool {
 }
 
 func (c *AbstractClient) GetShardFromKey(k state.Key) int {
-	//nShards := len(c.leaders)
-	return 0 
-	//int(k) % nShards
+	nShards := len(c.leaders)
+	return int(math.Abs(float64(k))) % nShards
 }
 
 // func (c *AbstractClient) DetermineReplicaPings() {
@@ -311,7 +311,7 @@ func (c *AbstractClient) leaderListener(leader int) {
 	var errS string
 	for !c.shutdown && err == nil {
 		if msgType, err = c.readers[leader].ReadByte(); err != nil {
-			dlog.Printf("&&&&&&&&&&&&&&&&&Got this error from leader %d at time %v: %v\n", leader, time.Now().UnixMilli(), err)
+			log.Printf("&&&&&&&&&&&&&&&&&Got this error from leader %d at time %v: %v\n", leader, time.Now().UnixMilli(), err)
 			errS = "reading opcode"
 			break
 		}
