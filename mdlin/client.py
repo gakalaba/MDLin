@@ -24,6 +24,9 @@ def _load_library():
 
                 library.SyncAppRequest.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
                 library.SyncAppRequest.restype = ctypes.c_char_p
+
+                library.InitCustom.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+                library.InitCustom.restype = None
                 
                 return library
         except Exception as e:
@@ -39,6 +42,18 @@ try:
 except OSError as e:
     print(f"Warning: {e}")
     _library = None
+
+def InitCustom(client_id, client_type):
+    """
+    Init mdl with client id and type ("mdl, multi_paxos")
+    :param client_id: int client id
+    :param client_type: string client type
+    """
+    if _library is None:
+        raise RuntimeError("Library not loaded. Cannot perform InitCustom.")
+    client_id_bytes = client_id.encode('utf-8')
+    client_type_bytes = client_type.encode('utf-8')
+    _library.InitCustom(client_id_bytes, client_type_bytes)
 
 def AppRequest(op_type, key, value=None, old_value=None):
     """

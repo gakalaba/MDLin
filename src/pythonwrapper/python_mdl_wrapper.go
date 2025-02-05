@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"state"
+    "strconv"
 )
 import (
 	"crypto/md5"
@@ -182,32 +183,62 @@ const (
 	POST
 )
 
+func createClient(clientId string, clientType string) clients.Client {
+    id, err := strconv.Atoi(clientId) // Convert string to int
 
-
-func createClient() clients.Client {
-	// return clients.NewAsynchClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-	// 	*statsFile, false, true, *singleShardAware)
-	return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-		*statsFile, false, false)
+    if err != nil {
+        fmt.Println("Invalid client ID:", clientId)
+        return nil
+    }
+    
+    switch clientType {
+        case "mdl":
+            return clients.NewAsynchClient(int32(id), *coordinatorAddr, *coordinatorPort, *forceLeader, 
+            *statsFile, false, true, *singleShardAware)
+        case "multi_paxos":
+            return clients.NewProposeClient(int32(id), *coordinatorAddr, *coordinatorPort, *forceLeader, 
+            *statsFile, false, false)
+        default:
+            fmt.Println("Invalid client type:", clientType)
+            return nil
+    }
 }
 
 var client clients.Client
 
 func init() {
-    flag.Parse()
-    *replProtocol = "async-mdl"  // async mdl
-    //*coordinatorAddr = us-east-1-0.iocl.praxis.emulab.net | *coordinatorPort = 7067
-    //*coordinatorAddr = "localhost"
+    // flag.Parse()
+    // *replProtocol = "async-mdl"  // async mdl
+    // //*coordinatorAddr = us-east-1-0.iocl.praxis.emulab.net | *coordinatorPort = 7067
+    // //*coordinatorAddr = "localhost"
+    // *coordinatorAddr = "us-east-1-0.lam.praxis.emulab.net"
+    // //*coordinatorAddr = "us-east-1-0.lam.praxis-PG0.utah.cloudlab.us"
+    // //*coordinatorPort = 7087
+    // *coordinatorPort = 7067
+
+    // client = createClient()
+    // if client == nil {
+    //     fmt.Println("Failed to create client during initialization")
+    //     return
+    // }
+}
+
+//export InitCustom
+func InitCustom(clientId *C.char, clientType *C.char) {
+	flag.Parse()
+
+	*replProtocol = C.GoString(clientType)
+
     *coordinatorAddr = "us-east-1-0.lam.praxis.emulab.net"
-    //*coordinatorAddr = "us-east-1-0.lam.praxis-PG0.utah.cloudlab.us"
-    //*coordinatorPort = 7087
+
     *coordinatorPort = 7067
 
-    client = createClient()
-    if client == nil {
-        fmt.Println("Failed to create client during initialization")
-        return
-    }
+	client = createClient(C.GoString(clientId), C.GoString(clientType))
+
+	if client == nil {
+		fmt.Println("Failed to create client during initialization")
+		return
+	}
 }
 
 //export AsyncAppRequest
