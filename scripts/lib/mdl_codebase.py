@@ -151,7 +151,8 @@ class MDLCodebase(ExperimentCodebase):
         client_command = '(cd %s; %s) & ' % (exp_directory, client_command)
         # app_app_sync.py
         # cp /users/akalaba/test.json %s, stats_file
-        # client_command = 'cd /users/akalaba/basic-redis-leaderboard-demo-python-transformed; source redis-leaderboard-venv/bin/activate; python app_ioc.py 1> %s 2> %s' % (stdout_file, stderr_file)
+        # client_command = '(cd /users/akalaba/basic-redis-leaderboard-demo-python-transformed; source redis-leaderboard-venv/bin/activate; python server/manage_mdl.py --clientid=%s 1> %s 2> %s) & ' % (client_id, stdout_file, stderr_file)
+        # client_command = '(cd /users/akalaba/basic-redis-leaderboard-demo-python-transformed; source redis-leaderboard-venv/bin/activate; python server/manage_sync.py --clientid=%s 1> %s 2> %s) & ' % (client_id, stdout_file, stderr_file)
         print("client-diid = ", client_id)
         print("stdout_file = ", stdout_file)
         print("stderr_file = ", stderr_file)
