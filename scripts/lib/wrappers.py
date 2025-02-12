@@ -2,10 +2,12 @@ from lib.gryff_codebase import GryffCodebase
 from lib.rdma_repl_codebase import RdmaReplCodebase
 from lib.morty_codebase import MortyCodebase
 from lib.mdl_codebase import MDLCodebase
+from lib.mdl_transformed_codebase import MDLTransformedCodebase
 
 
 __BUILDERS__ = {
-    "mdl": MDLCodebase()
+    "mdl": MDLCodebase(),
+    "mdl_transformed": MDLTransformedCodebase()
 }
 
 

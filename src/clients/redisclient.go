@@ -6,7 +6,7 @@ import (
 	"fastrpc"
 	"strconv"
 
-	"log"
+	//"log"
 	//"fmt"
 	"genericsmr"
 	"mdlinproto"
@@ -30,7 +30,6 @@ type AsynchClient struct {
   mu               *sync.Mutex
   mapMu            *sync.Mutex
   repliesMap       map[int32]*mdlinproto.ProposeReply
-  shardFreq	map[int]int
 }
 
 func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader int, statsFile string,
@@ -50,16 +49,10 @@ func NewAsynchClient(id int32, masterAddr string, masterPort int, forceLeader in
 		new(sync.Mutex),
 		new(sync.Mutex),
 		make(map[int32]*mdlinproto.ProposeReply),
-		make(map[int]int),
 	}
 	pc.propose.PID = int64(id) // only need to set this once per client
 	pc.RegisterRPC(new(mdlinproto.ProposeReply), clientproto.MDL_PROPOSE_REPLY, pc.proposeReplyChan)
 	go pc.asynchReadReplies()
-	i := 0
-	for i < 9 {
-		pc.shardFreq[i] = 0
-		i++
-	}
 	return pc
 }
 
@@ -68,7 +61,6 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, newVa
     panic("Can only send one request at a time with AppRequest")
   }
   key := keys[0]
-  log.Printf("key = %v", key)
   // Convert string values to state.Value objects
   var oldValueObj, newValueObj state.Value
   if len(oldValues) > 0 {
@@ -79,9 +71,6 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, newVa
   }
 
   l := c.GetShardFromKey(state.Key(key))
-  c.shardFreq[l]++
-  log.Printf("shard = %v", l)
-  log.Printf("shardFreq = %v", c.shardFreq)
   // Figure out the sequence number
   if _, ok := c.seqnos[l]; !ok {
     c.seqnos[l] = 0
@@ -101,13 +90,14 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, newVa
   // We should set the predecessor tag based on whether we are concurrent with the previous sent request
   sendCoord := false
   if lastReceived == (myCommandId-1) {
-    dlog.Printf("CommandId %v is NOT concurrent", myCommandId)
+    //dlog.Printf("CommandId %v is NOT concurrent", myCommandId)
     c.propose.Predecessor = mdlinproto.Tag{K: state.Key(-1), PID: int64(-1), SeqNo: -1}
   } else {
     sendCoord = true
-    dlog.Printf("CommandId %v is Concurrent with CommandId %v", myCommandId, lastReceived+1)
+    //dlog.Printf("CommandId %v is Concurrent with CommandId %v", myCommandId, lastReceived+1)
     c.propose.Predecessor = c.lastSentTag
   }
+  //dlog.Printf("the predecessor = %v", c.lastSentTag)
 
 
   if opTypes[0] == state.GET || opTypes[0] == state.SCARD || opTypes[0] == state.SUBSCRIBE || opTypes[0] == state.LISTEN || opTypes[0] == state.EXISTS {
@@ -121,7 +111,9 @@ func (c *AsynchClient) AppRequest(opTypes []state.Operation, keys []int64, newVa
   if sendCoord {
     c.sendCoordinationRequest(c.propose.Predecessor, l)
   }
-  
+
+  c.lastSentTag = mdlinproto.Tag{K: state.Key(key), PID: int64(c.id), SeqNo: c.seqnos[l]}
+
   return true, state.NewString(strconv.Itoa(int(myCommandId)))
 }
 

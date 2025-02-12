@@ -190,13 +190,13 @@ func createClient(clientId string, clientType string) clients.Client {
         fmt.Println("Invalid client ID:", clientId)
         return nil
     }
-    
+
     switch clientType {
         case "mdl":
-            return clients.NewAsynchClient(int32(id), *coordinatorAddr, *coordinatorPort, *forceLeader, 
+            return clients.NewAsynchClient(int32(id), *coordinatorAddr, *coordinatorPort, *forceLeader,
             *statsFile, false, true, *singleShardAware)
         case "multi_paxos":
-            return clients.NewProposeClient(int32(id), *coordinatorAddr, *coordinatorPort, *forceLeader, 
+            return clients.NewProposeClient(int32(id), *coordinatorAddr, *coordinatorPort, *forceLeader,
             *statsFile, false, false)
         default:
             fmt.Println("Invalid client type:", clientType)
