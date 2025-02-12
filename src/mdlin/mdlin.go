@@ -1383,7 +1383,7 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
 func (r *Replica) executeCommands() {
 	i := int32(0)
 	for !r.Shutdown {
-		//executed := false
+		executed := false
 
 		for i <= r.committedUpTo {
 			if r.instanceSpace[i].cmds != nil {
@@ -1407,19 +1407,18 @@ func (r *Replica) executeCommands() {
 						dlog.Printf("EXECUTING --> CLIENT:OK = TRUE, CommandID = %d, val = %v, key = %d, seqno = %d, PID = %dHA", inst.lb.clientProposals[j].CommandId, val, inst.lb.clientProposals[j].Command.K, inst.lb.clientProposals[j].SeqNo, inst.lb.clientProposals[j].PID)
 
             r.MDReplyPropose(propreply, inst.lb.clientProposals[j].Reply)
-					} else {
-          }
+					}
 				}
 				i++
-				//executed = true
+				executed = true
 			} else {
 				break
 			}
 		}
 
-		//if !executed {
-		//	time.Sleep(1000 * 1000)
-		//}
+		if !executed {
+			time.Sleep(1000 * 1000)
+		}
 	}
 
 }
