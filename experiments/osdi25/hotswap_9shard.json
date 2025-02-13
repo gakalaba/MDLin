@@ -86,14 +86,13 @@
 
 ],
   "clients": [
-	  "client-0-0",
-	  "client-1-0"
+	  "client-0-0"
   ],
   "server_regions": {
     "region1": ["us-east-1-0", "us-east-1-1", "us-east-1-2"],
     "region2": ["us-west-1-0", "us-west-1-1", "us-west-1-2"],
     "region3": ["eu-west-1-0", "eu-west-1-1", "eu-west-1-2"],
-    "region4": ["client-0-0", "client-1-0"]
+    "region4": ["client-0-0"]
   },
   "region_rtt_latencies": {
       "region1": {
@@ -122,12 +121,12 @@
       }
  },
   "client_total": [
-	  [2, 4, 8, 16, 32, 64, 128],
-	  [2, 4, 8, 16, 32, 64, 128]
+	  [1, 2, 4, 8, 16, 32, 64, 128],
+	  [1, 2, 4, 8, 16, 32, 64, 128]
   ],
   "client_processes_per_client_node": [
-	  [1, 2, 4, 8, 16, 32, 64],
-	  [1, 2, 4, 8, 16, 32, 64]
+	  [1, 2, 4, 8, 16, 32, 64, 128],
+	  [1, 2, 4, 8, 16, 32, 64, 128]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
