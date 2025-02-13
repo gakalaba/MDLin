@@ -1460,7 +1460,10 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
   if fareply.OK == TRUE {
     inst.lb.finalOKs++
     if inst.lb.finalOKs+1 > r.N>>1 {
-	    /*numAcks := inst.lb.finalOKs
+	    /*
+	    // put same final accept ACK on rest of the batched requests
+	    // it would be better though if a coord req could lookup the whole batches ACKs at a single location
+	    numAcks := inst.lb.finalOKs
 	    r.readyToCommit(fareply.Instance)
 
 	    for i := int32(0); i < fareply.Total; i++ {
@@ -1493,9 +1496,6 @@ func (r *Replica) handleFinalAcceptReply(fareply *mdlinproto.FinalAcceptReply) {
 	    }*/
 
 	    r.readyToCommit(fareply.Instance)
-		    /*if inst.lb.clientProposals[i].PID == 69 && inst.lb.clientProposals[i].CommandId >= 400 && inst.lb.clientProposals[i].CommandId <= 407 {
-                log.Printf("shardID %v: Got FINAL ACCEPT RESPONSE... going to execute soon for CommandID %v and PID = %v at time %v", r.ShardId, inst.lb.clientProposals[i].CommandId, inst.lb.clientProposals[i].PID, time.Now().UnixMilli())
-        }*/
 
 	if (inst.lb.clientProposals[0].Predecessor.PID == -1 && inst.lb.clientProposals[0].Predecessor.SeqNo == -1) {
 		// all naught requests can reply now
