@@ -195,7 +195,7 @@ class MDLTransformedCodebase(ExperimentCodebase):
             '-statsFile', stats_file,
             '-nshards', config['num_shards'],
             '-fanout', config['client_fanout'],
-            '-epoch', config['server_epoch']
+            '-batchsize', config['batchsize']
             ]])
         replica_command += self.get_replication_protocol_arg_from_name(config['replication_protocol'])
         if 'proxy_operations' in config['replication_protocol_settings'] and config['replication_protocol_settings']['proxy_operations']:
@@ -236,7 +236,7 @@ class MDLTransformedCodebase(ExperimentCodebase):
         if 'first_round_batching' in config['replication_protocol_settings'] and config['replication_protocol_settings']['first_round_batching']:
             replica_command += ' -batching'
         if 'second_round_batching' in config['replication_protocol_settings'] and config['replication_protocol_settings']['second_round_batching']:
-            replica_command += ' -epochBatching'
+            replica_command += ' -coordBatching'
         if 'single_shard_aware' in config['replication_protocol_settings'] and config['replication_protocol_settings']['single_shard_aware']:
             replica_command += ' -singleShardAware'
             if config['num_shards'] != 1:
