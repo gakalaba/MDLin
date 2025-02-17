@@ -3,11 +3,11 @@ package clients
 import (
 	"clientproto"
 	"fastrpc"
-	"fmt"
+	//"dlog"
+	//"log"
 	"genericsmr"
 	"genericsmrproto"
 	"state"
-	"time"
 )
 
 type ProposeClient struct {
@@ -34,70 +34,84 @@ func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader i
 	return pc
 }
 
-func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
+func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64, newValues []state.Value, oldValues []state.Value) (bool, state.Value) {
+	// fmt.Printf("AppRequest, running operation, opTypes: %v, keys: %v, oldValues: %v, newValues: %v\n", opTypes, keys, oldValues, newValues)
 	for i, opType := range opTypes {
-		k := keys[i]
+		key := keys[i]
+		oldValue := oldValues[i]
+		newValue := newValues[i]
 
-		before := time.Now()
-		var opTypeStr string
+		//before := time.Now()
+		//var opTypeStr string
 		var success bool
-		if opType == state.GET {
-			opTypeStr = "read"
-			success, _ = c.Read(k)
-		} else if opType == state.PUT {
-			opTypeStr = "write"
-			success = c.Write(k, int64(k))
+		var returnValue state.Value
+
+		if opType == state.GET || opType == state.SCARD || opType == state.SUBSCRIBE || opType == state.LISTEN || opType == state.EXISTS {
+			success, returnValue = c.Read(opType, key, state.NewString("0"))
+		} else if opType == state.HMGET {
+			success, returnValue = c.Read(opType, key, newValue)
+		} else if opType == state.PUT || opType == state.SET || opType == state.INCR || opType == state.SADD || opType == state.PUBLISH || opType == state.SREM || opType==state.SISMEMBER || opType==state.ZADD {
+			success = c.Write(opType, key, newValue)
+			returnValue = state.NewString("0")
 		} else {
-			opTypeStr = "rmw"
-			success, _ = c.CompareAndSwap(k, int64(k-1), int64(k))
+			success, returnValue = c.CompareAndSwap(opType, key, oldValue, newValue)
 		}
-		after := time.Now()
 
 		if success {
-			lat := after.Sub(before).Nanoseconds()
-			fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
+			//lat := after.Sub(before).Nanoseconds()
+			// fmt.Printf("Got a result from this %s \n", opType)
+			return true, returnValue
 		} else {
-			return false, -1
+			// fmt.Printf("Error: %s \n", opType)
+			return false, state.NewString("-1")
 		}
 	}
 
-	return true, 0
+	return true, state.NewString("0")
 }
 
-func (c *ProposeClient) Read(key int64) (bool, int64) {
-	commandId := c.opCount
-	c.opCount++
-	c.preparePropose(commandId, key, 0)
-	c.propose.Command.Op = state.GET
-	return c.sendProposeAndReadReply()
+func (c *ProposeClient) AppResponse(commandId int32) (state.Value, uint8) {
+  return state.NewString("0"), 0
 }
 
-func (c *ProposeClient) Write(key int64, value int64) bool {
+func (c *ProposeClient) GrabHighestResponse() int32 {
+	return 0
+}
+
+func (c *ProposeClient) Read(opType state.Operation, key int64, value state.Value) (bool, state.Value) {
 	commandId := c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, value)
-	c.propose.Command.Op = state.PUT
+	c.propose.Command.Op = opType
+	return c.sendProposeAndReadReply()
+}
+
+func (c *ProposeClient) Write(opType state.Operation, key int64, value state.Value) bool {
+	commandId := c.opCount
+	c.opCount++
+	c.preparePropose(commandId, key, value)
+	c.propose.Command.Op = opType
 	success, _ := c.sendProposeAndReadReply()
 	return success
 }
 
-func (c *ProposeClient) CompareAndSwap(key int64, oldValue int64,
-	newValue int64) (bool, int64) {
+func (c *ProposeClient) CompareAndSwap(opType state.Operation, key int64, oldValue state.Value,
+	newValue state.Value) (bool, state.Value) {
 	commandId := c.opCount
 	c.opCount++
 	c.preparePropose(commandId, key, newValue)
-	c.propose.Command.OldValue = state.Value(newValue)
-	c.propose.Command.Op = state.CAS
+	c.propose.Command.OldValue = oldValue
+	c.propose.Command.Op = opType
 	return c.sendProposeAndReadReply()
 }
 
-func (c *ProposeClient) preparePropose(commandId int32, key int64, value int64) {
+func (c *ProposeClient) preparePropose(commandId int32, key int64, value state.Value) {
 	c.propose.CommandId = commandId
 	c.propose.Command.K = state.Key(key)
-	c.propose.Command.V = state.Value(value)
+	c.propose.Command.V = value
 }
 
-func (c *ProposeClient) sendProposeAndReadReply() (bool, int64) {
+func (c *ProposeClient) sendProposeAndReadReply() (bool, state.Value) {
 	c.sendPropose()
 	return c.readProposeReply(c.propose.CommandId)
 }
@@ -127,17 +141,17 @@ func (c *ProposeClient) sendPropose() {
 	}
 }
 
-func (c *ProposeClient) readProposeReply(commandId int32) (bool, int64) {
+func (c *ProposeClient) readProposeReply(commandId int32) (bool, state.Value) {
 	for !c.shutdown {
 		reply := (<-c.proposeReplyChan).(*genericsmrproto.ProposeReplyTS)
 		if reply.OK == 0 {
-			return false, 0
+			return false, state.NewString("0")
 		} else {
 			//dlog.Printf("Received ProposeReply for %d\n", reply.CommandId)
 			if commandId == reply.CommandId {
-				return true, int64(reply.Value)
+				return true, reply.Value
 			}
 		}
 	}
-	return false, 0
+	return false, state.NewString("0")
 }

@@ -25,9 +25,7 @@
     }
   ],
   "server_names": [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2",
+      "us-east-1-0",
       "eu-west-1-0",
       "eu-west-1-1",
       "eu-west-1-2"
@@ -110,9 +108,9 @@
       "us-west-1-0"
     ],
 [
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
+      "eu-west-1-2",
+      "us-east-1-0",
+      "eu-west-1-0"
     ],
 [
       "us-west-1-2",
@@ -126,12 +124,57 @@
     ],
 
 [
+      "eu-west-1-2",
+      "us-east-1-0",
+      "eu-west-1-0"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "eu-west-1-0"
+    ],
+[
+      "us-east-1-0",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
       "eu-west-1-0",
       "eu-west-1-1",
       "eu-west-1-2"
     ],
 [
       "eu-west-1-2",
+      "eu-west-1-0",
+      "eu-west-1-1"
+    ],
+[
+      "eu-west-1-1",
+      "eu-west-1-2",
+      "us-east-1-0"
+    ],
+[
+      "eu-west-1-0",
+      "eu-west-1-1",
+      "eu-west-1-2"
+    ],
+[
+      "us-east-1-0",
       "eu-west-1-0",
       "eu-west-1-1"
     ],
@@ -146,9 +189,9 @@
       "eu-west-1-2"
     ],
 [
-      "eu-west-1-2",
       "eu-west-1-0",
-      "eu-west-1-1"
+      "eu-west-1-1",
+      "eu-west-1-2"
     ],
 [
       "eu-west-1-1",
@@ -162,59 +205,15 @@
     ],
 [
       "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
+      "us-east-1-0"
     ],
 [
       "eu-west-1-1",
       "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
+      "us-east-1-0",
       "eu-west-1-0"
     ]
+
           ],
   "clients": [
 	  "client-1-0"
@@ -234,63 +233,35 @@
         "region2": 90,
         "region3": 90,
 	"region4": 90,
-	"region5": 0,
-	"region6": 0,
-	"region7": 0
+	"region5": 0
       },
       "region2": {
         "region1": 90,
         "region2": 0,
         "region3": 90,
         "region4": 90,
-	"region5": 0,
-	        "region6": 0,
-		        "region7": 0
+	"region5": 5
       },
       "region3": {
         "region1": 90,
         "region2": 90,
         "region3": 0,
         "region4": 90,
-	"region5": 0,
-	        "region6": 0,
-		        "region7": 0
+	"region5": 0
       },
       "region4": {
         "region1": 90,
         "region2": 90,
         "region3": 90,
         "region4": 0,
-	"region5": 0,
-	        "region6": 0,
-		        "region7": 0
+	"region5": 0
       },
       "region5": {
         "region1": 90,
         "region2": 90,
         "region3": 90,
         "region4": 0,
-	"region5": 0,
-	        "region6": 0,
-		        "region7": 0
-      },
-      "region6": {
-        "region1": 90,
-        "region2": 90,
-        "region3": 90,
-        "region4": 0,
-	"region5": 0,
-	        "region6": 0,
-		        "region7": 0
-      },
-      "region7": {
-        "region1": 90,
-        "region2": 90,
-        "region3": 90,
-        "region4": 0,
-	"region5": 0,
-	        "region6": 0,
-		        "region7": 0
+	"region5": 0
       }
  },
   "client_total": [

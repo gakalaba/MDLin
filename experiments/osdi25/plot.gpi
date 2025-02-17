@@ -1,0 +1,18 @@
+set datafile separator ','
+set title "Monitoring Application\n"
+set key bottom right
+# set ytics (0,0.9,0.99,0.999,0.9999,1.0)
+set xlabel 'Latency Between Requests (ns)'
+set xrange [1200000:1]
+#set logscale x 2
+set ylabel 'Throughput'
+set terminal pngcairo size 800,600 enhanced dashed font 'DejaVu Sans,12'
+set output '/users/akalaba/MDLin/experiments/osdi25/plot.png'
+set style line 1 linetype 1 linewidth 2
+set style line 2 linetype 1 linecolor "green" linewidth 2
+set style line 3 linetype 1 linecolor "blue" linewidth 2
+set style line 4 linetype 4 linewidth 2
+set style line 5 linetype 5 linewidth 2
+set style line 6 linetype 8 linewidth 2
+plot '/users/akalaba/MDLin/experiments/osdi25/iocldata.csv' title "IOCL" ls 1 with lines, \
+'/users/akalaba/MDLin/experiments/osdi25/mpdata.csv' title "multi-paxos" ls 2 with lines

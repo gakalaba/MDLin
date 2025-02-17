@@ -1,7 +1,13 @@
 package state
 
 import (
+	"crypto/md5"
+	"encoding/binary"
+	"fmt"
 	"log"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -15,11 +21,68 @@ const (
 	RLOCK
 	WLOCK
 	CAS
+	SET
+	INCR
+	SADD
+	SCARD
+	HMSET
+	HMGET
+	SUBSCRIBE
+	LISTEN
+	PUBLISH
+	EXISTS
+	ZADD
+	SREM
+	SISMEMBER
+	ZREVRANGE
 )
 
-type Value int64
+type ValueType int
 
-const NIL Value = 0
+const (
+	StringType ValueType = iota
+	ListType
+	SetType
+	HashType
+)
+
+type Value struct {
+	Type   ValueType
+	String string
+	List   []string
+	Set    map[string]bool
+	Hash   map[string]string
+}
+
+func NewString(s string) Value {
+	return Value{
+		Type:   StringType,
+		String: s,
+	}
+}
+
+func NewList(l []string) Value {
+	return Value{
+		Type: ListType,
+		List: l,
+	}
+}
+
+func NewSet(s map[string]bool) Value {
+	return Value{
+		Type: SetType,
+		Set:  s,
+	}
+}
+
+func NewHash(h map[string]string) Value {
+	return Value{
+		Type: HashType,
+		Hash: h,
+	}
+}
+
+var NIL = Value{Type: StringType, String: ""}
 
 type Key int64
 
@@ -73,7 +136,7 @@ func NewState() *State {
 				 log.Printf("Leveldb open failed: %v\n", err)
 		 }
 
-		 return &State{d}
+		 return &State{d} 
 	*/
 
 	versions = make(map[Key]Version)
@@ -82,7 +145,7 @@ func NewState() *State {
 }
 
 func AllOpTypes() []Operation {
-	return []Operation{PUT, GET, CAS}
+	return []Operation{PUT, GET, EXISTS, CAS}
 }
 
 func GetConflictingOpTypes(op Operation) []Operation {
@@ -131,38 +194,258 @@ func IsRead(command *Command) bool {
 	return command.Op == GET
 }
 
+
 func (c *Command) Execute(st *State) Value {
-	//log.Printf("Executing (%d, %d)\n", c.K, c.V)
-
-	//var key, value [8]byte
-
-	//    st.mutex.Lock()
-	//    defer st.mutex.Unlock()
-
 	switch c.Op {
-	case PUT:
-		/*
-		 binary.LittleEndian.PutUint64(key[:], uint64(c.K))
-		 binary.LittleEndian.PutUint64(value[:], uint64(c.V))
-		 st.DB.Set(key[:], value[:], nil)
-		*/
 
+	//Type: string, Return: string
+	case PUT:
 		st.Store[c.K] = c.V
 		return c.V
 
+	//Type: string, Return: string
+	case SET:
+		st.Store[c.K] = c.V
+		return NewString("OK")
+
+	//Type: string, Return: List
 	case GET:
 		if val, present := st.Store[c.K]; present {
 			return val
 		}
+
+	// Type: string, Return: string
 	case CAS:
 		if val, present := st.Store[c.K]; present {
-			if val == c.OldValue {
+			if val.String == c.OldValue.String {
 				st.Store[c.K] = c.V
 				return val
 			}
 		}
-	}
 
+	// Type: string, Return: string
+	// Increment the value stored at key by 1
+	case INCR:
+		if val, present := st.Store[c.K]; present {
+			if val.String != "" {
+				// Convert string to integer, increment, then back to string
+				num, err := strconv.Atoi(val.String)
+				if err != nil {
+					return NewString("0") // Return 0 if not a valid number
+				}
+				newVal := NewString(strconv.Itoa(num + 1))
+				st.Store[c.K] = newVal
+				return newVal
+			}
+		}
+		st.Store[c.K] = NewString("1")
+		return NewString("1")
+	
+	// Type: string, Return: string
+	// Add specified member(s)? to the set stored at key
+	case SADD:
+		if st.Store[c.K].Type != SetType {
+			st.Store[c.K] = NewSet(make(map[string]bool))
+		}
+		st.Store[c.K].Set[c.V.String] = true
+		return NewString(strconv.Itoa(len(st.Store[c.K].Set)))
+	
+	// Type: string, Return: string
+	// Return number of elements of the set stored at key 
+	case SCARD:
+		if st.Store[c.K].Type == SetType {
+			return NewString(strconv.Itoa(len(st.Store[c.K].Set)))
+		}
+		return NewString("0")
+	
+	// Type: list, Return: string
+	// Set specified field to their respective value
+	case HMSET:
+		
+		// Initialize hash if it doesn't exist or isn't a hash
+		if st.Store[c.K].Type != HashType {
+			st.Store[c.K] = NewHash(make(map[string]string))
+		}
+		
+		// Set field-value pairs
+		st.Store[c.K].Hash[c.V.String] = c.OldValue.String
+		return NewString("OK")
+
+	// Type: list, Return: list
+	case HMGET:
+		if st.Store[c.K].Type != HashType {
+			st.Store[c.K] = NewHash(make(map[string]string))
+		}
+		return NewList([]string{st.Store[c.K].Hash[c.V.String]})
+
+	// Type: string, Return: string
+	// Initialize client's index for a queue
+	case SUBSCRIBE:
+		indexKey := Key(stringToInt64Hash(fmt.Sprintf("client_%v_index", c.K)))
+		// Initialize index to 0 if it doesn't exist
+		if _, exists := st.Store[indexKey]; !exists {
+			st.Store[indexKey] = NewString("0")
+		}
+		// Initialize queue if it doesn't exist
+		if _, exists := st.Store[c.K]; !exists {
+			st.Store[c.K] = NewList([]string{})
+		}
+		return NewString("OK")
+
+	// Type: string, Return: list
+	// Get messages from index to current position
+	case LISTEN:
+		// Debug log
+		
+		// Get index key
+		indexKey := Key(stringToInt64Hash(fmt.Sprintf("client_%v_index", c.K)))
+		if _, exists := st.Store[indexKey]; !exists {
+			// if key doesn't exist, return empty list
+			return NewList([]string{}) 
+		}
+
+		// Get current index
+		currentIndex, _ := strconv.Atoi(st.Store[indexKey].String)
+		
+		// Get queue
+		if queue, exists := st.Store[c.K]; exists && queue.Type == ListType {
+			// get all messages from index to end
+			messages := queue.List[currentIndex:]
+			// Update index to be current index plus number of messages we just read
+			result := NewList(messages)
+			// Update index to be current index plus number of messages we just read
+			st.Store[indexKey] = NewString(strconv.Itoa(currentIndex + len(messages)))
+			return result
+		}
+		return NewList([]string{})	
+
+	// Type: string, Return: string
+	// Append message to queue
+	case PUBLISH:
+		// Debug logging
+
+		// Determine the value to publish
+		publishValue := c.V.String
+		if publishValue == "" && c.V.Type == ListType && len(c.V.List) > 0 {
+			publishValue = c.V.List[0]
+		}
+		
+		// Initialize queue if it doesn't exist
+		if _, exists := st.Store[c.K]; !exists {
+			st.Store[c.K] = NewList([]string{})
+		} 
+		
+		// grab list and append new element	
+		currentList := st.Store[c.K].List
+		newList := append(currentList, publishValue)
+		// store as new struct
+		st.Store[c.K] = NewList(newList)
+		return NewString("OK")
+	
+	case EXISTS:
+		// Check existence of one or more keys
+		if _, exists := st.Store[c.K]; exists {
+			return NewString("1")
+		}
+		// Return the number of keys that exist
+		return NewString("0")
+	
+	case SREM:
+		val, exists := st.Store[c.K]
+		if !exists || val.Type != SetType {
+			return NewString("0")
+		}
+
+		if _, ok := val.Set[c.V.String]; ok {
+			delete(val.Set, c.V.String)
+			st.Store[c.K] = NewSet(val.Set)
+			return NewString("1")
+		}
+
+		return NewString("0")
+	
+	case SISMEMBER:
+		val, exists := st.Store[c.K]
+		if !exists {
+			return NewString("0")
+		}
+		if val.Type != SetType {
+			return NewString("0")
+		}
+		if _, ok := val.Set[c.V.String]; ok {
+			return NewString("1")
+		}
+		return NewString("0")
+	
+	case ZADD:
+		// Initialize dictionary if it doesn't exist
+		if _, exists := st.Store[c.K]; !exists {
+			st.Store[c.K] = NewHash(make(map[string]string))
+		}
+		// Add element to hash
+		st.Store[c.K].Hash[c.V.String] = c.OldValue.String
+		// Return number of elements in hash
+		return NewString(strconv.Itoa(len(st.Store[c.K].Hash)))
+	
+	case ZREVRANGE:
+		// Check if the key exists and is a hash
+		val, exists := st.Store[c.K]
+		if !exists || val.Type != HashType {
+			return NIL
+		}
+
+		// Extract keys from the hash
+		keys := make([]string, 0, len(val.Hash))
+		for k := range val.Hash {
+			keys = append(keys, k)
+		}
+
+		// Sort keys in reverse order
+		sort.Sort(sort.Reverse(sort.StringSlice(keys)))
+
+		// Convert start and stop to integers
+		start, err1 := strconv.Atoi(c.V.String)
+		stop, err2 := strconv.Atoi(c.OldValue.String)
+
+		if err1 != nil || err2 != nil {
+			return NIL
+		}
+
+		// Adjust indices to handle negative indexing
+		if start < 0 {
+			start = len(keys) + start
+		}
+		if stop < 0 {
+			stop = len(keys) + stop
+		}
+
+		// Ensure indices are within bounds
+		if start < 0 {
+			start = 0
+		}
+		if stop >= len(keys) {
+			stop = len(keys) - 1
+		}
+
+		// If start is beyond stop, return empty list
+		if start > stop {
+			return NewList([]string{})
+		}
+
+		// Extract the range of keys
+		rangeKeys := keys[start : stop+1]
+
+		// Create result list with values from the hash
+		result := make([]string, len(rangeKeys))
+		for i, k := range rangeKeys {
+			result[i] = val.Hash[k]
+		}
+
+		return NewList(result)
+
+	default:
+		return NIL
+	}
 	return NIL
 }
 
@@ -182,4 +465,15 @@ func AllWrites(cmds []Command) bool {
 		}
 	}
 	return true
+}
+
+func stringToInt64Hash(input string) int64 {
+	// Normalize the input string
+	normalized := strings.ToLower(strings.TrimSpace(input))
+
+	// Generate MD5 hash
+	hash := md5.Sum([]byte(normalized))
+
+	// Convert first 8 bytes of MD5 hash to int64
+	return int64(binary.BigEndian.Uint64(hash[:8]))
 }

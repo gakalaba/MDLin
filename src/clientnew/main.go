@@ -14,6 +14,7 @@ import (
 	"runtime/pprof"
 	"state"
 	"time"
+	"strconv"
   "zipfgenerator"
 )
 
@@ -179,7 +180,7 @@ var zipfV = flag.Float64(
 
 func createClient() clients.Client {
 	switch *replProtocol {
-	case "abd":
+	/*case "abd":
 		return clients.NewAbdClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, *regular)
 	case "gryff":
@@ -188,13 +189,13 @@ func createClient() clients.Client {
 			*epaxosMode)
 	case "epaxos":
 		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, true)
+			*statsFile, false, true)*/
 	case "mdl":
-		return clients.NewMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewAsynchClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true, *singleShardAware)
-	case "ss-mdl":
+	/*case "ss-mdl":
 		return clients.NewSSMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
-			*statsFile, false, false)
+			*statsFile, false, false)*/
 	default:
 		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, false)
@@ -260,17 +261,19 @@ func main() {
 	start := time.Now()
 	now := start
 	currRuntime := now.Sub(start)
+
+	pending_awaits := make([]state.Value, *fanout)
+	pending_success := make([]bool, *fanout)
 	for int(currRuntime.Seconds()) < *expLength {
 		//if *randSleep > 0 {
 		time.Sleep(time.Duration(r.Intn(1e6))) // randSleep ms
 		//}
 
-		var opTypes []state.Operation
-		var k int64
-		var keys []int64
+		before := time.Now()
 		for i := 0; i < *fanout; i++ {
 			opTypeRoll := r.Intn(1000)
 			var opType state.Operation
+			var k int64
 			if opTypeRoll < *reads {
 				opType = state.GET
 			} else if opTypeRoll < *reads+*writes {
@@ -278,7 +281,6 @@ func main() {
 			} else {
 				opType = state.CAS
 			}
-			opTypes = append(opTypes, opType)
 
 			if *conflicts >= 0 {
 				if r.Intn(*conflictsDenom) < *conflicts {
@@ -290,20 +292,43 @@ func main() {
 				k = int64(zipf.Uint64())
 				//k = int64(r.Intn(int(*numKeys)))
 			}
-			keys = append(keys, k)
+			if *replProtocol == "mdl" {
+				_, future := client.AppRequest([]state.Operation{opType}, []int64{k},  nil, nil)
+				pending_awaits[i] = future
+			} else {
+				var valueObj, oldValueObj state.Value
+				MPsuccess, _ := client.AppRequest([]state.Operation{opType}, []int64{k}, []state.Value{valueObj}, []state.Value{oldValueObj})
+				pending_success[i] = MPsuccess
+			}
 		}
 
-		var success bool
+		success := true
 
-		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
-		before := time.Now()
-		success, _ = client.AppRequest(opTypes, keys)
+		if *replProtocol == "mdl" {
+			for _, future := range pending_awaits {
+				fut, _ := strconv.Atoi(future.String)
+				_, val := client.AppResponse(int32(fut))
+				if val != 1 {
+					success = false
+					break
+				}
+			}
+		} else {
+			for _, MPsucc := range pending_success {
+				if MPsucc != true {
+					success = false
+					break
+				}
+			}
+		}
+
 		after := time.Now()
                 //dlog.Printf("!!!!Paxos APP level write took %d microseconds\n", int64(after.Sub(before).Microseconds()))
 
 		opString := "app"
 		if !success {
 			log.Printf("Failed %s(%d).\n", opString, count)
+			panic("why is an AppRequest getting failed response")
 		}
 		count++
 		dlog.Printf("AppRequests attempted: %d\n", count)
@@ -312,7 +337,7 @@ func main() {
 		currInt := int(currRuntime.Seconds())
 		if *rampUp <= currInt && currInt < *expLength-*rampDown {
 			lat := int64(after.Sub(before).Nanoseconds())
-			fmt.Printf("%s,%d,%d,%d\n", opString, lat, k, count)
+			fmt.Printf("%s,%d,%d,%d\n", opString, lat, 420, count)
 
 		}
 		now = time.Now()

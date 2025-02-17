@@ -103,7 +103,7 @@ def calculate_statistics_for_run(config, local_out_directory, run):
                 client_out_file = os.path.join(local_out_directory,
                                                client_dir,
                                                '%s-%d-stdout-%d.log' % (client, k, run))
-
+                                               
                 with open(client_out_file) as f:
                     ops = f.readlines()
                     for op in ops:
