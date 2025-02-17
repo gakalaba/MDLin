@@ -108,7 +108,6 @@ func NewAbstractClient(id int32, coordinatorAddr string, coordinatorPort int, fo
 		make([]map[uint8]bool, 0), // delayRPC
 		make([]map[uint8]chan fastrpc.Serializable, 0), // delayedRPC
 	}
-	log.Printf("Num leaders = %v", c.numLeaders)
 	c.RegisterRPC(new(clientproto.PingReply), clientproto.GEN_PING_REPLY, c.pingReplyChan)
 
 	c.ConnectToCoordinator()
