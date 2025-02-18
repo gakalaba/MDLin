@@ -229,7 +229,7 @@ func InitCustom(clientId *C.char, clientType *C.char) {
 
 	*replProtocol = C.GoString(clientType)
 
-    *coordinatorAddr = "us-east-1-0.iocl.praxis-PG0.utah.cloudlab.us"
+    *coordinatorAddr = "us-east-1-0.mdl.praxis-PG0.utah.cloudlab.us"
 
     *coordinatorPort = 7067
 

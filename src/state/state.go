@@ -378,6 +378,9 @@ func (c *Command) Execute(st *State) Value {
 		return NewString("0")
 	
 	case ZADD:
+		// replace this with same operation as put and see 
+		// if you get expected results
+
 		// Initialize dictionary if it doesn't exist
 		if _, exists := st.Store[c.K]; !exists {
 			st.Store[c.K] = NewHash(make(map[string]string))

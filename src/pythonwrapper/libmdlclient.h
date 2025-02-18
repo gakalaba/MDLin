@@ -78,6 +78,7 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
+extern void InitCustom(char* clientId, char* clientType);
 extern char* AsyncAppRequest(char* opTypesJSON, char* keysJSON, char* value, char* oldValue);
 extern char* AsyncAppResponse(char* keysJSON);
 extern char* SyncAppRequest(char* opTypesJSON, char* keysJSON, char* value, char* oldValue);

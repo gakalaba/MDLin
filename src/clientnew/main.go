@@ -356,3 +356,35 @@ func catchKill(interrupt chan os.Signal) {
 	log.Printf("Caught signal and stopped CPU profile before exit.\n")
 	os.Exit(0)
 }
+
+
+// func addMessageMDL(client clients.Client, roomID int64, fromID string, content string, timestamp int64) {
+//     // Define the message structure
+//     message := struct {
+//         From    string `json:"from"`
+//         Date    int64  `json:"date"`
+//         Message string `json:"message"`
+//         RoomID  int64  `json:"roomId"`
+//     }{
+//         From:    fromID,
+//         Date:    timestamp,
+//         Message: content,
+//         RoomID:  roomID,
+//     }
+
+//     // Marshal the message to JSON
+//     jsonMessage, err := json.Marshal(message)
+//     if err != nil {
+//         log.Printf("Error marshaling message: %v", err)
+//         return
+//     }
+
+//     // Create a state.Value containing the JSON string
+//     value := state.Value{String: string(jsonMessage)}
+
+//     // Send ZADD request for the room's message list
+//     _, future := client.AppRequest([]state.Operation{state.ZADD}, []int64{roomID}, []state.Value{value}, nil)
+
+//     // Wait for the operation to complete
+//     client.AppResponse(future)
+// }

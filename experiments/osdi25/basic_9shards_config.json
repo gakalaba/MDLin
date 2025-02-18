@@ -261,7 +261,7 @@
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "iocl",
+  "experiment_name": "mdl",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,

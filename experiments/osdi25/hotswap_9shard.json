@@ -121,12 +121,12 @@
       }
  },
   "client_total": [
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+	  [1, 2, 4, 8],
+	  [1, 2, 4, 8]
   ],
   "client_processes_per_client_node": [
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+	  [1, 2, 4, 8],
+	  [1, 2, 4, 8]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
@@ -203,7 +203,7 @@
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "iocl",
+  "experiment_name": "mdl",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,
