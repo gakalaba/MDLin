@@ -154,7 +154,7 @@ func (c *AsynchClient) AppResponse(commandId int32) (state.Value, uint8) {
 		  return reply.Value, reply.OK
 	  }
 	  c.mapMu.Unlock()
-	  time.Sleep(10000)
+	  //time.Sleep(10000)
   }
   //go cleanMap(request.CommandId)
   return state.NewString("0"), 0
