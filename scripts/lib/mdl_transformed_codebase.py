@@ -152,10 +152,10 @@ class MDLTransformedCodebase(ExperimentCodebase):
         if config['replication_protocol'] == 'mdl':
             print("RUNNING MDL APP")
             # client_command = '(cd /users/akalaba/basic-redis-leaderboard-demo-python-transformed; source redis-leaderboard-venv/bin/activate; python server/manage_mdl.py --clientid=%s 1> %s 2> %s) & ' % (client_id, stdout_file, stderr_file)
-            client_command = '(cd /users/akalaba/redis-chat-transformed; source redis-chat-venv/bin/activate; python app.py --clientid=%s 1> %s 2> %s) & ' % (client_id, stdout_file, stderr_file)
+            client_command = '(cd /users/akalaba/redis-chat-transformed; source redis-chat-venv/bin/activate; python app.py --clientid=%s --explen=%s 1> %s 2> %s) & ' % (client_id, config['client_experiment_length'], stdout_file, stderr_file)
         elif config['replication_protocol'] == 'multi_paxos':
             print("RUNNING MULTIPAXOS APP")
-            client_command = '(cd /users/akalaba/redis-chat-transformed; source redis-chat-venv/bin/activate; python app_app_sync.py --clientid=%s 1> %s 2> %s) & ' % (client_id, stdout_file, stderr_file)
+            client_command = '(cd /users/akalaba/redis-chat-transformed; source redis-chat-venv/bin/activate; python app_app_sync.py --clientid=%s --explen=%s 1> %s 2> %s) & ' % (client_id, config['client_experiment_length'], stdout_file, stderr_file)
         return client_command
 
 

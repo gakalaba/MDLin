@@ -70,6 +70,7 @@ def kill_clients_no_config(config, executor):
     futures = []
     for client in config["clients"]:
         client_host = get_client_host(config, client)
+        print("AYOAYOAYOAYOAYAOYAOYAOYAOYAOYAOYAOYAOYAOYAOYAOAYOAYOAYAOYAOYAYOA")
         if is_exp_remote(config):
             futures.append(executor.submit(kill_remote_process_by_name,
                                            config['client_bin_name'], config['emulab_user'],
