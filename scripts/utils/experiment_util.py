@@ -71,7 +71,16 @@ def kill_clients_no_config(config, executor):
     for client in config["clients"]:
         client_host = get_client_host(config, client)
         if is_exp_remote(config):
-            futures.append(executor.submit(kill_remote_process_by_name,
+            if config['codebase_name'] == 'mdl_transformed':
+                futures.append(executor.submit(kill_remote_process_by_name,
+                                           'python app.py', config['emulab_user'],
+                                           client_host, '-9'))
+
+                futures.append(executor.submit(kill_remote_process_by_name,
+                                           'python app_app_sync.py', config['emulab_user'],
+                                           client_host, '-9'))
+            else:
+                futures.append(executor.submit(kill_remote_process_by_name,
                                            config['client_bin_name'], config['emulab_user'],
                                            client_host, '-9'))
         else:
