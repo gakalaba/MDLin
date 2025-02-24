@@ -15,7 +15,6 @@ import (
 	"state"
 	"time"
 	"strconv"
-  "zipfgenerator"
 )
 
 var clientId *int = flag.Int(
@@ -246,10 +245,10 @@ func main() {
 	client := createClient()
 
 	r := rand.New(rand.NewSource(int64(*clientId)))
-  zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
-  if err != nil {
-    panic("problem making the zipfian generator :0")
-  }
+//   zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
+//   if err != nil {
+//     panic("problem making the zipfian generator :0")
+//   }
 	var count int32
 	count = 0
 
@@ -262,8 +261,8 @@ func main() {
 	now := start
 	currRuntime := now.Sub(start)
 
-	pending_awaits := make([]state.Value, *fanout)
-	pending_success := make([]bool, *fanout)
+	// pending_awaits := make([]state.Value, *fanout)
+	// pending_success := make([]bool, *fanout)
 	for int(currRuntime.Seconds()) < *expLength {
 		//if *randSleep > 0 {
 		time.Sleep(time.Duration(r.Intn(1e6))) // randSleep ms
@@ -271,65 +270,69 @@ func main() {
 
 		before := time.Now()
 		for i := 0; i < *fanout; i++ {
-			opTypeRoll := r.Intn(1000)
-			var opType state.Operation
-			var k int64
-			if opTypeRoll < *reads {
-				opType = state.GET
-			} else if opTypeRoll < *reads+*writes {
-				opType = state.PUT
-			} else {
-				opType = state.CAS
-			}
+			// opTypeRoll := r.Intn(1000)
+			// var opType state.Operation
+			// var k int64
+			// if opTypeRoll < *reads {
+			// 	opType = state.GET
+			// } else if opTypeRoll < *reads+*writes {
+			// 	opType = state.PUT
+			// } else {
+			// 	opType = state.CAS
+			// }
 
-			if *conflicts >= 0 {
-				if r.Intn(*conflictsDenom) < *conflicts {
-					k = 0
-				} else {
-					k = (int64(count) << 32) | int64(*clientId)
-				}
-			} else {
-				k = int64(zipf.Uint64())
-				//k = int64(r.Intn(int(*numKeys)))
-			}
+			// if *conflicts >= 0 {
+			// 	if r.Intn(*conflictsDenom) < *conflicts {
+			// 		k = 0
+			// 	} else {
+			// 		k = (int64(count) << 32) | int64(*clientId)
+			// 	}
+			// } else {
+			// 	k = int64(zipf.Uint64())
+			// 	//k = int64(r.Intn(int(*numKeys)))
+			// }
 			if *replProtocol == "mdl" {
-				_, future := client.AppRequest([]state.Operation{opType}, []int64{k},  nil, nil)
-				pending_awaits[i] = future
+				createPrivateRoomMdl(client, 12345, 1234)
+				// addMessageMDL(client, int64(1), string("1"), "Hello", int64(0))
+				// _, future := client.AppRequest([]state.Operation{opType}, []int64{k},  nil, nil)
+				// pending_awaits[i] = future
 			} else {
-				var valueObj, oldValueObj state.Value
-				MPsuccess, _ := client.AppRequest([]state.Operation{opType}, []int64{k}, []state.Value{valueObj}, []state.Value{oldValueObj})
-				pending_success[i] = MPsuccess
+				// var valueObj, oldValueObj state.Value
+				// MPsuccess, _ := client.AppRequest([]state.Operation{opType}, []int64{k}, []state.Value{valueObj}, []state.Value{oldValueObj})
+				// pending_success[i] = MPsuccess
+				createPrivateRoomSync(client, 12345, 1234)
+				//addMessageSync(client, int64(1), string("1"), "Hello", int64(0))
 			}
 		}
 
-		success := true
+		// success := true
 
-		if *replProtocol == "mdl" {
-			for _, future := range pending_awaits {
-				fut, _ := strconv.Atoi(future.String)
-				_, val := client.AppResponse(int32(fut))
-				if val != 1 {
-					success = false
-					break
-				}
-			}
-		} else {
-			for _, MPsucc := range pending_success {
-				if MPsucc != true {
-					success = false
-					break
-				}
-			}
-		}
+		// if *replProtocol == "mdl" {
+		// 	for _, future := range pending_awaits {
+		// 		fut, _ := strconv.Atoi(future.String)
+		// 		_, val := client.AppResponse(int32(fut))
+		// 		if val != 1 {
+		// 			success = false
+		// 			break
+		// 		}
+		// 	}
+		// } else {
+		// 	for _, MPsucc := range pending_success {
+		// 		if MPsucc != true {
+		// 			success = false
+		// 			break
+		// 		}
+		// 	}
+		// }
 
 		after := time.Now()
                 //dlog.Printf("!!!!Paxos APP level write took %d microseconds\n", int64(after.Sub(before).Microseconds()))
 
 		opString := "app"
-		if !success {
-			log.Printf("Failed %s(%d).\n", opString, count)
-			panic("why is an AppRequest getting failed response")
-		}
+		// if !success {
+		// 	log.Printf("Failed %s(%d).\n", opString, count)
+		// 	panic("why is an AppRequest getting failed response")
+		// }
 		count++
 		dlog.Printf("AppRequests attempted: %d\n", count)
 		//dlog.Printf("AppRequests attempted: %d at time %d\n", count, time.Now().UnixMilli())
@@ -357,34 +360,138 @@ func catchKill(interrupt chan os.Signal) {
 	os.Exit(0)
 }
 
+func getPrivateRoomID(user1 int64, user2 int64) (string, error) {
+	minUserID, maxUserID := user1, user2
+	if user1 > user2 {
+		minUserID, maxUserID = user2, user1
+	}
+	return fmt.Sprintf("%s:%s", minUserID, maxUserID), nil
+}
 
-// func addMessageMDL(client clients.Client, roomID int64, fromID string, content string, timestamp int64) {
-//     // Define the message structure
-//     message := struct {
-//         From    string `json:"from"`
-//         Date    int64  `json:"date"`
-//         Message string `json:"message"`
-//         RoomID  int64  `json:"roomId"`
-//     }{
-//         From:    fromID,
-//         Date:    timestamp,
-//         Message: content,
-//         RoomID:  roomID,
-//     }
+func createPrivateRoomMdl(client clients.Client, user1 int64, user2 int64) (map[string]interface{}, bool) {
+	pending_awaits := make([]int32, 2)
+	var oldValue state.Value
+	roomID, _ := getPrivateRoomID(user1, user2)
+	newValue := state.Value{String: roomID}
+	
+	_ , future := client.AppRequest([]state.Operation{state.SADD}, []int64{user1}, []state.Value{newValue}, []state.Value{oldValue})
+	futureValue := future.String
+	futureInt, _ := strconv.Atoi(futureValue)
+	pending_awaits[0] = int32(futureInt)
 
-//     // Marshal the message to JSON
-//     jsonMessage, err := json.Marshal(message)
-//     if err != nil {
-//         log.Printf("Error marshaling message: %v", err)
-//         return
-//     }
+	_ , future = client.AppRequest([]state.Operation{state.SADD}, []int64{user2}, []state.Value{newValue}, []state.Value{oldValue})
+	futureValue = future.String
+	futureInt, _ = strconv.Atoi(futureValue)
+	pending_awaits[1] = int32(futureInt)
 
-//     // Create a state.Value containing the JSON string
-//     value := state.Value{String: string(jsonMessage)}
+	user2String := strconv.FormatInt(user1, 10)
 
-//     // Send ZADD request for the room's message list
-//     _, future := client.AppRequest([]state.Operation{state.ZADD}, []int64{roomID}, []state.Value{value}, nil)
+	pending_awaits_hmget1, user1Data := hmget(client, user1, user2String)
 
-//     // Wait for the operation to complete
-//     client.AppResponse(future)
-// }
+	pending_awaits = append(pending_awaits_hmget1, pending_awaits...)
+	
+	pending_awaits_hmget2, user2Data := hmget(client, user1, user2String)
+	
+	pending_awaits = append(pending_awaits_hmget2, pending_awaits...)
+
+	for _, future := range pending_awaits {
+		client.AppResponse(future)
+	}	
+
+	return map[string]interface{}{
+		"id":    roomID,
+		"names": []string{user1Data, user2Data},
+	}, false
+}
+
+func createPrivateRoomSync(client clients.Client, user1, user2 int64) (map[string]interface{}, bool) {
+	roomID, _ := getPrivateRoomID(user1, user2)
+
+	newValue := state.Value{String: roomID}
+	var oldValue state.Value
+
+	client.AppRequest([]state.Operation{state.SADD}, []int64{user1}, []state.Value{newValue}, []state.Value{oldValue})
+	client.AppRequest([]state.Operation{state.SADD}, []int64{user2}, []state.Value{newValue}, []state.Value{oldValue})
+
+	user2Str := strconv.FormatInt(user2, 10)
+
+	user1Data := hmgetSync(client, user1, user2Str)
+	user2Data := hmgetSync(client, user1, user2Str)
+
+	return map[string]interface{}{
+		"id":    roomID,
+		"names": []string{user1Data, user2Data},
+	}, false
+}
+
+func hmget(client clients.Client, key int64, key2 string) ([]int32, string) {
+	value2 := []state.Value{
+		{String: key2},
+	}
+
+	var oldValue state.Value
+	pending_awaits := []int32{}
+
+	// Send request
+	_, future := client.AppRequest([]state.Operation{state.HMGET}, []int64{key}, value2, []state.Value{oldValue})
+	futureValue := future.String
+	// Convert string to integer
+	futureInt, err := strconv.Atoi(futureValue)
+	if err != nil {
+		// Handle the error (return empty slice and error message)
+		return nil, "Error converting value"
+	}
+
+	// Process response
+	result, _ := client.AppResponse(int32(futureInt))
+	resultStr := result.String
+	return pending_awaits, resultStr
+}
+
+func hmgetSync(client clients.Client, key int64, key2 string) string {
+	value2 := []state.Value{
+		{String: key2},
+	}
+	var oldValue state.Value
+
+	_, res := client.AppRequest([]state.Operation{state.HMGET}, []int64{key}, value2, []state.Value{oldValue})
+	resStr := res.String
+	return resStr
+}
+
+
+func addMessageMDL(client clients.Client, roomID int64, fromID string, content string, timestamp int64) {
+    value := state.Value{String: string("hello")}
+	pending_awaits := make([]int32, 4)
+	// Perform 4 AppRequests
+	for i := 0; i < 4; i++ {
+		_, future := client.AppRequest([]state.Operation{state.ZADD}, []int64{roomID}, []state.Value{value}, nil)
+		futureValue := future.String
+		futureInt, err := strconv.Atoi(futureValue)
+		if err != nil {
+			log.Fatalf("Failed to convert future to int: %v", err)
+		}
+		pending_awaits = append(pending_awaits, int32(futureInt))
+	}
+	// Wait for all operations to complete
+	for _, futureAwait := range pending_awaits {
+		_, val := client.AppResponse(futureAwait)
+		if val != 1 {
+			log.Fatalf("App Response failed")
+		}
+	}
+}
+
+
+func addMessageSync(client clients.Client, roomID int64, fromID string, content string, timestamp int64) {
+    // Create a state.Value containing the JSON string
+    value := state.Value{String: string("Hello")}
+	var oldValueObj state.Value
+	for i := 0; i < 4; i++ {
+		MPsuccess, _ := client.AppRequest([]state.Operation{state.ZADD}, []int64{roomID}, []state.Value{value}, []state.Value{oldValueObj})
+		if MPsuccess != true {
+			log.Fatal("MPsucc is false, terminating the program")
+		}
+	}
+}
+

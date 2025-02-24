@@ -86,13 +86,13 @@
 
 ],
   "clients": [
-	  "client-0-0"
+	  "client-1-0"
   ],
   "server_regions": {
     "region1": ["us-east-1-0", "us-east-1-1", "us-east-1-2"],
     "region2": ["us-west-1-0", "us-west-1-1", "us-west-1-2"],
     "region3": ["eu-west-1-0", "eu-west-1-1", "eu-west-1-2"],
-    "region4": ["client-0-0"]
+    "region4": ["client-1-0"]
   },
   "region_rtt_latencies": {
       "region1": {
@@ -121,19 +121,19 @@
       }
  },
   "client_total": [
-	  [1, 2, 4, 8],
-	  [1, 2, 4, 8]
+	  [1, 2, 4, 8, 16, 32, 64, 128],
+	  [1, 2, 4, 8, 16, 32, 64, 128]
   ],
   "client_processes_per_client_node": [
-	  [1, 2, 4, 8],
-	  [1, 2, 4, 8]
+	  [1, 2, 4, 8, 16, 32, 64, 128],
+	  [1, 2, 4, 8, 16, 32, 64, 128]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
   "client_write_percentage": 1000,
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
-  "client_fanout": 4,
+  "client_fanout": 1,
   "batchsize": 500,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
@@ -185,7 +185,7 @@
   "plot_tput_lat_series_title": ["MDL", "Multi_Paxos"],
   "plot_tput_lat_x_label": "Throughput (ops/sec)",
   "plot_tput_lat_y_label": "Latency (ms)",
-  "base_local_exp_directory": "/users/akalaba/MDLin/experiments/osdi25/results/monitoring_app",
+  "base_local_exp_directory": "/users/akalaba/MDLin/experiments/osdi25/hotswap/monitoring_app",
   "base_mounted_fs_path": "/mnt/extra",
   "base_remote_bin_directory_nfs": "/users/akalaba/MDLin",
   "base_remote_exp_directory": "/mnt/extra/experiments",
