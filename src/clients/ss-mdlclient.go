@@ -38,7 +38,7 @@ func NewSSMDLClient(id int32, masterAddr string, masterPort int, forceLeader int
 	return pc
 }
 
-func (c *SSMDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
+func (c *SSMDLClient) AppRequest(opTypes []state.Operation, keys []int64, oldValue []int64, newValue []int64) (bool, int64) {
 	fanout := len(keys)
 	startTimes := make([]time.Time, fanout)
 	startIdx := c.opCount
@@ -78,6 +78,14 @@ func (c *SSMDLClient) AppRequest(opTypes []state.Operation, keys []int64) (bool,
 	}
 
 	return true, 0
+}
+
+func (c *SSMDLClient) AppResponse(commandId int32) (state.Value, uint8) {
+  return 0,0
+}
+
+func (c *SSMDLClient) GrabHighestResponse() int32 {
+	return 0
 }
 
 func (c *SSMDLClient) Read(key int64) (bool, int64) {

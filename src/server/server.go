@@ -3,6 +3,7 @@ package main
 import (
 	"abd"
 	"dlog"
+	"syscall"
 	"epaxos"
 	"flag"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
+	"runtime"
 	"serverlib"
 )
 
@@ -69,16 +71,21 @@ func main() {
 
 	runtime.GOMAXPROCS(2)
 
-	if *cpuprofile != "" {
-		f, err := os.Create(*cpuprofile)
+	if true {
+	//if *cpuprofile != "" {
+		f, err := os.Create(fmt.Sprintf("/users/akalaba/myprogram-server-%vshards.prof", *numShards))
 		if err != nil {
 			log.Fatal(err)
 		}
 		pprof.StartCPUProfile(f)
+		interruptss := make(chan os.Signal, 1)
+		signal.Notify(interruptss)
+		go catchKillss(interruptss)
 	}
 	if *blockprofile != "" {
 		runtime.SetBlockProfileRate(1)
 	}
+	debug.SetGCPercent(-1)
 
 	log.Printf("Server starting on port %d\n", *portnum)
 
@@ -189,4 +196,20 @@ func catchKill(f Finishable, interrupt chan os.Signal) {
 		f.Close()
 	}
 	os.Exit(0)
+}
+
+func catchKillss(interrupt chan os.Signal) {
+	for true {
+		s := <-interrupt
+		log.Printf("the signal caught %v", s)
+		if (s != syscall.SIGTERM) {
+			continue
+		}
+		//if *cpuProfile != "" {
+		log.Printf("CALLED STOP")
+		pprof.StopCPUProfile()
+		//}
+		log.Printf("Caught signal and stopped CPU profile before exit.\n")
+		os.Exit(0)
+	}
 }

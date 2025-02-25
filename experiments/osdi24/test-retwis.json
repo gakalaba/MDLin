@@ -25,147 +25,66 @@
     }
   ],
   "server_names": [
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
   ],
-  "num_shards": 18,
+  "num_shards": 9,
   "shards": [
-	  [
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
+[
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
     ],
 [
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
+      "us-east-1-1",
+      "us-east-1-2",
+      "us-east-1-0"
     ],
 [
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
+      "us-east-1-2",
+      "us-east-1-0",
+      "us-east-1-1"
     ],
 [
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
     ],
 [
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
+      "us-east-1-1",
+      "us-east-1-2",
+      "us-east-1-0"
     ],
 [
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
+      "us-east-1-2",
+      "us-east-1-0",
+      "us-east-1-1"
     ],
 [
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
     ],
 [
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
+      "us-east-1-1",
+      "us-east-1-2",
+      "us-east-1-0"
     ],
 [
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
+      "us-east-1-2",
+      "us-east-1-0",
+      "us-east-1-1"
     ]
-          ],
-[
-"eu-west-1-1",
-"eu-west-1-2",
-"eu-west-1-0"
-          ]
 ],
   "clients": [
-	  "client-1-0"
+	  "client-0-0"
   ],
   "server_regions": {
-    "region1": ["eu-west-1-0"],
-    "region2": ["eu-west-1-1"],
-    "region3": ["eu-west-1-2"],
-    "region4": ["client-1-0"]
+    "region1": ["us-east-1-0"],
+    "region2": ["us-east-1-1"],
+    "region3": ["us-east-1-2"],
+    "region4": ["client-0-0"]
   },
   "region_rtt_latencies": {
       "region1": {
@@ -194,20 +113,20 @@
       }
  },
   "client_total": [
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+	  [1, 2, 4, 8, 16, 32, 64, 128, 256],
+	  [1, 2, 4, 8, 16, 32, 64, 128, 256]
   ],
   "client_processes_per_client_node": [
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+	  [1, 2, 4, 8, 16, 32, 64, 128, 256],
+	  [1, 2, 4, 8, 16, 32, 64, 128, 256]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
   "client_write_percentage": 1000,
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
-  "client_fanout": 8,
-  "batchsize": 500,
+  "client_fanout": 1,
+  "server_epoch": 500,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,
@@ -216,7 +135,7 @@
     "y_label": "Cumulative ratio of operations"
   },
   "plots": [
-        {
+       {
       "name": "tput-lat-p99",
       "font": "DejaVu Sans,12",
       "height": 600,
@@ -243,6 +162,106 @@
       "x_var_is_config": false,
       "y_label": "p50 Latency",
       "y_var": ["aggregate", "app", "p50"]
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-profile-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "profile", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "profile", "p50"]
+
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-login-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "login", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "login", "p50"]
+
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-logout-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "logout", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "logout", "p50"]
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-register-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "register", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "register", "p50"]
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-post-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "post", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "post", "p50"]
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-follow-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "follow", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "follow", "p50"]
+    },
+    {
+      "font": "DejaVu Sans,12",
+      "height": 600,
+      "name": "tput-lat-timeline-p50",
+      "series_indep_vars_idx": 0,
+      "series_titles": ["MDL", "Multi-Paxos"],
+      "width": 800,
+      "x_indep_vars_idx": 1,
+      "x_label": "Throughput (ops/s)",
+      "x_var": ["run_stats", "timeline", "tput", "p50"],
+      "x_var_is_config": false,
+      "y_label": "p50 Latency",
+      "y_var": ["aggregate", "timeline", "p50"]
     }
   ],
   "plot_cdf_png_font": "DejaVu Sans,12",
@@ -263,15 +282,15 @@
   "base_remote_bin_directory_nfs": "/users/akalaba/MDLin",
   "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
-  "client_bin_name": "clientnew",
+  "client_bin_name": "retwisclient",
   "client_debug_output": false,
-  "client_experiment_length": 45,
+  "client_experiment_length": 90,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 2,
   "client_num_keys": 1000000,
   "client_ramp_down": 10,
-  "client_ramp_up": 10,
+  "client_ramp_up": 20,
   "client_random_coordinator": false,
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
@@ -286,7 +305,7 @@
   "max_bandwidth": "10gibps",
   "max_file_descriptors": 65535,
   "max_retries": 0,
-  "num_experiment_runs": 1,
+  "num_experiment_runs": 2,
   "out_directory_name": "out",
   "project_name": "praxis-PG0",
   "stats_file_name": "stats.json",
@@ -298,7 +317,7 @@
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
   "server_rpc_port": 8087,
-  "src_commit_hash": "newCrisis",
+  "src_commit_hash": "retwis",
   "src_directory": "/users/akalaba/MDLin",
   "codebase_name": "mdl",
   "remote_bin_directory_nfs_enabled": false,

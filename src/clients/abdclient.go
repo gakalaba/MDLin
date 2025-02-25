@@ -79,7 +79,7 @@ func NewAbdClient(id int32, masterAddr string, masterPort int, forceLeader int, 
 	return abdc
 }
 
-func (c *AbdClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
+func (c *AbdClient) AppRequest(opTypes []state.Operation, keys []int64, oldValue []int64, newValue []int64) (bool, int64) {
 	for i, opType := range opTypes {
 		k := keys[i]
 
@@ -98,6 +98,14 @@ func (c *AbdClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, i
 	}
 
 	return true, 0
+}
+
+func (c *AbdClient) AppResponse(commandId int32) (state.Value, uint8) {
+  return 0, 0
+}
+
+func (c *AbdClient) GrabHighestResponse() int32 {
+	return 0
 }
 
 func (c *AbdClient) Read(key int64) (bool, int64) {
@@ -187,6 +195,10 @@ func (c *AbdClient) handleReadReply(readReply *abdproto.ReadReply) {
 			c.currOp.sentWriteRound = true
 		}
 	}
+}
+
+func (c *AbdClient) GetNumShards() int {
+	return c.numLeaders
 }
 
 func (c *AbdClient) doWriteRound() {

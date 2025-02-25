@@ -881,7 +881,6 @@ func (t *FinalAccept) Unmarshal(rr io.Reader) error {
                 return err
         }
         t.TimestampChain = make([]int64, alen1)
-        //t.TimestampChain = make([][]int64, alen1)
         for i := int64(0); i < alen1; i++ {
 		//alen2, err = binary.ReadVarint(wire)
 		//if err != nil {
@@ -1185,14 +1184,6 @@ func (t *CommitShort) Marshal(wire io.Writer) {
 	bs[15] = byte(tmp32 >> 24)
 	wire.Write(bs)
 
-	bs = b[:4]
-	tmp32 = t.Status
-	bs[0] = byte(tmp32)
-	bs[1] = byte(tmp32 >> 8)
-	bs[2] = byte(tmp32 >> 16)
-	bs[3] = byte(tmp32 >> 24)
-	wire.Write(bs)
-
 }
 
 func (t *CommitShort) Unmarshal(wire io.Reader) error {
@@ -1206,11 +1197,6 @@ func (t *CommitShort) Unmarshal(wire io.Reader) error {
 	t.Instance = int32((uint32(bs[4]) | (uint32(bs[5]) << 8) | (uint32(bs[6]) << 16) | (uint32(bs[7]) << 24)))
 	t.Count = int32((uint32(bs[8]) | (uint32(bs[9]) << 8) | (uint32(bs[10]) << 16) | (uint32(bs[11]) << 24)))
 	t.Ballot = int32((uint32(bs[12]) | (uint32(bs[13]) << 8) | (uint32(bs[14]) << 16) | (uint32(bs[15]) << 24)))
-	bs = b[:4]
-	if _, err := io.ReadAtLeast(wire, bs, 4); err != nil {
-		return err
-	}
-	t.Status = int32((uint32(bs[0]) | (uint32(bs[1]) << 8) | (uint32(bs[2]) << 16) | (uint32(bs[3]) << 24)))
 	return nil
 }
 

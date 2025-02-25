@@ -112,6 +112,7 @@ type Replica struct {
 	DoneAdaptingChan chan bool
 	delayRPC         []map[uint8]bool
 	delayedRPC       []map[uint8]chan fastrpc.Serializable
+	arrived int64
 }
 
 func NewReplica(id int, peerAddrList []string, numShards int, thrifty bool, exec bool, dreply bool, clientConnect bool, statsFile string) *Replica {
@@ -157,6 +158,7 @@ func NewReplica(id int, peerAddrList []string, numShards int, thrifty bool, exec
 		make(chan bool, 1),
 		make([]map[uint8]bool, 0),                      // delayRPC
 		make([]map[uint8]chan fastrpc.Serializable, 0), // delayedRPC
+		time.Now().UnixNano(),
 	}
 
 	dlog.Printf("hi\n")
@@ -482,6 +484,11 @@ func (r *Replica) WaitForClientConnections() {
 			continue
 		}
 		log.Printf("Accepted client connection %s\n", conn.RemoteAddr().String())
+		if err := conn.(*net.TCPConn).SetNoDelay(true); err != nil {
+			log.Printf("SetNoDelay didn't work %v", err)
+			panic("SetNoDelay didn't work")
+		}
+
 		go r.clientListener(conn)
 
 		if r.clientConnect {
@@ -623,7 +630,8 @@ func (r *Replica) clientListener(conn net.Conn) {
 				errS = "reading GEN_PROPOSE"
 				break
 			}
-			dlog.Printf("GENERICSMR got command %v at time %v\n", prop.CommandId, time.Now().UnixNano())
+			r.arrived = time.Now().UnixNano()
+			log.Printf("GENERICSMR got command %v at time %v\n", prop.CommandId, r.arrived)
 			r.ProposeChan <- &Propose{prop, writer}
 			break
 
@@ -745,6 +753,7 @@ func (r *Replica) ReplyPropose(reply *genericsmrproto.ProposeReply, w *bufio.Wri
 func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio.Writer) {
 	//r.clientMutex.Lock()
 	//defer r.clientMutex.Unlock()
+	log.Printf("reply for command %v at took time %v\n", reply.CommandId, (time.Now().UnixNano() - r.arrived))
 	w.WriteByte(clientproto.GEN_PROPOSE_REPLY)
 	reply.Marshal(w)
 	w.Flush()

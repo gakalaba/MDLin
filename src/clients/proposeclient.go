@@ -3,11 +3,12 @@ package clients
 import (
 	"clientproto"
 	"fastrpc"
-	"fmt"
+	//"fmt"
 	"genericsmr"
 	"genericsmrproto"
 	"state"
-	"time"
+	//"time"
+	//"dlog"
 )
 
 type ProposeClient struct {
@@ -34,34 +35,42 @@ func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader i
 	return pc
 }
 
-func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
+func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64, oldValues []int64, newValues []int64) (bool, int64) {
 	for i, opType := range opTypes {
 		k := keys[i]
 
-		before := time.Now()
-		var opTypeStr string
+		//before := time.Now()
+		//var opTypeStr string
 		var success bool
 		if opType == state.GET {
-			opTypeStr = "read"
+			//opTypeStr = "read"
 			success, _ = c.Read(k)
 		} else if opType == state.PUT {
-			opTypeStr = "write"
-			success = c.Write(k, int64(k))
+			//opTypeStr = "write"
+			success = c.Write(k, newValues[i])
 		} else {
-			opTypeStr = "rmw"
-			success, _ = c.CompareAndSwap(k, int64(k-1), int64(k))
+			//opTypeStr = "rmw"
+			success, _ = c.CompareAndSwap(k, oldValues[i], newValues[i])
 		}
-		after := time.Now()
+		//after := time.Now()
 
 		if success {
-			lat := after.Sub(before).Nanoseconds()
-			fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
+			//lat := after.Sub(before).Nanoseconds()
+			//fmt.Printf("%s,%d,%d,%d\n", opTypeStr, lat, k, i)
 		} else {
 			return false, -1
 		}
 	}
 
 	return true, 0
+}
+
+func (c *ProposeClient) AppResponse(commandId int32) (state.Value, uint8) {
+  return 0,0
+}
+
+func (c *ProposeClient) GrabHighestResponse() int32 {
+	return 0
 }
 
 func (c *ProposeClient) Read(key int64) (bool, int64) {
@@ -98,8 +107,13 @@ func (c *ProposeClient) preparePropose(commandId int32, key int64, value int64) 
 }
 
 func (c *ProposeClient) sendProposeAndReadReply() (bool, int64) {
+	//A := time.Now()
 	c.sendPropose()
-	return c.readProposeReply(c.propose.CommandId)
+	//B := time.Now()
+	val1, val2 := c.readProposeReply(c.propose.CommandId)
+	//C := time.Now()
+	//dlog.Printf("sendpropose = %v, readReply = %v", B.Sub(A), C.Sub(B))
+	return val1, val2
 }
 
 func (c *ProposeClient) sendPropose() {
@@ -114,9 +128,14 @@ func (c *ProposeClient) sendPropose() {
 			}
 		}
 		//dlog.Printf("@Sending request to %d\n", replica)
+		//A := time.Now()
 		c.writers[replica].WriteByte(clientproto.GEN_PROPOSE)
+		//B := time.Now()
 		c.propose.Marshal(c.writers[replica])
+		//C := time.Now()
 		c.writers[replica].Flush()
+		//D := time.Now()
+		//dlog.Printf("WriteByte=%v, Marshal=%v, Flush=%v", B.Sub(A), C.Sub(B), D.Sub(C))
 	} else {
 		//dlog.Printf("Sending request to all replicas\n")
 		for i := 0; i < c.numLeaders; i++ {
@@ -125,6 +144,10 @@ func (c *ProposeClient) sendPropose() {
 			c.writers[i].Flush()
 		}
 	}
+}
+
+func (c *ProposeClient) GetNumShards() int {
+	return c.numLeaders
 }
 
 func (c *ProposeClient) readProposeReply(commandId int32) (bool, int64) {

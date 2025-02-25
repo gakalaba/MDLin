@@ -4,9 +4,10 @@ import (
 	"clients"
 	"dlog"
 	"flag"
+	"syscall"
 	"fmt"
 	"log"
-	"math/rand"
+	//"math/rand"
 	"os"
 	"os/signal"
 	"runtime"
@@ -14,7 +15,7 @@ import (
 	"runtime/pprof"
 	"state"
 	"time"
-  "zipfgenerator"
+  //"zipfgenerator"
 )
 
 var clientId *int = flag.Int(
@@ -38,7 +39,7 @@ var cpuProfile *string = flag.String(
 	"",
 	"Name of file for CPU profile. If empty, no profile is created.")
 
-var dbg *bool = flag.Bool(
+var debugvar *bool = flag.Bool(
 	"debug",
 	true,
 	"Enable debug output.")
@@ -177,6 +178,15 @@ var zipfV = flag.Float64(
 	"Zipfian v parameter. Generates values k∈ [0, numKeys] such that P(k) is "+
 		"proportional to (v + k) ** (-s)")
 
+
+type RetwisOp uint8
+const (
+        NONE RetwisOp = iota
+	POST
+)
+
+
+
 func createClient() clients.Client {
 	switch *replProtocol {
 	case "abd":
@@ -190,7 +200,7 @@ func createClient() clients.Client {
 		return clients.NewProposeClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true)
 	case "mdl":
-		return clients.NewMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
+		return clients.NewAsynchClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
 			*statsFile, false, true, *singleShardAware)
 	case "ss-mdl":
 		return clients.NewSSMDLClient(int32(*clientId), *coordinatorAddr, *coordinatorPort, *forceLeader,
@@ -212,26 +222,15 @@ func Max(a int64, b int64) int64 {
 func main() {
 	flag.Parse()
 
-	if *conflicts > 100 {
-		log.Fatalf("Conflicts percentage must be between 0 and 100.\n")
-	}
 
-	dlog.DLOG = *dbg
-
-	if *conflicts >= 0 {
-		dlog.Println("Using uniform distribution")
-	} else {
-		dlog.Println("Using zipfian distribution")
-	}
-
-	if *writes+*reads+*rmws != 1000 {
-		log.Fatalf("Writes (%d), reads (%d), and rmws (%d) must add up to 1000.\n", *writes, *reads, *rmws)
-	}
+	dlog.DLOG = *debugvar
 
 	runtime.GOMAXPROCS(2)
-	debug.SetGCPercent(-1)
-	if *cpuProfile != "" {
-		f, err := os.Create(*cpuProfile)
+
+	client := createClient()
+	if true {
+	//if *cpuProfile != "" {
+		f, err := os.Create(fmt.Sprintf("/users/akalaba/myprogram-client-%vshards.prof", client.GetNumShards()))
 		if err != nil {
 			log.Fatalf("Error creating CPU profile file %s: %v\n", *cpuProfile, err)
 		}
@@ -239,95 +238,79 @@ func main() {
 		interrupt := make(chan os.Signal, 1)
 		signal.Notify(interrupt)
 		go catchKill(interrupt)
-		defer pprof.StopCPUProfile()
+		//defer pprof.StopCPUProfile()
 	}
-
-	client := createClient()
-
-	r := rand.New(rand.NewSource(int64(*clientId)))
+	debug.SetGCPercent(-1)
+	/*r := rand.New(rand.NewSource(time.Now().UnixNano()))
   zipf, err := zipfgenerator.NewZipfGenerator(r, 0, *numKeys, *zipfS, false)
   if err != nil {
     panic("problem making the zipfian generator :0")
-  }
-	var count int32
-	count = 0
+  }*/
+	var sentcount int32
+	sentcount = 0
+	//doneChan := make(chan bool)
+	//resultChan := make(chan int, 2)
 
 	go func(client clients.Client) {
 		time.Sleep(time.Duration(*expLength+1) * time.Second)
 		client.Finish()
 	}(client)
 
+	log.Printf("starting grafana test!")
+	//ns := int64(50)
+	key := 0
 	start := time.Now()
 	now := start
 	currRuntime := now.Sub(start)
+	time.Sleep(time.Duration(*rampUp) * time.Second)
 	for int(currRuntime.Seconds()) < *expLength {
-		//if *randSleep > 0 {
-		time.Sleep(time.Duration(r.Intn(100 * 1e6))) // randSleep ms
-		//}
 
-		var opTypes []state.Operation
-		var k int64
-		var keys []int64
-		for i := 0; i < *fanout; i++ {
-			opTypeRoll := r.Intn(1000)
-			var opType state.Operation
-			if opTypeRoll < *reads {
-				opType = state.GET
-			} else if opTypeRoll < *reads+*writes {
-				opType = state.PUT
-			} else {
-				opType = state.CAS
-			}
-			opTypes = append(opTypes, opType)
+		//delay_start := time.Now()
+		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(key)}, nil, []int64{4})
 
-			if *conflicts >= 0 {
-				if r.Intn(*conflictsDenom) < *conflicts {
-					k = 0
-				} else {
-					k = (int64(count) << 32) | int64(*clientId)
-				}
-			} else {
-				k = int64(zipf.Uint64())
-				//k = int64(r.Intn(int(*numKeys)))
-			}
-			keys = append(keys, k)
-		}
 
-		var success bool
+		sentcount++
+		key++
 
-		//dlog.Printf("Client %v about to issue AppRequest at time %v\n", *clientId, time.Now().UnixMilli())
-		before := time.Now()
-		success, _ = client.AppRequest(opTypes, keys, nil, nil)
-		after := time.Now()
-                //dlog.Printf("!!!!Paxos APP level write took %d microseconds\n", int64(after.Sub(before).Microseconds()))
-
-		opString := "app"
-		if !success {
-			log.Printf("Failed %s(%d).\n", opString, count)
-		}
-		count++
-		dlog.Printf("AppRequests attempted: %d\n", count)
-		//dlog.Printf("AppRequests attempted: %d at time %d\n", count, time.Now().UnixMilli())
-
-		currInt := int(currRuntime.Seconds())
-		if *rampUp <= currInt && currInt < *expLength-*rampDown {
-			lat := int64(after.Sub(before).Nanoseconds())
-			fmt.Printf("%s,%d,%d,%d\n", opString, lat, k, count)
-
-		}
 		now = time.Now()
 		currRuntime = now.Sub(start)
+		//for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
 	}
-	log.Printf("Total AppRequests attempted: %d, total system level requests: %d\n", count, count*int32(*fanout))
+	//numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
+	count := client.GrabHighestResponse() + 1
+	log.Printf("TEST DONE")
+	//log.Printf("numReplies pulled out = %d, highest command ID returned = %d", numReplies, count)
+	log.Printf("Total Attempted Logging of App Events (MP Completed): %d\n", sentcount)
+	log.Printf("Total Completed Logging of App Events: %d\n", count)
 	log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
+	log.Printf("Experiment rampUp %v and rampDown %v\n", *rampUp, *rampDown)
+	log.Printf("Total Log Tput: %d\n", (int(count)/(int(currRuntime.Seconds())-*rampUp)))
+	log.Printf("Total Log Tput (MP): %d\n", (int(sentcount)/(int(currRuntime.Seconds())-*rampUp)))
 	client.Finish()
+	pprof.StopCPUProfile()
+}
+
+func delayBetweenRequests(ns int64) {
+	start := time.Now()
+	for true {
+		if time.Now().Sub(start).Nanoseconds() >= ns {
+			return
+		}
+	}
 }
 
 func catchKill(interrupt chan os.Signal) {
-	<-interrupt
-	if *cpuProfile != "" {
+	for true {
+		s := <-interrupt
+		log.Printf("the signal caught %v", s)
+		if (s != syscall.SIGKILL) {
+			continue
+		}
+		//if *cpuProfile != "" {
+		log.Printf("CALLED STOP")
 		pprof.StopCPUProfile()
+		//}
+		log.Printf("Caught signal and stopped CPU profile before exit.\n")
+		os.Exit(0)
 	}
-	log.Printf("Caught signal and stopped CPU profile before exit.\n")
-	os.Exit(0)
 }

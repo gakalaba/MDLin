@@ -99,7 +99,6 @@ type CommitShort struct {
 	Instance int32
 	Count    int32
 	Ballot   int32
-	Status   int32
 }
 
 // Message types for MultiShard MDL

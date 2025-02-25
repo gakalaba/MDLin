@@ -14,5 +14,5 @@ sudo -s; apt-get update; apt-get install -y feh; apt-get install -y gnuplot; apt
 ----------------------------
 sudo -s
 export PATH="$PATH:/usr/local/go/bin"
-python3 ./scripts/run_multiple_experiments.py ./experiments/sosp2023/tput-3.json
+python3 ./scripts/run_multiple_experiments.py ./experiments/osdi25/test-monitor-app.json
 make

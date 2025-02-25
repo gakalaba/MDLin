@@ -190,6 +190,10 @@ func (c *GryffClient) SendRead2(rop *gryffcommon.ReadOp, replicas []int32) {
 	}
 }
 
+func (c *GryffClient) GetNumShards() int {
+	return c.numLeaders
+}
+
 func (c *GryffClient) SendWrite1(wop *gryffcommon.WriteOp, replicas []int32) {
 	c.write1.RequestId = wop.RequestId
 	c.write1.ClientId = c.id
@@ -271,7 +275,7 @@ func (c *GryffClient) HandleOverwrite(key state.Key, newValue state.Value,
  * End gryffcommon.IGryffCoordinator methods
  */
 
-func (c *GryffClient) AppRequest(opTypes []state.Operation, keys []int64) (bool, int64) {
+func (c *GryffClient) AppRequest(opTypes []state.Operation, keys []int64, oldValue []int64, newValue []int64) (bool, int64) {
 	for i, opType := range opTypes {
 		k := keys[i]
 
@@ -290,6 +294,14 @@ func (c *GryffClient) AppRequest(opTypes []state.Operation, keys []int64) (bool,
 	}
 
 	return true, 0
+}
+
+func (c *GryffClient) AppResponse(commandId int32) (state.Value, uint8) {
+  return 0,0
+}
+
+func (c *GryffClient) GrabHighestResponse() int32 {
+	return 0
 }
 
 /**

@@ -25,147 +25,26 @@
     }
   ],
   "server_names": [
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
   ],
-  "num_shards": 18,
+  "num_shards": 1,
   "shards": [
-	  [
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
 [
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
-    ],
-[
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2"
-    ],
-[
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "eu-west-1-0"
-    ],
-[
-      "eu-west-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1"
+      "us-east-1-0",
+      "us-east-1-1",
+      "us-east-1-2"
     ]
-          ],
-[
-"eu-west-1-1",
-"eu-west-1-2",
-"eu-west-1-0"
-          ]
 ],
   "clients": [
-	  "client-1-0"
+	  "client-0-0"
   ],
   "server_regions": {
-    "region1": ["eu-west-1-0"],
-    "region2": ["eu-west-1-1"],
-    "region3": ["eu-west-1-2"],
-    "region4": ["client-1-0"]
+    "region1": ["us-east-1-0"],
+    "region2": ["us-east-1-1"],
+    "region3": ["us-east-1-2"],
+    "region4": ["client-0-0"]
   },
   "region_rtt_latencies": {
       "region1": {
@@ -194,20 +73,20 @@
       }
  },
   "client_total": [
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+	  [1],
+	  [1]
   ],
   "client_processes_per_client_node": [
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
-	  [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+	  [1],
+	  [1]
   ],
   "client_threads_per_process": 1,
   "client_conflict_percentage": -1,
   "client_write_percentage": 1000,
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
-  "client_fanout": 8,
-  "batchsize": 500,
+  "client_fanout": 1,
+  "server_epoch": 500,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
     "height": 600,
@@ -216,7 +95,7 @@
     "y_label": "Cumulative ratio of operations"
   },
   "plots": [
-        {
+       {
       "name": "tput-lat-p99",
       "font": "DejaVu Sans,12",
       "height": 600,
@@ -258,25 +137,25 @@
   "plot_tput_lat_series_title": ["MDL", "Multi-Paxos"],
   "plot_tput_lat_x_label": "Throughput (ops/sec)",
   "plot_tput_lat_y_label": "Latency (ms)",
-  "base_local_exp_directory": "/users/akalaba/MDLin/experiments/osdi24/results/tput-3",
+  "base_local_exp_directory": "/users/akalaba/MDLin/experiments/osdi25/results/lamernewz_app",
   "base_mounted_fs_path": "/mnt/extra",
   "base_remote_bin_directory_nfs": "/users/akalaba/MDLin",
   "base_remote_exp_directory": "/mnt/extra/experiments",
   "bin_directory_name": "bin",
-  "client_bin_name": "clientnew",
+  "client_bin_name": "lamernewzclient",
   "client_debug_output": false,
-  "client_experiment_length": 45,
+  "client_experiment_length": 70,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "client_name_format_str": "%s",
   "client_max_processors": 2,
   "client_num_keys": 1000000,
-  "client_ramp_down": 10,
-  "client_ramp_up": 10,
+  "client_ramp_down": 30,
+  "client_ramp_up": 30,
   "client_random_coordinator": false,
   "client_zipfian_s": 0,
   "client_zipfian_v": 1,
   "emulab_user": "root",
-  "experiment_name": "MDL",
+  "experiment_name": "mdl",
   "use_coordinator": true,
   "coordinator_bin_name": "coordinator",
   "coordinator_port": 7067,
@@ -298,7 +177,7 @@
   "server_host_format_str": "%s.%s.%s.utah.cloudlab.us",
   "server_port": 7087,
   "server_rpc_port": 8087,
-  "src_commit_hash": "newCrisis",
+  "src_commit_hash": "lamernewz",
   "src_directory": "/users/akalaba/MDLin",
   "codebase_name": "mdl",
   "remote_bin_directory_nfs_enabled": false,

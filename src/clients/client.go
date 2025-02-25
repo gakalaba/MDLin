@@ -39,9 +39,15 @@ type Client interface {
 	Write(key int64, value int64) bool
 	CompareAndSwap(key int64, oldValue int64,
 		newValue int64) (bool, int64)
-	AppRequest(opTypes []state.Operation, keys []int64) (bool, int64)
-	Finish()
+	AppRequest(opTypes []state.Operation, keys []int64, oldValues []int64, newValues []int64) (bool, int64)
+	//OpenAppRequest(opTypes state.Operation, keys int64)
+	//StartAsynchReadReplies(doneChan chan bool, resultChan chan int)
+	//StopAsynchReadReplies(doneChan chan bool, resultChan chan int) (int, int)
+	AppResponse(commandId int32) (state.Value, uint8)
+	GrabHighestResponse() int32
+  Finish()
 	ConnectToCoordinator()
+	GetNumShards() int
 	// ConnectToReplicas()
 	// DetermineLeader()
 	// DetermineReplicaPings()
@@ -193,6 +199,11 @@ func (c *AbstractClient) connectToLeader(i int) bool {
 		log.Printf("Error connecting to leader %d: %v\n", i, err)
 		return false
 	}
+	if err := c.leaders[i].(*net.TCPConn).SetNoDelay(true); err != nil {
+		log.Printf("SetNoDelay didn't work %v", err)
+		panic("SetNoDelay didn't work")
+	}
+
 	log.Printf("Connected to leader %d with connection %s\n", i, c.leaders[i].LocalAddr().String())
 	c.readers[i] = bufio.NewReader(c.leaders[i])
 	c.writers[i] = bufio.NewWriter(c.leaders[i])
@@ -206,6 +217,10 @@ func (c *AbstractClient) connectToLeader(i int) bool {
 	c.leaderAlive[i] = true
 	go c.leaderListener(i)
 	return true
+}
+
+func (c *AbstractClient) GetNumShards() int {
+	return c.numLeaders
 }
 
 func (c *AbstractClient) GetShardFromKey(k state.Key) int {
@@ -301,6 +316,7 @@ func (c *AbstractClient) ShouldDelayNextRPC(replica int, opCode uint8) bool {
 }
 
 func (c *AbstractClient) leaderListener(leader int) {
+	log.Printf("Leader Listener for leader %v", leader)
 	var msgType byte
 	var err error
 	var errS string
