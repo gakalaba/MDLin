@@ -248,6 +248,8 @@ func main() {
   }*/
 	var sentcount int32
 	sentcount = 0
+	var excludeCount int32
+	excludeCount = 0
 	//doneChan := make(chan bool)
 	//resultChan := make(chan int, 2)
 
@@ -262,14 +264,19 @@ func main() {
 	start := time.Now()
 	now := start
 	currRuntime := now.Sub(start)
-	time.Sleep(time.Duration(*rampUp) * time.Second)
+	//time.Sleep(time.Duration(*rampUp) * time.Second)
+	*expLength -= *rampDown
 	for int(currRuntime.Seconds()) < *expLength {
 
 		//delay_start := time.Now()
 		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(key)}, nil, []int64{4})
 
 
-		sentcount++
+		if *rampUp <= int(currRuntime.Seconds()) {
+			sentcount++
+		} else {
+			excludeCount++
+		}
 		key++
 
 		now = time.Now()
@@ -281,10 +288,10 @@ func main() {
 	log.Printf("TEST DONE")
 	//log.Printf("numReplies pulled out = %d, highest command ID returned = %d", numReplies, count)
 	log.Printf("Total Attempted Logging of App Events (MP Completed): %d\n", sentcount)
-	log.Printf("Total Completed Logging of App Events: %d\n", count)
-	log.Printf("Experiment over after %f seconds\n", currRuntime.Seconds())
+	log.Printf("Total Completed Logging of App Events: %d, but total we're excluding: %d\n", count, excludeCount)
+	log.Printf("Experiment over after %f seconds, going to use %v seconds of data\n", currRuntime.Seconds(), int(currRuntime.Seconds()) - *rampUp)
 	log.Printf("Experiment rampUp %v and rampDown %v\n", *rampUp, *rampDown)
-	log.Printf("Total Log Tput: %d\n", (int(count)/(int(currRuntime.Seconds())-*rampUp)))
+	log.Printf("Total Log Tput: %d\n", ((int(count) - int(excludeCount))/(int(currRuntime.Seconds())-*rampUp)))
 	log.Printf("Total Log Tput (MP): %d\n", (int(sentcount)/(int(currRuntime.Seconds())-*rampUp)))
 	client.Finish()
 	pprof.StopCPUProfile()
