@@ -131,10 +131,10 @@ func (c *AsynchClient) GetNumShards() int {
 /*************For Grafana Testing Only!! Not for Austin's API **********/
 /***********************************************************************/
 func (c *AsynchClient) GrabHighestResponse() int32 {
-	c.mu.Lock()
-	result := c.latestReceived
-	c.mu.Unlock()
-	return result
+	c.mapMu.Lock()
+	result := len(c.repliesMap)
+	c.mapMu.Unlock()
+	return int32(result)
 }
 
 func (c *AsynchClient) AppResponse(commandId int32) (state.Value, uint8) {
@@ -179,6 +179,10 @@ func (c *AsynchClient) asynchReadReplies() {
 		}
 		c.mu.Unlock()
 		c.mapMu.Lock()
+		_, exists := c.repliesMap[reply.CommandId]
+		if exists {
+			panic("Should not be getting duplicate responses")
+		}
 		c.repliesMap[reply.CommandId] = reply
 		c.mapMu.Unlock()
 	}

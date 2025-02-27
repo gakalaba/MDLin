@@ -248,8 +248,6 @@ func main() {
   }*/
 	var sentcount int32
 	sentcount = 0
-	var excludeCount int32
-	excludeCount = 0
 	//doneChan := make(chan bool)
 	//resultChan := make(chan int, 2)
 
@@ -266,6 +264,7 @@ func main() {
 	currRuntime := now.Sub(start)
 	//time.Sleep(time.Duration(*rampUp) * time.Second)
 	*expLength -= *rampDown
+	var excludeCount int32
 	for int(currRuntime.Seconds()) < *expLength {
 
 		//delay_start := time.Now()
@@ -275,7 +274,7 @@ func main() {
 		if *rampUp <= int(currRuntime.Seconds()) {
 			sentcount++
 		} else {
-			excludeCount++
+			excludeCount = client.GrabHighestResponse()
 		}
 		key++
 
@@ -284,7 +283,7 @@ func main() {
 		//for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
 	}
 	//numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
-	count := client.GrabHighestResponse() + 1
+	count := client.GrabHighestResponse()
 	log.Printf("TEST DONE")
 	//log.Printf("numReplies pulled out = %d, highest command ID returned = %d", numReplies, count)
 	log.Printf("Total Attempted Logging of App Events (MP Completed): %d\n", sentcount)
