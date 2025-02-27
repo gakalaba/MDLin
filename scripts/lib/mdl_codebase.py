@@ -71,6 +71,8 @@ class MDLCodebase(ExperimentCodebase):
             '-writes', config['client_write_percentage'],
             '-fanout', config['client_fanout'],
         ]])
+        if 'inter_request_delay' in config:
+            client_command += ' -ird %d' % config['inter_request_delay']
         if 'client_cpuprofile' in config and config['client_cpuprofile']:
             client_command += ' -cpuProfile %s' % os.path.join(exp_directory,
                                                                config['out_directory_name'],

@@ -105,6 +105,11 @@ var rampUp *int = flag.Int(
 	5,
 	"Length of the warm-up period before statistics are measured (in seconds).")
 
+var interRequestDelay *int64 = flag.Int64(
+	"ird",
+	0,
+	"Number of nano seconds delay between issueing each request")
+
 var randSleep *int = flag.Int(
 	"randSleep",
 	1,
@@ -257,17 +262,15 @@ func main() {
 	}(client)
 
 	log.Printf("starting grafana test!")
-	//ns := int64(50)
 	key := 0
 	start := time.Now()
 	now := start
 	currRuntime := now.Sub(start)
-	//time.Sleep(time.Duration(*rampUp) * time.Second)
 	*expLength -= *rampDown
 	var excludeCount int32
 	for int(currRuntime.Seconds()) < *expLength {
 
-		//delay_start := time.Now()
+		delay_start := time.Now()
 		client.AppRequest([]state.Operation{state.PUT}, []int64{int64(key)}, nil, []int64{4})
 
 
@@ -280,12 +283,10 @@ func main() {
 
 		now = time.Now()
 		currRuntime = now.Sub(start)
-		//for time.Now().Sub(delay_start).Nanoseconds() <= ns {}
+		for time.Now().Sub(delay_start).Nanoseconds() <= *interRequestDelay {}
 	}
-	//numReplies, count := client.StopAsynchReadReplies(doneChan, resultChan)
 	count := client.GrabHighestResponse()
 	log.Printf("TEST DONE")
-	//log.Printf("numReplies pulled out = %d, highest command ID returned = %d", numReplies, count)
 	log.Printf("Total Attempted Logging of App Events (MP Completed): %d\n", sentcount)
 	log.Printf("Total Completed Logging of App Events: %d, but total we're excluding: %d\n", count, excludeCount)
 	log.Printf("Experiment over after %f seconds, going to use %v seconds of data\n", currRuntime.Seconds(), int(currRuntime.Seconds()) - *rampUp)
