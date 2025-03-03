@@ -4,7 +4,7 @@
 	  ["client_total", "client_processes_per_client_node"]
   ],
   "replication_protocol":[
-	  "mdl", "multi_paxos"
+	  "multi_paxos"
   ],
   "replication_protocol_settings": [
 	  {
@@ -14,16 +14,7 @@
 	    "single_shard_aware": false,
 	    "server_execute_commands": true,
 	    "server_thrifty": true,
-	    "python_app_name": "app.py"
-    },
-	  {
-	    "first_round_batching": false,
-	    "second_round_batching": false,
-            "server_delay_reply": true,
-	    "single_shard_aware": false,
-	    "server_execute_commands": true,
-	    "server_thrifty": true,
-	    "python_app_name": "app_app_sync.py"
+	    "python_app_name": "pythonclient.py"
     }
   ],
   "server_names": [
@@ -122,11 +113,9 @@
       }
  },
   "client_total": [
-	  [1],
 	  [1]
   ],
   "client_processes_per_client_node": [
-	  [1],
 	  [1]
   ], 
   "client_threads_per_process": 1,
@@ -150,7 +139,7 @@
       "height": 600,
       "width": 800,
       "series_indep_vars_idx": 0,
-      "series_titles": ["Ellis", "Paxos"],
+      "series_titles": [ "Paxos"],
       "x_var_is_config": false,
       "x_var": ["run_stats", "app", "tput", "p50"],
       "x_label": "Throughput (ops/s)",
@@ -163,7 +152,7 @@
       "height": 600,
       "name": "tput-lat-p50",
       "series_indep_vars_idx": 0,
-      "series_titles": ["Ellis", "Paxos"],
+      "series_titles": [  "Paxos"],
       "width": 800,
       "x_indep_vars_idx": 1,
       "x_label": "Throughput (ops/s)",
@@ -177,7 +166,7 @@
       "height": 600,
       "name": "tput-lat-CreateUser-p50",
       "series_indep_vars_idx": 0,
-      "series_titles": ["Ellis", "Paxos"],
+      "series_titles": [  "Paxos"],
       "width": 800,
       "x_indep_vars_idx": 1,
       "x_label": "Throughput (ops/s)",
@@ -191,7 +180,7 @@
       "height": 600,
       "name": "tput-lat-CreatePrivateRoom-p50",
       "series_indep_vars_idx": 0,
-      "series_titles": ["Ellis", "Paxos"],
+      "series_titles": [  "Paxos"],
       "width": 800,
       "x_indep_vars_idx": 1,
       "x_label": "Throughput (ops/s)",
@@ -205,7 +194,7 @@
       "height": 600,
       "name": "tput-lat-AddMessage-p50",
       "series_indep_vars_idx": 0,
-      "series_titles": ["Ellis", "Paxos"],
+      "series_titles": [ "Paxos"],
       "width": 800,
       "x_indep_vars_idx": 1,
       "x_label": "Throughput (ops/s)",
@@ -219,7 +208,7 @@
       "height": 600,
       "name": "tput-lat-GetMessages-p50",
       "series_indep_vars_idx": 0,
-      "series_titles": ["Ellis", "Paxos"],
+      "series_titles": [  "Paxos"],
       "width": 800,
       "x_indep_vars_idx": 1,
       "x_label": "Throughput (ops/s)",
@@ -234,24 +223,23 @@
   "plot_cdf_png_font": "DejaVu Sans,12",
   "plot_cdf_png_height": 600,
   "plot_cdf_png_width": 800,
-  "plot_cdf_series_title": ["Ellis", "Paxos"],
+  "plot_cdf_series_title": [  "Paxos"],
   "plot_cdf_x_label": "Latency (ms)",
   "plot_cdf_y_label": "Cumulative ratio of operations",
   "plot_directory_name": "plots",
   "plot_tput_lat_png_font": "DejaVu Sans,12",
   "plot_tput_lat_png_height": 600,
   "plot_tput_lat_png_width": 800,
-  "plot_tput_lat_series_title": ["Ellis", "Paxos"],
+  "plot_tput_lat_series_title": [  "Paxos"],
   "plot_tput_lat_x_label": "Throughput (ops/sec)",
   "plot_tput_lat_y_label": "Latency (ms)",
-  "base_local_exp_directory": "/users/akalaba/MDLin/experiments/osdi25/pythonredis/debug",
+  "base_local_exp_directory": "/users/akalaba/MDLin/experiments/osdi25/pythonredis/debug_leaderboard",
   "base_mounted_fs_path": "/mnt/extra",
   "base_remote_bin_directory_nfs": "/users/akalaba/MDLin",
   "base_remote_exp_directory": "/mnt/extra/experiments",
-  "base_python_directory": "/users/akalaba/redis-chat-transformed",
-  "python_venv": "redis-chat-venv/bin/activate",
+  "base_python_directory": "/users/akalaba/basic-redis-leaderboard-demo-python-transformed",
+  "python_venv": "../leaderboard_venv/bin/activate",
   "bin_directory_name": "bin",
-  "client_bin_name": "monitoring_app_client",
   "client_debug_output": false,
   "client_experiment_length": 15,
   "client_host_format_str": "%s.%s.%s.utah.cloudlab.us",
