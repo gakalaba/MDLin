@@ -73,7 +73,6 @@ class MDLTransformedCodebase(ExperimentCodebase):
                                                      stderr_file)
 
         client_command = '(cd %s; %s) & ' % (config['base_python_directory'], client_command)
-        client_command = '(cd /users/akalaba/redis-chat-transformed; source redis-chat-venv/bin/activate; python app.py --clientid=%s --explen=%s 1> %s 2> %s) & ' % (client_id, config['client_experiment_length'], stdout_file, stderr_file)
         return client_command
 
 
