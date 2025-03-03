@@ -125,6 +125,7 @@ def AppResponse(key):
         
         value_result = result.get('result')
         value_type = value_result.get('Type')
+        
         if value_type == 0:  # StringType
             return value_result.get('String', '')
         elif value_type == 1:  # ListType
@@ -133,6 +134,9 @@ def AppResponse(key):
             # Convert map[string]bool to set
             set_dict = value_result.get('Set', {})
             return {k for k, v in set_dict.items() if v}
+        elif value_type == 3:  # HashType
+            # Extract the hash map (map[string]string)
+            return value_result.get('Hash', {})
         else:
             return None
             
@@ -196,6 +200,9 @@ def SyncAppRequest(op_type, key, value=None, old_value=None):
             # Convert map[string]bool to set
             set_dict = value_result.get('Set', {})
             return {k for k, v in set_dict.items() if v}
+        elif value_type == 3:  # HashType
+            # Extract the hash map (map[string]string)
+            return value_result.get('Hash', {})
         else:
             return None
         

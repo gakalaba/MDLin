@@ -232,7 +232,6 @@ func InitCustom(clientId *C.char, clientType *C.char) {
     *coordinatorAddr = "us-east-1-0.mdl.praxis-PG0.utah.cloudlab.us"
 
     *coordinatorPort = 7067
-
 	client = createClient(C.GoString(clientId), C.GoString(clientType))
 
 	if client == nil {
@@ -280,6 +279,11 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
         op = state.HMGET
     case "HMSET":
         op = state.HMSET
+    case "HSET":
+        op = state.HSET
+    case "HGETALL":
+        fmt.Println("Set op to hget all")
+        op = state.HGETALL
     case "EXISTS":
 		op = state.EXISTS
     case "SET":
@@ -294,6 +298,13 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
 		op = state.ZADD
 	case "ZREVRANGE":
 		op = state.ZREVRANGE
+    case "ZINCRBY":
+        op = state.ZINCRBY
+    case "ZSCORE":
+        op = state.ZSCORE
+    case "ZRANGE":
+        print("op is zrange")
+        op = state.ZRANGE
 	default:
         fmt.Printf("Invalid operation type: %s\n", opType)
         return C.CString("")
@@ -353,6 +364,7 @@ func AsyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVa
     keyInt64 := stringToInt64Hash(keyStr)
 
     // Execute command and return success and value as string
+
     success, val := client.AppRequest([]state.Operation{op}, []int64{keyInt64}, []state.Value{valueObj}, []state.Value{oldValueObj})
     if !success {
         return C.CString("")
@@ -440,8 +452,12 @@ func SyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVal
         op = state.SREM
     case "HMGET":
         op = state.HMGET
+    case "HGETALL":
+        op = state.HGETALL
     case "HMSET":
         op = state.HMSET
+    case "HSET":
+        op = state.HSET
     case "EXISTS":
 		op = state.EXISTS
     case "SET":
@@ -456,11 +472,16 @@ func SyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVal
 		op = state.ZADD
 	case "ZREVRANGE":
 		op = state.ZREVRANGE
+    case "ZINCRBY":
+        op = state.ZINCRBY
+    case "ZSCORE":
+        op = state.ZSCORE
+    case "ZRANGE":
+        op = state.ZRANGE
 	default:
         fmt.Printf("Invalid operation type: %s\n", opType)
         return C.CString("")
     }
-
     // Helper function to convert JSON to state.Value
     convertJSONToValue := func(jsonStr string) state.Value {
         
@@ -515,6 +536,14 @@ func SyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVal
     // Create command
     keyInt64 := stringToInt64Hash(keyStr)
 
+    // fmt.Println("App Request running")
+
+    // Print inputs before making the request
+    // fmt.Printf("Operations: %+v\n", []state.Operation{op})
+    // fmt.Printf("Keys: %+v\n", []int64{keyInt64})
+    // fmt.Printf("Values: %+v\n", []state.Value{valueObj})
+    // fmt.Printf("Old Values: %+v\n", []state.Value{oldValueObj})
+
     // Execute command and return success and value as string
 	// BOOL, STATE.VALUE IN CLIENT APPREQUEST
     success, result := client.AppRequest([]state.Operation{op}, []int64{keyInt64}, []state.Value{valueObj}, []state.Value{oldValueObj})
@@ -524,7 +553,7 @@ func SyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVal
 		Result:  result,
 	}
 
-	// Marshal response to JSON
+    // Marshal response to JSON
 	jsonResponse, err := json.Marshal(response)
 	if err != nil {
 		errResponse := Response{
