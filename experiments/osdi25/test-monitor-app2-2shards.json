@@ -27,68 +27,26 @@
   "server_names": [
       "us-east-1-0",
       "us-east-1-1",
-      "us-east-1-2",
-      "eu-west-1-0",
-      "eu-west-1-1",
-      "eu-west-1-2",
-      "us-west-1-0",
-      "us-west-1-1",
-      "us-west-1-2"
+      "us-east-1-2"
   ],
-  "num_shards": 9,
+  "num_shards": 2,
   "shards": [
 [
       "us-east-1-0",
       "us-east-1-1",
       "us-east-1-2"
     ],
-    [
-	    "us-east-1-2",
+    ["us-east-1-2",
 	    "us-east-1-0",
-	    "us-east-1-1"],
-    [
-	    "us-east-1-1",
-	    "us-east-1-2",
-	    "us-east-1-0"
-    ],
-    [
-	    "eu-west-1-0",
-	    "eu-west-1-1",
-	    "eu-west-1-2"
-    ],
-    [
-	    "eu-west-1-2",
-	    "eu-west-1-0",
-	    "eu-west-1-1"
-    ],
-    [
-	    "eu-west-1-1",
-	    "eu-west-1-2",
-	    "eu-west-1-0"
-    ],
-    [
-	    "us-west-1-0",
-	    "us-west-1-1",
-	    "us-west-1-2"
-    ],
-    [
-	    "us-west-1-2",
-	    "us-west-1-0",
-	    "us-west-1-1"
-    ],
-    [
-	    "us-west-1-1",
-	    "us-west-1-2",
-	    "us-west-1-0"
-    ]
+	    "us-east-1-1"]
 ],
   "clients": [
 	  "client-0-0"
   ],
   "server_regions": {
-    "region1": ["us-east-1-0", "eu-west-1-0", "us-west-1-0"],
-    "region2": ["us-east-1-1", "eu-west-1-1", "us-west-1-1"],
-    "region3": ["us-east-1-2", "eu-west-1-2", "us-west-1-2"],
+    "region1": ["us-east-1-0"],
+    "region2": ["us-east-1-1"],
+    "region3": ["us-east-1-2"],
     "region4": ["client-0-0"]
   },
   "region_rtt_latencies": {
@@ -131,7 +89,7 @@
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
   "client_fanout": 1,
-  "inter_request_delay": 0,
+  "inter_request_delay": 20000,
   "server_epoch": 500,
   "cdf_plots": {
     "font": "DejaVu Sans,12",

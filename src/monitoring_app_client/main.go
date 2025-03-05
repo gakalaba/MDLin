@@ -233,7 +233,7 @@ func main() {
 	runtime.GOMAXPROCS(2)
 
 	client := createClient()
-	if true {
+	if false {
 	//if *cpuProfile != "" {
 		f, err := os.Create(fmt.Sprintf("/users/akalaba/myprogram-client-%vshards.prof", client.GetNumShards()))
 		if err != nil {

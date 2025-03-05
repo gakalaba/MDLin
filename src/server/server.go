@@ -68,7 +68,7 @@ func main() {
 
 	runtime.GOMAXPROCS(2)
 
-	if true {
+	if false {
 	//if *cpuprofile != "" {
 		f, err := os.Create(fmt.Sprintf("/users/akalaba/myprogram-server-%vshards.prof", *numShards))
 		if err != nil {
