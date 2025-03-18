@@ -613,7 +613,7 @@ func (r *Replica) clientListener(conn net.Conn) {
 				break
 			}
 			r.arrived = time.Now().UnixNano()
-			log.Printf("GENERICSMR got command %v at time %v\n", prop.CommandId, r.arrived)
+			dlog.Printf("GENERICSMR got command %v at time %v\n", prop.CommandId, r.arrived)
 			r.ProposeChan <- &Propose{prop, writer}
 			break
 
@@ -725,7 +725,7 @@ func (r *Replica) ReplyPropose(reply *genericsmrproto.ProposeReply, w *bufio.Wri
 func (r *Replica) ReplyProposeTS(reply *genericsmrproto.ProposeReplyTS, w *bufio.Writer) {
 	//r.clientMutex.Lock()
 	//defer r.clientMutex.Unlock()
-	log.Printf("reply for command %v at took time %v\n", reply.CommandId, (time.Now().UnixNano() - r.arrived))
+	dlog.Printf("reply for command %v at took time %v\n", reply.CommandId, (time.Now().UnixNano() - r.arrived))
 	w.WriteByte(clientproto.GEN_PROPOSE_REPLY)
 	reply.Marshal(w)
 	w.Flush()

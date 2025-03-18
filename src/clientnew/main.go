@@ -103,6 +103,11 @@ var rampUp *int = flag.Int(
 	5,
 	"Length of the warm-up period before statistics are measured (in seconds).")
 
+var interRequestDelay *int64 = flag.Int64(
+	"ird",
+	0,
+	"Number of nano seconds delay between issueing each request")
+
 var randSleep *int = flag.Int(
 	"randSleep",
 	0,

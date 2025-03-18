@@ -92,7 +92,7 @@
   "client_read_percentage": 0,
   "client_rmw_percentage": 0,
   "client_fanout": 1,
-  "inter_request_delay": 40000,
+  "inter_request_delay": 50000,
   "server_epoch": 500,
   "cdf_plots": {
     "font": "DejaVu Sans,12",
