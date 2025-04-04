@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"fmt"
+	"encoding/json"
 )
 
 func (t *Command) BinarySize() (nbytes int, sizeKnown bool) {
@@ -212,11 +214,10 @@ func (t *Key) Marshal(w io.Writer) {
 	w.Write(bs)
 }
 
-
 func (t *Value) Marshal(w io.Writer) {
 	var b [8]byte
 	bs := b[:8]
-	
+
 	// Convert value to string representation based on type
 	var valueStr string
 	switch t.Type {
@@ -230,6 +231,14 @@ func (t *Value) Marshal(w io.Writer) {
 			setItems = append(setItems, item)
 		}
 		valueStr = strings.Join(setItems, ",")
+	case HashType:
+		// Convert the hash map to a JSON string representation
+		hashBytes, err := json.Marshal(t.Hash)
+		if err != nil {
+			fmt.Println("Error marshaling hash:", err) // Debug: Error handling
+			return
+		}
+		valueStr = string(hashBytes)
 	default:
 		valueStr = ""
 	}
@@ -241,9 +250,14 @@ func (t *Value) Marshal(w io.Writer) {
 	
 	// Write each character individually
 	for i := 0; i < valueLen; i++ {
-		w.Write([]byte{valueStr[i]})
+		_, err := w.Write([]byte{valueStr[i]})
+		if err != nil {
+			fmt.Println("Error writing byte:", err) // Debug: Error handling
+			return
+		}
 	}
 }
+
 
 
 func (t *Key) Unmarshal(r io.Reader) error {
@@ -259,25 +273,38 @@ func (t *Key) Unmarshal(r io.Reader) error {
 func (t *Value) Unmarshal(r io.Reader) error {
 	var b [8]byte
 	bs := b[:8]
-	
+
 	if _, err := io.ReadFull(r, bs); err != nil {
+		fmt.Println("Error reading value length:", err)
 		return err
 	}
 	valueLen := binary.LittleEndian.Uint64(bs)
-	
+
 	valueBytes := make([]byte, valueLen)
 	for i := 0; i < int(valueLen); i++ {
 		if _, err := io.ReadFull(r, bs[:1]); err != nil {
+			fmt.Println("Error reading value bytes:", err)
 			return err
 		}
 		valueBytes[i] = bs[0]
 	}
 	valueStr := string(valueBytes)
-	
+
+	// Check if the value is an encoded hash (e.g., JSON format)
+	if json.Valid(valueBytes) {
+		var hashData map[string]string
+		if err := json.Unmarshal(valueBytes, &hashData); err == nil {
+			*t = Value{
+				Type: HashType,
+				Hash: hashData,
+			}
+			return nil
+		}
+	}
+
 	if valueStr == "" {
 		*t = Value{Type: StringType, String: ""}
 	} else if isValidList(valueStr) {
-		// If contains comma and looks like a valid list, treat as list
 		*t = Value{
 			Type: ListType,
 			List: strings.Split(valueStr, ","),
@@ -288,7 +315,7 @@ func (t *Value) Unmarshal(r io.Reader) error {
 			String: valueStr,
 		}
 	}
-	
+
 	return nil
 }
 

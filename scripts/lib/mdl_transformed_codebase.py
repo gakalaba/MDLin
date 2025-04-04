@@ -33,96 +33,20 @@ class MDLTransformedCodebase(ExperimentCodebase):
 
         if is_exp_local(config):
             exp_directory = local_exp_directory
-            path_to_client_bin = os.path.join(config['src_directory'],
-                                              config['bin_directory_name'],
-                                              config['client_bin_name'])
-            stats_file = os.path.join(exp_directory,
-                                      config['out_directory_name'], client,
-                                      '%s-%d-stats-%d.json' % (client, k, run))
         else:
             exp_directory = remote_exp_directory
-            path_to_client_bin = os.path.join(config['base_remote_bin_directory_nfs'],
-                                              config['bin_directory_name'],
-                                              config['client_bin_name'])
 
-            stats_file = os.path.join(exp_directory,
-                                      config['out_directory_name'],
-                                      '%s-%d-stats-%d.json' % (client, k, run))
-
-        coordinator_host = get_coordinator_host(config)
-        coordinator_port = get_coordinator_port(config)
 
         client_id = i * config['client_processes_per_client_node'] + k
 
-        client_command = ' '.join([str(x) for x in [
-            path_to_client_bin,
-            '-clientId', client_id,
-            '-expLength', config['client_experiment_length'],
-            '-caddr', coordinator_host,
-            '-cport', coordinator_port,
-            '-maxProcessors', config['client_max_processors'],
-            '-numKeys', config['client_num_keys'],
-            '-rampDown', config['client_ramp_down'],
-            '-rampUp', config['client_ramp_up'],
-            '-reads', config['client_read_percentage'],
-            '-replProtocol', config['replication_protocol'],
-            '-rmws', config['client_rmw_percentage'],
-            '-statsFile', stats_file,
-            '-writes', config['client_write_percentage'],
-            '-fanout', config['client_fanout'],
+        client_command = ''.join([str(x) for x in [
+            'source ', config['python_venv'],
+            '; python ',
+            config['replication_protocol_settings']['python_app_name'],
+            ' --clientid=', client_id,
+            ' --explen=', config['client_experiment_length'],
         ]])
-        if 'client_cpuprofile' in config and config['client_cpuprofile']:
-            client_command += ' -cpuProfile %s' % os.path.join(exp_directory,
-                                                               config['out_directory_name'],
-                                                               '%s-%d-cpuprof-%d.log' % (client, k, run))
-        if 'client_rand_sleep' in config:
-            client_command += ' -randSleep %d' % config['client_rand_sleep']
-        if config['client_conflict_percentage'] < 0:
-            client_command += ' -zipfS %f' % config['client_zipfian_s']
-            client_command += ' -zipfV %f' % config['client_zipfian_v']
-        else:
-            client_command += ' -conflicts %s' % config['client_conflict_percentage']
-        # TODO need logic for how to determine leader for various protocols
-        if config['replication_protocol'] == 'gpaxos':
-            client_command += ' -fastPaxos'
-        if config['client_random_coordinator']:
-            client_command += ' -randomLeader'
-        if config['client_debug_output']:
-            client_command += ' -debug'
-        if 'single_shard_aware' in config['replication_protocol_settings'] and config['replication_protocol_settings']['single_shard_aware']:
-            client_command += ' -SSA'
-        if 'server_epaxos_mode' in config['replication_protocol_settings'] and config['replication_protocol_settings']['server_epaxos_mode']:
-            client_command += ' -epaxosMode'
-
-        if 'server_emulate_wan' in config and not config['server_emulate_wan']:
-            client_command += ' -defaultReplicaOrder'
-            client_command += ' -forceLeader %d' % i
-
-        if config['replication_protocol'] == 'abd':
-            if config['replication_protocol_settings']['client_regular_consistency']:
-                client_command += ' -regular'
-        elif config['replication_protocol'] == 'gryff':
-            if config['replication_protocol_settings']['client_regular_consistency']:
-                client_command += ' -regular'
-            if config['replication_protocol_settings']['client_sequential_consistency']:
-                client_command += ' -sequential'
-        if 'proxy_operations' in config['replication_protocol_settings'] and config['replication_protocol_settings']['proxy_operations']:
-            client_command += ' -proxy'
-        if 'server_thrifty' in config['replication_protocol_settings'] and config['replication_protocol_settings']['server_thrifty']:
-            client_command += ' -thrifty'
-        if 'client_tail_at_scale' in config and config['client_tail_at_scale'] > 0:
-            client_command += ' -tailAtScale %d' % config['client_tail_at_scale']
-        if 'client_gc_debug_trace' in config and config['client_gc_debug_trace']:
-            if is_exp_local(config) or not is_using_tcsh(config):
-                client_command = 'GODEBUG=\'gctrace=1\'; %s' % client_command
-            else:
-                client_command = 'setenv GODEBUG gctrace=1; %s' % client_command
-        if 'client_disable_gc' in config and config['client_disable_gc']:
-            if is_exp_local(config) or not is_using_tcsh(config):
-                client_command = 'GOGC=off; %s' % client_command
-            else:
-                client_command = 'setenv GOGC off; %s' % client_command
-
+        
         if is_exp_local(config):
             stdout_file = os.path.join(exp_directory,
                                        config['out_directory_name'],
@@ -148,14 +72,7 @@ class MDLTransformedCodebase(ExperimentCodebase):
                 client_command = '%s 1> %s 2> %s' % (client_command, stdout_file,
                                                      stderr_file)
 
-        client_command = '(cd %s; %s) & ' % (exp_directory, client_command)
-        if config['replication_protocol'] == 'mdl':
-            print("RUNNING MDL APP")
-            # client_command = '(cd /users/akalaba/basic-redis-leaderboard-demo-python-transformed; source redis-leaderboard-venv/bin/activate; python server/manage_mdl.py --clientid=%s 1> %s 2> %s) & ' % (client_id, stdout_file, stderr_file)
-            client_command = '(cd /users/akalaba/redis-chat-transformed; source venv-chat/bin/activate; python python_simple_mdl.py --clientid=%s --explen=%s 1> %s 2> %s) & ' % (client_id, config['client_experiment_length'], stdout_file, stderr_file)
-        elif config['replication_protocol'] == 'multi_paxos':
-            print("RUNNING MULTIPAXOS APP")
-            client_command = '(cd /users/akalaba/redis-chat-transformed; source venv-chat/bin/activate; python python_simple_sync.py --clientid=%s --explen=%s 1> %s 2> %s) & ' % (client_id, config['client_experiment_length'], stdout_file, stderr_file)
+        client_command = '(cd %s; %s) & ' % (config['base_python_directory'], client_command)
         return client_command
 
 

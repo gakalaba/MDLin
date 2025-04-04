@@ -5,6 +5,7 @@ import (
 	"fastrpc"
 	//"dlog"
 	//"log"
+	"fmt"
 	"genericsmr"
 	"genericsmrproto"
 	"state"
@@ -35,7 +36,6 @@ func NewProposeClient(id int32, masterAddr string, masterPort int, forceLeader i
 }
 
 func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64, newValues []state.Value, oldValues []state.Value) (bool, state.Value) {
-	// fmt.Printf("AppRequest, running operation, opTypes: %v, keys: %v, oldValues: %v, newValues: %v\n", opTypes, keys, oldValues, newValues)
 	for i, opType := range opTypes {
 		key := keys[i]
 		oldValue := oldValues[i]
@@ -46,11 +46,11 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64, newV
 		var success bool
 		var returnValue state.Value
 
-		if opType == state.GET || opType == state.SCARD || opType == state.SUBSCRIBE || opType == state.LISTEN || opType == state.EXISTS {
+		if opType == state.GET || opType == state.SCARD || opType == state.SUBSCRIBE || opType == state.LISTEN || opType == state.EXISTS || opType == state.HGETALL{
 			success, returnValue = c.Read(opType, key, state.NewString("0"))
 		} else if opType == state.HMGET {
 			success, returnValue = c.Read(opType, key, newValue)
-		} else if opType == state.PUT || opType == state.SET || opType == state.INCR || opType == state.SADD || opType == state.PUBLISH || opType == state.SREM || opType==state.SISMEMBER || opType==state.ZADD {
+		} else if opType == state.PUT || opType == state.SET || opType == state.INCR || opType == state.SADD || opType == state.PUBLISH || opType == state.SREM || opType==state.SISMEMBER || opTypes[0] == state.ZSCORE {
 			success = c.Write(opType, key, newValue)
 			returnValue = state.NewString("0")
 		} else {
@@ -59,10 +59,9 @@ func (c *ProposeClient) AppRequest(opTypes []state.Operation, keys []int64, newV
 
 		if success {
 			//lat := after.Sub(before).Nanoseconds()
-			// fmt.Printf("Got a result from this %s \n", opType)
 			return true, returnValue
 		} else {
-			// fmt.Printf("Error: %s \n", opType)
+			fmt.Printf("Error: %s \n", opType)
 			return false, state.NewString("-1")
 		}
 	}
@@ -147,7 +146,6 @@ func (c *ProposeClient) readProposeReply(commandId int32) (bool, state.Value) {
 		if reply.OK == 0 {
 			return false, state.NewString("0")
 		} else {
-			//dlog.Printf("Received ProposeReply for %d\n", reply.CommandId)
 			if commandId == reply.CommandId {
 				return true, reply.Value
 			}

@@ -26,6 +26,7 @@ const (
 	SADD
 	SCARD
 	HMSET
+	HSET
 	HMGET
 	SUBSCRIBE
 	LISTEN
@@ -35,6 +36,10 @@ const (
 	SREM
 	SISMEMBER
 	ZREVRANGE
+	ZRANGE
+	ZINCRBY
+	ZSCORE
+	HGETALL
 )
 
 type ValueType int
@@ -272,12 +277,54 @@ func (c *Command) Execute(st *State) Value {
 		st.Store[c.K].Hash[c.V.String] = c.OldValue.String
 		return NewString("OK")
 
+	// Type: hash, Return: integer
+	// Set the specified field to the given value in a hash.
+	case HSET:
+		// Initialize hash if it doesn't exist or isn't a hash
+		if st.Store[c.K].Type != HashType {
+			st.Store[c.K] = NewHash(make(map[string]string))
+		}
+
+		// Check if the field already exists
+		fieldExists := "0"
+		if _, exists := st.Store[c.K].Hash[c.V.String]; !exists {
+			fieldExists = "1"
+		}
+		// Set field-value pair
+		st.Store[c.K].Hash[c.V.String] = c.OldValue.String
+
+		return NewString(fieldExists)
+
 	// Type: list, Return: list
 	case HMGET:
 		if st.Store[c.K].Type != HashType {
 			st.Store[c.K] = NewHash(make(map[string]string))
 		}
-		return NewList([]string{st.Store[c.K].Hash[c.V.String]})
+		
+		result := make(map[string]string)
+		for _, field := range c.V.List {
+			result[field] = st.Store[c.K].Hash[field]
+		}
+		
+		return NewHash(result)
+
+	case HGETALL:
+		// Check if the key exists and is a hash
+		val, exists := st.Store[c.K]
+
+		// Create a map to store field-value pairs
+		result := make(map[string]string, len(val.Hash))
+
+		if !exists || val.Type != HashType {
+			return NewHash(result)
+		}
+
+		for field, value := range val.Hash {
+			result[field] = value
+		}
+		
+		// Return the map as a hash
+		return NewHash(result)
 
 	// Type: string, Return: string
 	// Initialize client's index for a queue
@@ -379,73 +426,177 @@ func (c *Command) Execute(st *State) Value {
 		return NewString("0")
 	
 	case ZADD:
-		// replace this with same operation as put and see 
-		// if you get expected results
-
-		// Initialize dictionary if it doesn't exist
-		if _, exists := st.Store[c.K]; !exists {
+		// Initialize hash if it doesn't exist
+		if _, exists := st.Store[c.K]; !exists || st.Store[c.K].Type != HashType {
 			st.Store[c.K] = NewHash(make(map[string]string))
 		}
-		// Add element to hash
-		st.Store[c.K].Hash[c.V.String] = c.OldValue.String
-		// Return number of elements in hash
-		return NewString(strconv.Itoa(len(st.Store[c.K].Hash)))
+		
+		member := c.V.String
+		score := c.OldValue.String
+
+		st.Store[c.K].Hash[member] = score
+		
+		// Return 1 to indicate success
+		return NewString("1")
 	
 	case ZREVRANGE:
-		// Check if the key exists and is a hash
+		// Check if the key exists
 		val, exists := st.Store[c.K]
-		if !exists || val.Type != HashType {
+		if !exists {
 			return NIL
 		}
-
-		// Extract keys from the hash
-		keys := make([]string, 0, len(val.Hash))
-		for k := range val.Hash {
-			keys = append(keys, k)
+		
+		if val.Type != HashType {
+			fmt.Println("Key is not a hash type")
+			return NIL
 		}
-
-		// Sort keys in reverse order
-		sort.Sort(sort.Reverse(sort.StringSlice(keys)))
-
+		
+		// Create a slice of member-score pairs
+		type MemberScore struct {
+			Member string
+			Score  float64
+		}
+		
+		pairs := make([]MemberScore, 0, len(val.Hash))
+		for member, scoreStr := range val.Hash {
+			score, err := strconv.ParseFloat(scoreStr, 64)
+			if err != nil {
+				// fmt.Println("Error parsing score:", err)
+				// If score can't be parsed as float, use 0
+				score = 0
+			}
+			pairs = append(pairs, MemberScore{Member: member, Score: score})
+		}
+		
+		// Sort by score
+		sort.Slice(pairs, func(i, j int) bool {
+			return pairs[i].Score > pairs[j].Score
+		})
+	
 		// Convert start and stop to integers
 		start, err1 := strconv.Atoi(c.V.String)
 		stop, err2 := strconv.Atoi(c.OldValue.String)
-
+	
 		if err1 != nil || err2 != nil {
 			return NIL
 		}
-
+	
 		// Adjust indices to handle negative indexing
 		if start < 0 {
-			start = len(keys) + start
+			start = len(pairs) + start
 		}
 		if stop < 0 {
-			stop = len(keys) + stop
+			stop = len(pairs) + stop
 		}
-
+	
 		// Ensure indices are within bounds
 		if start < 0 {
 			start = 0
 		}
-		if stop >= len(keys) {
-			stop = len(keys) - 1
+		if stop >= len(pairs) {
+			stop = len(pairs) - 1
 		}
-
+	
 		// If start is beyond stop, return empty list
-		if start > stop {
+		if start > stop || len(pairs) == 0 {
 			return NewList([]string{})
 		}
-
-		// Extract the range of keys
-		rangeKeys := keys[start : stop+1]
-
-		// Create result list with values from the hash
-		result := make([]string, len(rangeKeys))
-		for i, k := range rangeKeys {
-			result[i] = val.Hash[k]
+	
+		// Extract the range of members
+		result := make([]string, 0, stop-start+1)
+		for i := start; i <= stop && i < len(pairs); i++ {
+			result = append(result, pairs[i].Member)
 		}
-
+		
 		return NewList(result)
+		
+
+	case ZRANGE:
+		// Check if the key exists
+		val, exists := st.Store[c.K]
+		if !exists {
+			return NIL
+		}
+		
+		if val.Type != HashType {
+			fmt.Println("Key is not a hash type")
+			return NIL
+		}
+		
+		// Create a slice of member-score pairs
+		type MemberScore struct {
+			Member string
+			Score  float64
+		}
+		
+		pairs := make([]MemberScore, 0, len(val.Hash))
+		for member, scoreStr := range val.Hash {
+			score, err := strconv.ParseFloat(scoreStr, 64)
+			if err != nil {
+				fmt.Println("Error parsing score:", err)
+				// If score can't be parsed as float, use 0
+				score = 0
+			}
+			pairs = append(pairs, MemberScore{Member: member, Score: score})
+		}
+		
+		// Sort by score
+		sort.Slice(pairs, func(i, j int) bool {
+			return pairs[i].Score < pairs[j].Score
+		})
+	
+		// Convert start and stop to integers
+		start, err1 := strconv.Atoi(c.V.String)
+		stop, err2 := strconv.Atoi(c.OldValue.String)
+	
+		if err1 != nil || err2 != nil {
+			return NIL
+		}
+	
+		// Adjust indices to handle negative indexing
+		if start < 0 {
+			start = len(pairs) + start
+		}
+		if stop < 0 {
+			stop = len(pairs) + stop
+		}
+	
+		// Ensure indices are within bounds
+		if start < 0 {
+			start = 0
+		}
+		if stop >= len(pairs) {
+			stop = len(pairs) - 1
+		}
+	
+		// If start is beyond stop, return empty list
+		if start > stop || len(pairs) == 0 {
+			return NewList([]string{})
+		}
+	
+		// Extract the range of members
+		result := make([]string, 0, stop-start+1)
+		for i := start; i <= stop && i < len(pairs); i++ {
+			result = append(result, pairs[i].Member)
+		}
+		
+		return NewList(result)
+		
+	case ZSCORE:
+		// Check if the key exists and is a hash (sorted set)
+		val, exists := st.Store[c.K]
+		if !exists || val.Type != HashType {
+			return NIL
+		}
+	
+		// Get the score for the specified member
+		scoreStr, exists := val.Hash[c.OldValue.String]
+		if !exists {
+			return NIL
+		}
+	
+		// Return the score as a string
+		return NewString(scoreStr)
 
 	default:
 		return NIL
