@@ -200,6 +200,7 @@ func (c *Command) Execute(st *State) Value {
 
 	//Type: string, Return: string
 	case PUT:
+		fmt.Println("Executing put")
 		st.Store[c.K] = c.V
 		return c.V
 

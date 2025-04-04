@@ -193,9 +193,11 @@ func createClient(clientId string, clientType string) clients.Client {
 
     switch clientType {
         case "mdl":
+			fmt.Println("Creating asynch client")
             return clients.NewAsynchClient(int32(id), *coordinatorAddr, *coordinatorPort, *forceLeader,
             *statsFile, false, true, *singleShardAware)
         case "multi_paxos":
+			fmt.Println("Creating new paxos client")
             return clients.NewProposeClient(int32(id), *coordinatorAddr, *coordinatorPort, *forceLeader,
             *statsFile, false, false)
         default:
@@ -229,7 +231,7 @@ func InitCustom(clientId *C.char, clientType *C.char) {
 
 	*replProtocol = C.GoString(clientType)
 
-    *coordinatorAddr = "us-east-1-0.mdl.praxis-PG0.utah.cloudlab.us"
+    *coordinatorAddr = "us-east-1-0.newproj.praxis-PG0.utah.cloudlab.us"
 
     *coordinatorPort = 7067
 
@@ -239,6 +241,7 @@ func InitCustom(clientId *C.char, clientType *C.char) {
 		fmt.Println("Failed to create client during initialization")
 		return
 	}
+	fmt.Println("Init custom completed")
 }
 
 //export AsyncAppRequest
@@ -406,6 +409,7 @@ func AsyncAppResponse(keysJSON *C.char) *C.char {
 //export SyncAppRequest
 func SyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldValue *C.char) *C.char {
     // Decode operation type
+    fmt.Println("[DEBUG] SyncAppRequest called")
     var opType string
     err := json.Unmarshal([]byte(C.GoString(opTypesJSON)), &opType)
     if err != nil {
@@ -517,7 +521,10 @@ func SyncAppRequest(opTypesJSON *C.char, keysJSON *C.char, value *C.char, oldVal
 
     // Execute command and return success and value as string
 	// BOOL, STATE.VALUE IN CLIENT APPREQUEST
+    fmt.Printf("[DEBUG] Calling AppRequest with: op=%v, keyInt64=%v, valueObj=%v, oldValueObj=%v\n", op, keyInt64, valueObj, oldValueObj)
+
     success, result := client.AppRequest([]state.Operation{op}, []int64{keyInt64}, []state.Value{valueObj}, []state.Value{oldValueObj})
+    fmt.Printf("[DEBUG] AppRequest result: success=%v, result=%v\n", success, result)
 
 	response := Response{
 		Success: success != false, // Convert uint8 to bool
